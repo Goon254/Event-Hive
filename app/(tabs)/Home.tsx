@@ -118,7 +118,7 @@ export default function HomeScreen() {
         styles.eventCard,
         { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }
       ]}
-      onPress={() => router.push(`/event-details/${item.id}`)}
+      onPress={() => router.push(`/screens/eventdetails?id=${item.id}`)}
     >
       {item.imageUrl ? (
         <Image 
@@ -165,7 +165,7 @@ export default function HomeScreen() {
     return (
       <TouchableOpacity
         style={styles.featuredContainer}
-        onPress={() => router.push(`/event-details/${featuredEvent.id}`)}
+        onPress={() => router.push(`/screens/eventdetails?id=${featuredEvent.id}`)}
       >
         <LinearGradient
           colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.7)']}
@@ -286,7 +286,7 @@ export default function HomeScreen() {
             Upcoming Events
           </Text>
           {upcomingEvents.length > 0 && (
-            <TouchableOpacity onPress={() => router.push('/(tabs)/explore')}>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/Explore')}>
               <Text style={[styles.sectionAction, { color: Colors[colorScheme ?? 'light'].tint }]}>
                 See All
               </Text>
@@ -314,7 +314,7 @@ export default function HomeScreen() {
             </Text>
             <TouchableOpacity 
               style={styles.createButton}
-              onPress={() => router.push('/(tabs)/explore')}
+              onPress={() => router.push('/(tabs)/Explore')}
             >
               <Text style={styles.createButtonText}>Explore Events</Text>
             </TouchableOpacity>
@@ -345,7 +345,7 @@ export default function HomeScreen() {
                     styles.activityItem,
                     index < events.slice(0, 3).length - 1 && styles.activityItemBorder
                   ]}
-                  onPress={() => router.push(`/event-details/${event.id}`)}
+                  onPress={() => router.push(`../screens/eventdetails/${event.id}`)}
                 >
                   <View style={styles.activityIconContainer}>
                     <FontAwesome name="calendar-plus-o" size={16} color="#FFF" />

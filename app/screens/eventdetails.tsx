@@ -1,6 +1,5 @@
-// app/(tabs)/event-details/[id].tsx
+// app/screens/eventdetails.tsx
 import React, { useState, useEffect } from 'react';
-
 import {
   View,
   Text,
@@ -11,12 +10,11 @@ import {
   TouchableOpacity,
   Image,
   Share,
-  FlatList,
   Linking,
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { FontAwesome, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import MapView, { Marker } from 'react-native-maps';
 import { useAuth } from '../AuthContext';
@@ -31,12 +29,14 @@ export default function EventDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAttending, setIsAttending] = useState(false);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
+  
   interface MapRegion {
     latitude: number;
     longitude: number;
     latitudeDelta: number;
     longitudeDelta: number;
   }
+  
   const [mapRegion, setMapRegion] = useState<MapRegion | null>(null);
   const [showAllAttendees, setShowAllAttendees] = useState(false);
 
@@ -49,21 +49,10 @@ export default function EventDetailsScreen() {
         const eventData = await eventService.getEventById(id.toString());
         
         if (eventData) {
-          const [event, setEvent] = useState<any>(null);
+          setEvent(eventData);
           
           // Set map region if location is available
           if (eventData.locationDetails) {
-            // You'd need a geocoding service to convert address to coordinates
-            // For now, we'll use a placeholder location
-            interface MapRegion {
-              latitude: number;
-              longitude: number;
-              latitudeDelta: number;
-              longitudeDelta: number;
-            }
-            
-            // Use the interface when initializing the state
-            const [mapRegion, setMapRegion] = useState<MapRegion | null>(null);
             setMapRegion({
               latitude: 37.78825,
               longitude: -122.4324,
@@ -74,7 +63,7 @@ export default function EventDetailsScreen() {
           
           // Fetch attendees
           const attendeesList = await eventService.getEventAttendees(id.toString());
-          const [attendees, setAttendees] = useState<Attendee[]>([]);
+          setAttendees(attendeesList);
 
           // Check if current user is attending
           if (user) {
@@ -159,7 +148,6 @@ export default function EventDetailsScreen() {
       
       if (isAttending) {
         // Logic to cancel attendance
-        // This would depend on your data structure
         Alert.alert('Feature Coming Soon', 'Cancellation will be available in the next update');
         
       } else {
@@ -192,7 +180,7 @@ export default function EventDetailsScreen() {
     if (!event) return;
     
     try {
-      const result = await Share.share({
+      await Share.share({
         title: event.title,
         message: `Join me at ${event.title} on ${formatDate(event.date)} at ${formatTime(event.time)}. Location: ${event.location || 'TBD'}`,
         url: `https://yourapp.com/events/${id}` // Replace with your actual deep link
