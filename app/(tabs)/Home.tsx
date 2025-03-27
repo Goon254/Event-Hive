@@ -264,13 +264,13 @@ export default function HomeScreen() {
           <Text style={[styles.welcomeText, { color: Colors[colorScheme ?? 'light'].invertedText }]}>
             Welcome{user?.name ? `, ${user.name}` : ' back'}!
           </Text>
-          <Text style={[styles.subtitleText, { color: Colors[colorScheme ?? 'light'].invertedSecondaryText }]}>
+          <Text style={[styles.subtitleText, { color: Colors[colorScheme ?? 'light'].text }]}>
             Let's discover exciting events
           </Text>
         </View>
         <TouchableOpacity 
           style={styles.scanButton}
-          onPress={() => router.push('/scan')}
+          onPress={() => router.push('/screens/scan')}
         >
           <FontAwesome name="qrcode" size={20} color="#FFF" />
         </TouchableOpacity>
@@ -308,7 +308,7 @@ export default function HomeScreen() {
             decelerationRate="fast"
           />
         ) : (
-          <View style={[styles.emptyContainer, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+          <View style={[styles.emptyContainer, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
             <Text style={[styles.emptyText, { color: Colors[colorScheme ?? 'light'].secondaryText }]}>
               No upcoming events found.
             </Text>
@@ -336,7 +336,7 @@ export default function HomeScreen() {
         {loading ? (
           <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].tint} style={styles.loader} />
         ) : (
-          <View style={[styles.activityContainer, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
+          <View style={[styles.activityContainer, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
             {events.length > 0 ? (
               events.slice(0, 3).map((event, index) => (
                 <TouchableOpacity 

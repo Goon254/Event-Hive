@@ -203,7 +203,7 @@ export default function CreateEventScreen() {
         [
           { 
             text: 'View Event', 
-            onPress: () => router.push(`../screens/eventdetails/${createdEvent.id}`) 
+            onPress: () => router.push(`/screens/eventdetails?${createdEvent.id}`) 
           },
           { 
             text: 'Create Another', 

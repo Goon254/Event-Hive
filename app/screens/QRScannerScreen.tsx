@@ -1,246 +1,253 @@
-// app/screens/QRScannerScreen.tsx
-import React, { useState, useEffect } from 'react';
-import { Text, View, StyleSheet, Alert, TouchableOpacity } from 'react-native';
-import { Camera } from 'expo-camera';
+// app/screens/QRCodeScreen.tsx
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Share, ActivityIndicator, StatusBar, SafeAreaView } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import eventService from '../services/eventServices';
+import { FontAwesome } from '@expo/vector-icons';
+import { useAuth } from '../AuthContext';
+import eventService, { Event as EventType } from '../services/eventServices';
 
-export default function QRScannerScreen() {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [scanned, setScanned] = useState(false);
+export default function QRCodeScreen() {
   const { eventId } = useLocalSearchParams();
   const router = useRouter();
+  const { user } = useAuth();
+  const [event, setEvent] = useState<EventType | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const qrValue = `scangoapp://event-checkin/${eventId}/${user?.id || 'guest'}`;
 
   useEffect(() => {
-    const getCameraPermissions = async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
+    const fetchEventDetails = async () => {
+      if (!eventId) return;
+      try {
+        setIsLoading(true);
+        const eventData = await eventService.getEventById(eventId.toString());
+        if (eventData) {
+          setEvent(eventData as EventType);
+        } else {
+          router.back();
+        }
+      } catch (error) {
+        console.error('Error fetching event:', error);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
-    getCameraPermissions();
-  }, []);
+    fetchEventDetails();
+  }, [eventId]);
 
-  const handleBarCodeScanned = async ({ type, data }: { type: string, data: string }) => {
-    setScanned(true);
-    
+  const handleShare = async () => {
+    if (!event) return;
     try {
-      // Parse the QR code data
-      if (data.startsWith('scangoapp://event-checkin/')) {
-        const parts = data.split('/');
-        const scannedEventId = parts[3];
-        const attendeeId = parts[4];
-        
-        // Verify this is for the current event
-        if (scannedEventId !== eventId) {
-          Alert.alert("Invalid QR Code", "This QR code is for a different event.");
-          return;
-        }
-        
-        // Process the check-in
-        const success = await eventService.processQRCheckIn(eventId.toString(), attendeeId);
-        
-        if (success) {
-          Alert.alert(
-            "Check-in Successful", 
-            "Attendee has been checked in.",
-            [{ text: "OK", onPress: () => setScanned(false) }]
-          );
-        } else {
-          Alert.alert(
-            "Check-in Failed", 
-            "This attendee may already be checked in or is not registered for this event.",
-            [{ text: "Try Again", onPress: () => setScanned(false) }]
-          );
-        }
-      } else {
-        Alert.alert(
-          "Invalid QR Code", 
-          "This doesn't appear to be a valid ScanGo QR code.",
-          [{ text: "Try Again", onPress: () => setScanned(false) }]
-        );
-      }
+      await Share.share({
+        title: `Check-in QR code for ${event.title}`,
+        message: `Scan this QR code to check in to ${event.title}`,
+        url: qrValue
+      });
     } catch (error) {
-      console.error('Error processing QR code:', error);
-      Alert.alert(
-        "Error", 
-        "There was a problem processing this check-in. Please try again.",
-        [{ text: "OK", onPress: () => setScanned(false) }]
-      );
+      console.error('Error sharing QR code:', error);
     }
   };
 
-  if (hasPermission === null) {
-    return (
-      <View style={styles.messageContainer}>
-        <Text style={styles.messageText}>Requesting camera permission...</Text>
-      </View>
-    );
-  }
+  const formatDate = (date?: Date | { toDate: () => Date }) => {
+      if (!date) return 'N/A';
+      const eventDate = date instanceof Date ? date : date.toDate();
+      return eventDate.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+      });
+    };
   
-  if (hasPermission === false) {
-    return (
-      <View style={styles.messageContainer}>
-        <Text style={styles.messageText}>No access to camera</Text>
-        <TouchableOpacity 
-          style={styles.permissionButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.permissionButtonText}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const formatTime = (time?: Date | { toDate: () => Date }) => {
+      if (!time) return 'N/A';
+      const eventTime = time instanceof Date ? time : time.toDate();
+      return eventTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    };
 
   return (
-    <View style={styles.container}>
-      <Camera
-        style={StyleSheet.absoluteFillObject}
-        onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barCodeScannerSettings={{
-          barCodeTypes: ['qr'],
-        }}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.unfocusedContainer}></View>
-          <View style={styles.middleContainer}>
-            <View style={styles.unfocusedContainer}></View>
-            <View style={styles.focusedContainer}>
-              {/* Scanner frame */}
-              <View style={styles.cornerTopLeft} />
-              <View style={styles.cornerTopRight} />
-              <View style={styles.cornerBottomLeft} />
-              <View style={styles.cornerBottomRight} />
-            </View>
-            <View style={styles.unfocusedContainer}></View>
-          </View>
-          <View style={styles.unfocusedContainer}>
-            {scanned && (
-              <TouchableOpacity 
-                style={styles.scanAgainButton}
-                onPress={() => setScanned(false)}
-              >
-                <Text style={styles.scanAgainText}>Tap to Scan Again</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity 
-              style={styles.cancelButton}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <FontAwesome name="arrow-left" size={22} color="#007AFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Check-in QR Code</Text>
+          <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+            <FontAwesome name="share-alt" size={22} color="#007AFF" />
+          </TouchableOpacity>
         </View>
-      </Camera>
-    </View>
+        
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
+          </View>
+        ) : (
+          <View style={styles.content}>
+            <Text style={styles.eventTitle}>{event?.title}</Text>
+            
+            <View style={styles.qrWrapper}>
+              <View style={styles.qrContainer}>
+                <QRCode
+                  value={qrValue}
+                  size={220}
+                  backgroundColor="white"
+                  color="#000"
+                  logoBackgroundColor="white"
+                />
+              </View>
+              <Text style={styles.instructions}>
+                Present this QR code for check-in
+              </Text>
+            </View>
+            
+            <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <FontAwesome name="calendar" size={18} color="#6B7280" style={styles.infoIcon} />
+                <View>
+                  <Text style={styles.infoLabel}>Date & Time</Text>
+                  <Text style={styles.infoText}>
+                    {formatDate(event?.date)} at {formatTime(event?.time)}
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={styles.divider} />
+              
+              <View style={styles.infoRow}>
+                <FontAwesome name="map-marker" size={18} color="#6B7280" style={styles.infoIcon} />
+                <View>
+                  <Text style={styles.infoLabel}>Location</Text>
+                  <Text style={styles.infoText}>{event?.location || 'Not specified'}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.divider} />
+              
+              <View style={styles.infoRow}>
+                <FontAwesome name="user" size={18} color="#6B7280" style={styles.infoIcon} />
+                <View>
+                  <Text style={styles.infoLabel}>Attendee</Text>
+                  <Text style={styles.infoText}>{user?.name || "Anonymous"}</Text>
+                </View>
+              </View>
+            </View>
+            
+            <Text style={styles.note}>
+              This QR code is unique to you and this event. Do not share unless intended for someone else to check in.
+            </Text>
+          </View>
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
-  messageContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1F2937',
-    padding: 20,
-  },
-  messageText: {
-    color: 'white',
-    fontSize: 18,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  permissionButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  permissionButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  unfocusedContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  middleContainer: {
+  header: {
     flexDirection: 'row',
-    flex: 4,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
-  focusedContainer: {
-    flex: 6,
-    position: 'relative',
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#111827',
   },
-  cornerTopLeft: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: 40,
-    height: 40,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-    borderColor: 'white',
+  backButton: {
+    padding: 8,
   },
-  cornerTopRight: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 40,
-    height: 40,
-    borderTopWidth: 3,
-    borderRightWidth: 3,
-    borderColor: 'white',
+  shareButton: {
+    padding: 8,
   },
-  cornerBottomLeft: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: 40,
-    height: 40,
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
-    borderColor: 'white',
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 24,
   },
-  cornerBottomRight: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 40,
-    height: 40,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
-    borderColor: 'white',
+  eventTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 24,
   },
-  scanAgainButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 8,
+  qrWrapper: {
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+  qrContainer: {
+    backgroundColor: 'white',
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
     marginBottom: 16,
   },
-  scanAgainText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+  instructions: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
   },
-  cancelButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 30,
+  infoCard: {
+    width: '100%',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+  },
+  infoRow: {
+    flexDirection: 'row',
     paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 30,
   },
-  cancelButtonText: {
-    color: 'white',
+  infoIcon: {
+    marginRight: 16,
+    marginTop: 2,
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  infoText: {
     fontSize: 16,
-  }
+    color: '#111827',
+    fontWeight: '500',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  note: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    paddingHorizontal: 32,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
