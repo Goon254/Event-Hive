@@ -116,7 +116,7 @@ export default function HomeScreen() {
     <TouchableOpacity
       style={[
         styles.eventCard,
-        { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }
+        { backgroundColor: Colors[colorScheme ?? 'light'].background }
       ]}
       onPress={() => router.push(`/screens/eventdetails?id=${item.id}`)}
     >
@@ -206,7 +206,7 @@ export default function HomeScreen() {
             Events You're Hosting
           </Text>
           {myEvents.length > 0 && (
-            <TouchableOpacity onPress={() => router.push('/my-events')}>
+            <TouchableOpacity onPress={() => router.push('/screens/my-events')}>
               <Text style={[styles.sectionAction, { color: Colors[colorScheme ?? 'light'].tint }]}>
                 See All
               </Text>
@@ -228,13 +228,13 @@ export default function HomeScreen() {
             decelerationRate="fast"
           />
         ) : (
-          <View style={[styles.emptyContainer, { backgroundColor: Colors[colorScheme ?? 'light'].cardBackground }]}>
-            <Text style={[styles.emptyText, { color: Colors[colorScheme ?? 'light'].secondaryText }]}>
+          <View style={[styles.emptyContainer, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
+            <Text style={[styles.emptyText, { color: Colors[colorScheme ?? 'light'].text }]}>
               You haven't created any events yet.
             </Text>
             <TouchableOpacity 
               style={styles.createButton}
-              onPress={() => router.push('/scan')}
+              onPress={() => router.push('/screens/scan')}
             >
               <Text style={styles.createButtonText}>Scan QR Code</Text>
             </TouchableOpacity>

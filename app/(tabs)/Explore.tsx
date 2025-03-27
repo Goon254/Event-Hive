@@ -15,7 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
-import eventService from '../services/eventServices';
+import eventService, { Event as EventType } from '../services/eventServices';
 
 // Types for filtering
 type FilterType = 'all' | 'upcoming' | 'ongoing' | 'completed' | 'attending';
@@ -25,11 +25,11 @@ export default function EventsScreen() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
-  const [events, setEvents] = useState([]);
-  const [filteredEvents, setFilteredEvents] = useState([]);
+  const [events, setEvents] = useState<EventType[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<EventType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [attendingEvents, setAttendingEvents] = useState([]);
+  const [attendingEvents, setAttendingEvents] = useState<string[]>([]);
 
   // Fetch events from service
   const fetchEvents = async () => {
@@ -60,7 +60,7 @@ export default function EventsScreen() {
   };
 
   // Determine event status based on date and time
-  const getEventStatus = (event) => {
+  const getEventStatus = (event: EventType) => {
     if (!event || !event.date) return 'unknown';
     
     const now = new Date();
@@ -128,7 +128,7 @@ export default function EventsScreen() {
     fetchEvents();
   }, [user?.id]);
 
-  const formatDate = (date) => {
+  const formatDate = (date: Date | { toDate: () => Date }) => {
     if (!date) return 'No date';
     const eventDate = date instanceof Date ? date : date.toDate();
     return eventDate.toLocaleDateString('en-US', {
@@ -138,7 +138,7 @@ export default function EventsScreen() {
     });
   };
 
-  const formatTime = (time) => {
+  const formatTime = (time: Date | { toDate: () => Date }) => {
     if (!time) return '';
     const eventTime = time instanceof Date ? time : time.toDate();
     return eventTime.toLocaleTimeString('en-US', {
@@ -147,14 +147,14 @@ export default function EventsScreen() {
     });
   };
 
-  const renderEventCard = ({ item }) => {
+  const renderEventCard = ({ item }: { item: EventType }) => {
     const status = getEventStatus(item);
     const isAttending = attendingEvents.includes(item.id);
     
     return (
       <TouchableOpacity
         style={styles.eventCard}
-        onPress={() => router.push(`/(tabs)/event-details/${item.id}`)}
+        onPress={() => router.push(`/screens/eventdetails?${item.id}`)}
       >
         {/* Event image or placeholder */}
         <View style={styles.eventImageContainer}>
@@ -217,7 +217,7 @@ export default function EventsScreen() {
   };
   
   // Function to generate consistent colors based on text
-  const getColorForEvent = (text) => {
+  const getColorForEvent = (text: string) => {
     const colors = [
       '#4F46E5', '#7C3AED', '#EC4899', '#F59E0B', '#10B981', 
       '#3B82F6', '#8B5CF6', '#EF4444', '#F97316', '#06B6D4'

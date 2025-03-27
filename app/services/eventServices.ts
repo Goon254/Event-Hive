@@ -60,6 +60,7 @@ export interface Event extends Omit<CreateEventData, 'date' | 'time' | 'createdA
   paymentOptions?: string[];
   organizerName?: string;
   duration?: number;
+  attendees?: string[];
 }
 
 class EventService {

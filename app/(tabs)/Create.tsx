@@ -52,7 +52,7 @@ const PAYMENT_OPTIONS = [
   'PayPal',
   'Bank Transfer',
   'Cash at Door',
-  'Mobile Money'
+  'Venmo'
 ];
 
 export default function CreateEventScreen() {
