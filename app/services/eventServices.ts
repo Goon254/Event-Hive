@@ -43,6 +43,7 @@ export interface Attendee {
   id: string;
   name: string;
   avatar?: string;
+  email?: string;
   checkInStatus: 'pending' | 'checked-in' | 'absent';
   checkedInAt?: Timestamp;
 }

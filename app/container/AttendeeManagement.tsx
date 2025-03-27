@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
 interface AttendeeManagementProps {
   eventId: string;
   attendees: Attendee[];
-  onUpdateAttendee: (attendeeId: string, status: string) => void;
+    onUpdateAttendee: (attendeeId: string, status: 'pending' | 'checked-in' | 'absent') => void;
 }
 
 export default function AttendeeManagement({

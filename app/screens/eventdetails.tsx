@@ -19,6 +19,7 @@ import QRCode from 'react-native-qrcode-svg';
 import MapView, { Marker } from 'react-native-maps';
 import { useAuth } from '../AuthContext';
 import eventService, { Event, Attendee } from '../services/eventServices';
+import AttendeeManagement from '../container/AttendeeManagement';
 import { Timestamp } from 'firebase/firestore';
 
 export default function EventDetailsScreen() {
@@ -40,47 +41,47 @@ export default function EventDetailsScreen() {
   const [mapRegion, setMapRegion] = useState<MapRegion | null>(null);
   const [showAllAttendees, setShowAllAttendees] = useState(false);
 
-  useEffect(() => {
-    const fetchEventDetails = async () => {
-      try {
-        if (!id) return;
+  const fetchEventDetails = async () => {
+    try {
+      if (!id) return;
+      
+      setIsLoading(true);
+      const eventData = await eventService.getEventById(id.toString());
+      
+      if (eventData) {
+        setEvent(eventData);
         
-        setIsLoading(true);
-        const eventData = await eventService.getEventById(id.toString());
-        
-        if (eventData) {
-          setEvent(eventData);
-          
-          // Set map region if location is available
-          if (eventData.locationDetails) {
-            setMapRegion({
-              latitude: 37.78825,
-              longitude: -122.4324,
-              latitudeDelta: 0.0922,
-              longitudeDelta: 0.0421,
-            });
-          }
-          
-          // Fetch attendees
-          const attendeesList = await eventService.getEventAttendees(id.toString());
-          setAttendees(attendeesList);
-
-          // Check if current user is attending
-          if (user) {
-            setIsAttending(attendeesList.some(a => a.id === user.id));
-          }
-        } else {
-          Alert.alert('Error', 'Event not found');
-          router.back();
+        // Set map region if location is available
+        if (eventData.locationDetails) {
+          setMapRegion({
+            latitude: 37.78825,
+            longitude: -122.4324,
+            latitudeDelta: 0.0922,
+            longitudeDelta: 0.0421,
+          });
         }
-      } catch (error) {
-        Alert.alert('Error', 'Failed to fetch event details');
-        console.error('Error fetching event:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+        
+        // Fetch attendees
+        const attendeesList = await eventService.getEventAttendees(id.toString());
+        setAttendees(attendeesList);
 
+        // Check if current user is attending
+        if (user) {
+          setIsAttending(attendeesList.some(a => a.id === user.id));
+        }
+      } else {
+        Alert.alert('Error', 'Event not found');
+        router.back();
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch event details');
+      console.error('Error fetching event:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchEventDetails();
   }, [id, user]);
 
@@ -180,10 +181,11 @@ export default function EventDetailsScreen() {
     if (!event) return;
     
     try {
+      const url = `https://scangoapp.com/events/${id}`;
       await Share.share({
         title: event.title,
-        message: `Join me at ${event.title} on ${formatDate(event.date)} at ${formatTime(event.time)}. Location: ${event.location || 'TBD'}`,
-        url: `https://yourapp.com/events/${id}` // Replace with your actual deep link
+        message: `Join me at ${event.title} on ${formatDate(event.date)} at ${formatTime(event.time)}. Location: ${event.location || 'TBD'}\n\n${url}`,
+        url: url
       });
     } catch (error) {
       Alert.alert('Error', 'Failed to share event');
@@ -208,6 +210,33 @@ export default function EventDetailsScreen() {
     }
   };
 
+  const handleDelete = async () => {
+    Alert.alert(
+      "Delete Event",
+      "Are you sure you want to delete this event? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setIsLoading(true);
+              await eventService.deleteEvent(id.toString());
+              Alert.alert("Success", "Event deleted successfully");
+              router.back();
+            } catch (error) {
+              console.error("Error deleting event:", error);
+              Alert.alert("Error", "Failed to delete event");
+            } finally {
+              setIsLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -225,6 +254,7 @@ export default function EventDetailsScreen() {
   }
 
   const status = getEventStatus();
+  const isOrganizer = event.createdBy === user?.id;
 
   return (
     <ScrollView style={styles.container}>
@@ -355,56 +385,101 @@ export default function EventDetailsScreen() {
           </View>
         )}
 
+        {/* Management Options for Organizer */}
+        {isOrganizer && (
+          <View style={styles.managementSection}>
+            <Text style={styles.sectionTitle}>Event Management</Text>
+            
+            <View style={styles.managementButtons}>
+              <TouchableOpacity 
+                style={styles.managementButton}
+                onPress={() => router.push(`/screens/QRScannerScreen?eventId=${id}`)}
+              >
+                <FontAwesome name="qrcode" size={20} color="#FFFFFF" />
+                <Text style={styles.managementButtonText}>Scan Check-ins</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.managementButton, styles.deleteButton]}
+                onPress={handleDelete}
+              >
+                <FontAwesome name="trash" size={20} color="#FFFFFF" />
+                <Text style={styles.managementButtonText}>Delete Event</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.attendeeManagementContainer}>
+              <AttendeeManagement
+                eventId={id.toString()}
+                attendees={attendees.map(a => ({
+                  id: a.id,
+                  name: a.name || 'Anonymous',
+                  email: a.email || 'No email provided',
+                  status: a.checkInStatus === 'checked-in' ? 'checked-in' : 
+                        a.checkInStatus === 'absent' ? 'pending' : 'pending'
+                }))}
+                onUpdateAttendee={(attendeeId: string, status: 'pending' | 'checked-in' | 'absent') => {
+                  eventService.updateAttendeeStatus(id.toString(), attendeeId, status);
+                  // Refresh attendees
+                  fetchEventDetails();
+                }}
+              />
+            </View>
+          </View>
+        )}
+
         {/* Attendees List */}
-        <View style={styles.attendeesSection}>
-          <Text style={styles.sectionTitle}>Attendees</Text>
-          
-          {attendees.length === 0 ? (
-            <Text style={styles.noAttendeesText}>Be the first to attend this event!</Text>
-          ) : (
-            <>
-              <View style={styles.attendeesList}>
-                {(showAllAttendees ? attendees : attendees.slice(0, 5)).map((attendee, index) => (
-                  <View key={index} style={styles.attendeeItem}>
-                    {attendee.avatar ? (
-                      <Image source={{ uri: attendee.avatar }} style={styles.attendeeAvatar} />
-                    ) : (
-                      <View style={styles.attendeeAvatarPlaceholder}>
-                        <Text style={styles.avatarPlaceholderText}>
-                          {attendee.name?.charAt(0).toUpperCase() || 'A'}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={styles.attendeeInfo}>
-                      <Text style={styles.attendeeName}>{attendee.name}</Text>
-                      <View style={[
-                        styles.checkInStatus,
-                        attendee.checkInStatus === 'checked-in' && styles.checkedInStatus,
-                        attendee.checkInStatus === 'absent' && styles.absentStatus
-                      ]}>
-                        <Text style={styles.checkInStatusText}>
-                          {attendee.checkInStatus === 'checked-in' ? 'Checked In' : 
-                           attendee.checkInStatus === 'absent' ? 'Absent' : 'Not Checked In'}
-                        </Text>
+        {!isOrganizer && (
+          <View style={styles.attendeesSection}>
+            <Text style={styles.sectionTitle}>Attendees</Text>
+            
+            {attendees.length === 0 ? (
+              <Text style={styles.noAttendeesText}>Be the first to attend this event!</Text>
+            ) : (
+              <>
+                <View style={styles.attendeesList}>
+                  {(showAllAttendees ? attendees : attendees.slice(0, 5)).map((attendee, index) => (
+                    <View key={index} style={styles.attendeeItem}>
+                      {attendee.avatar ? (
+                        <Image source={{ uri: attendee.avatar }} style={styles.attendeeAvatar} />
+                      ) : (
+                        <View style={styles.attendeeAvatarPlaceholder}>
+                          <Text style={styles.avatarPlaceholderText}>
+                            {attendee.name?.charAt(0).toUpperCase() || 'A'}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.attendeeInfo}>
+                        <Text style={styles.attendeeName}>{attendee.name}</Text>
+                        <View style={[
+                          styles.checkInStatus,
+                          attendee.checkInStatus === 'checked-in' && styles.checkedInStatus,
+                          attendee.checkInStatus === 'absent' && styles.absentStatus
+                        ]}>
+                          <Text style={styles.checkInStatusText}>
+                            {attendee.checkInStatus === 'checked-in' ? 'Checked In' : 
+                             attendee.checkInStatus === 'absent' ? 'Absent' : 'Not Checked In'}
+                          </Text>
+                        </View>
                       </View>
                     </View>
-                  </View>
-                ))}
-              </View>
-              
-              {attendees.length > 5 && (
-                <TouchableOpacity 
-                  style={styles.showMoreButton}
-                  onPress={() => setShowAllAttendees(!showAllAttendees)}
-                >
-                  <Text style={styles.showMoreText}>
-                    {showAllAttendees ? 'Show Less' : `Show All (${attendees.length})`}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </>
-          )}
-        </View>
+                  ))}
+                </View>
+                
+                {attendees.length > 5 && (
+                  <TouchableOpacity 
+                    style={styles.showMoreButton}
+                    onPress={() => setShowAllAttendees(!showAllAttendees)}
+                  >
+                    <Text style={styles.showMoreText}>
+                      {showAllAttendees ? 'Show Less' : `Show All (${attendees.length})`}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+          </View>
+        )}
 
         {/* QR Code for Check-in */}
         {!event.requireFaceRecognition && (
@@ -424,35 +499,37 @@ export default function EventDetailsScreen() {
           </View>
         )}
 
-        {/* Attend Button */}
-        <TouchableOpacity
-          style={[
-            styles.attendButton,
-            isAttending && styles.attendingButton,
-            event.isPaid && !isAttending && styles.paymentButton
-          ]}
-          onPress={handleAttend}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <>
-              {event.isPaid && !isAttending ? (
-                <View style={styles.payButtonContent}>
-                  <FontAwesome name="credit-card" size={20} color="#FFFFFF" style={styles.paymentIcon} />
+        {/* Attend Button (don't show for organizer) */}
+        {!isOrganizer && (
+          <TouchableOpacity
+            style={[
+              styles.attendButton,
+              isAttending && styles.attendingButton,
+              event.isPaid && !isAttending && styles.paymentButton
+            ]}
+            onPress={handleAttend}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                {event.isPaid && !isAttending ? (
+                  <View style={styles.payButtonContent}>
+                    <FontAwesome name="credit-card" size={20} color="#FFFFFF" style={styles.paymentIcon} />
+                    <Text style={styles.attendButtonText}>
+                      PAY & ATTEND (${event.price?.toFixed(2) || '0.00'})
+                    </Text>
+                  </View>
+                ) : (
                   <Text style={styles.attendButtonText}>
-                    PAY & ATTEND (${event.price?.toFixed(2) || '0.00'})
+                    {isAttending ? 'CANCEL ATTENDANCE' : 'ATTEND THIS EVENT'}
                   </Text>
-                </View>
-              ) : (
-                <Text style={styles.attendButtonText}>
-                  {isAttending ? 'CANCEL ATTENDANCE' : 'ATTEND THIS EVENT'}
-                </Text>
-              )}
-            </>
-          )}
-        </TouchableOpacity>
+                )}
+              </>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </ScrollView>
   );
@@ -764,4 +841,38 @@ const styles = StyleSheet.create({
   paymentIcon: {
     marginRight: 8,
   },
+  managementSection: {
+    marginTop: 24,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+  },
+  managementButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 16,
+  },
+  managementButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    flex: 1,
+    marginHorizontal: 4,
+    justifyContent: 'center',
+  },
+  deleteButton: {
+    backgroundColor: '#EF4444',
+  },
+  managementButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  attendeeManagementContainer: {
+    marginTop: 8,
+  }
 });
