@@ -16,7 +16,6 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
-import MapView, { Marker } from 'react-native-maps';
 import { useAuth } from '../AuthContext';
 import eventService, { Event, Attendee } from '../services/eventServices';
 import AttendeeManagement from '../container/AttendeeManagement';
@@ -30,15 +29,7 @@ export default function EventDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAttending, setIsAttending] = useState(false);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
-  
-  interface MapRegion {
-    latitude: number;
-    longitude: number;
-    latitudeDelta: number;
-    longitudeDelta: number;
-  }
-  
-  const [mapRegion, setMapRegion] = useState<MapRegion | null>(null);
+  const [hasUserPaid, setHasUserPaid] = useState(false);
   const [showAllAttendees, setShowAllAttendees] = useState(false);
 
   const fetchEventDetails = async () => {
@@ -51,23 +42,19 @@ export default function EventDetailsScreen() {
       if (eventData) {
         setEvent(eventData);
         
-        // Set map region if location is available
-        if (eventData.locationDetails) {
-          setMapRegion({
-            latitude: 37.78825,
-            longitude: -122.4324,
-            latitudeDelta: 0.0922,
-            longitudeDelta: 0.0421,
-          });
-        }
-        
         // Fetch attendees
         const attendeesList = await eventService.getEventAttendees(id.toString());
         setAttendees(attendeesList);
 
         // Check if current user is attending
         if (user) {
-          setIsAttending(attendeesList.some(a => a.id === user.id));
+          const userAttending = attendeesList.some(a => a.id === user.id);
+          setIsAttending(userAttending);
+          
+          // Check if user has paid (for paid events)
+          if (userAttending && eventData.isPaid) {
+            setHasUserPaid(checkPaymentStatus(user.id, attendeesList));
+          }
         }
       } else {
         Alert.alert('Error', 'Event not found');
@@ -79,6 +66,14 @@ export default function EventDetailsScreen() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Check if user has paid for the event
+  const checkPaymentStatus = (userId: string, attendeesList: Attendee[]): boolean => {
+    const userAttendee = attendeesList.find(a => a.id === userId);
+    // In a real app, you would have a 'paymentStatus' field in your attendee data
+    // For now, we'll assume they've paid if they're checked in
+    return userAttendee?.checkInStatus === 'checked-in';
   };
 
   useEffect(() => {
@@ -153,21 +148,22 @@ export default function EventDetailsScreen() {
         
       } else {
         // Add the user as an attendee
-        await eventService.addEventAttendee(id.toString(), {
+        const newAttendee = await eventService.addEventAttendee(id.toString(), {
           name: user.name || 'Anonymous',
           checkInStatus: 'pending',
           avatar: user.avatar || undefined
         });
         
         setIsAttending(true);
-        setAttendees([...attendees, { 
-          id: Math.random().toString(), // Temporary ID
-          name: user.name || 'Anonymous',
-          checkInStatus: 'pending',
-          avatar: user.avatar
-        }]);
+        setAttendees([...attendees, newAttendee]);
         
-        Alert.alert('Success', 'You are now attending this event');
+        // If it's a paid event, handle payment process here
+        if (event?.isPaid) {
+          // In a real app, this would open a payment flow
+          Alert.alert('Payment Required', 'Please complete payment to receive your QR code');
+        } else {
+          Alert.alert('Success', 'You are now attending this event');
+        }
       }
     } catch (error) {
       console.error('Attendance error:', error);
@@ -192,22 +188,27 @@ export default function EventDetailsScreen() {
     }
   };
 
-  const openMaps = () => {
+  const openDirections = () => {
     if (!event || !event.location) return;
     
-    const scheme = Platform.select({ ios: 'maps:', android: 'geo:0,0?q=' });
-    const latLng = `${mapRegion?.latitude},${mapRegion?.longitude}`;
-    const label = event.location;
-    const url = Platform.select({
-      ios: `${scheme}${latLng}?q=${label}`,
-      android: `${scheme}${label}`
-    });
+    // Encode the address for use in a URL
+    const address = encodeURIComponent(event.location);
     
-    if (url) {
-      Linking.openURL(url);
-    } else {
-      Alert.alert('Error', 'Failed to open maps');
-    }
+    // Create a Google Maps URL (works on both iOS and Android)
+    const url = `https://www.google.com/maps/search/?api=1&query=${address}`;
+    
+    Linking.canOpenURL(url)
+      .then(supported => {
+        if (supported) {
+          return Linking.openURL(url);
+        } else {
+          Alert.alert('Error', 'Cannot open maps application');
+        }
+      })
+      .catch(err => {
+        console.error('Error opening directions:', err);
+        Alert.alert('Error', 'Failed to open directions');
+      });
   };
 
   const handleDelete = async () => {
@@ -255,6 +256,11 @@ export default function EventDetailsScreen() {
 
   const status = getEventStatus();
   const isOrganizer = event.createdBy === user?.id;
+  // Only show QR code if:
+  // 1. User is not the organizer
+  // 2. User is attending the event
+  // 3. If it's a paid event, user has paid
+  const shouldShowQRCode = !isOrganizer && isAttending && (!event.isPaid || hasUserPaid);
 
   return (
     <ScrollView style={styles.container}>
@@ -316,9 +322,6 @@ export default function EventDetailsScreen() {
         <View style={styles.detailRow}>
           <FontAwesome name="map-marker" size={16} color="#6B7280" />
           <Text style={styles.detailText}>{event.location}</Text>
-          <TouchableOpacity onPress={openMaps} style={styles.mapButton}>
-            <Text style={styles.mapButtonText}>View Map</Text>
-          </TouchableOpacity>
         </View>
         
         <View style={styles.detailRow}>
@@ -354,36 +357,27 @@ export default function EventDetailsScreen() {
         <Text style={styles.sectionTitle}>About this event</Text>
         <Text style={styles.description}>{event.description || 'No description available.'}</Text>
 
-        {/* Location Map */}
-        {mapRegion && (
-          <View style={styles.mapSection}>
-            <Text style={styles.sectionTitle}>Event Location</Text>
-            <View style={styles.mapContainer}>
-              <MapView 
-                style={styles.map}
-                initialRegion={mapRegion}
-              >
-                <Marker 
-                  coordinate={mapRegion}
-                  title={event.locationDetails?.buildingName || 'Event Location'}
-                  description={event.location || ''}
-                />
-              </MapView>
-              {event.locationDetails && (
-                <View style={styles.addressContainer}>
-                  {event.locationDetails.buildingName && (
-                    <Text style={styles.buildingName}>{event.locationDetails.buildingName}</Text>
-                  )}
-                  <Text style={styles.address}>{event.locationDetails.address}</Text>
-                  <Text style={styles.cityStateZip}>
-                    {event.locationDetails.city}{event.locationDetails.state ? ', ' + event.locationDetails.state : ''}
-                    {event.locationDetails.zipCode ? ' ' + event.locationDetails.zipCode : ''}
-                  </Text>
-                </View>
-              )}
-            </View>
+        {/* Location Section */}
+        <View style={styles.locationSection}>
+          <Text style={styles.sectionTitle}>Event Location</Text>
+          <View style={styles.locationContainer}>
+            {event.locationDetails?.buildingName && (
+              <Text style={styles.buildingName}>{event.locationDetails.buildingName}</Text>
+            )}
+            <Text style={styles.address}>{event.location}</Text>
+            {event.locationDetails && (
+              <Text style={styles.cityStateZip}>
+                {event.locationDetails.city}
+                {event.locationDetails.state ? ', ' + event.locationDetails.state : ''}
+                {event.locationDetails.zipCode ? ' ' + event.locationDetails.zipCode : ''}
+              </Text>
+            )}
+            <TouchableOpacity style={styles.directionsButton} onPress={openDirections}>
+              <FontAwesome name="map-signs" size={16} color="#FFFFFF" />
+              <Text style={styles.directionsButtonText}>Get Directions</Text>
+            </TouchableOpacity>
           </View>
-        )}
+        </View>
 
         {/* Management Options for Organizer */}
         {isOrganizer && (
@@ -393,7 +387,10 @@ export default function EventDetailsScreen() {
             <View style={styles.managementButtons}>
               <TouchableOpacity 
                 style={styles.managementButton}
-                onPress={() => router.push(`/screens/QRScannerScreen?eventId=${id}`)}
+                onPress={() => router.push({
+                  pathname: "/screens/scan",
+                  params: { eventId: id }
+                })}
               >
                 <FontAwesome name="qrcode" size={20} color="#FFFFFF" />
                 <Text style={styles.managementButtonText}>Scan Check-ins</Text>
@@ -415,11 +412,14 @@ export default function EventDetailsScreen() {
                   id: a.id,
                   name: a.name || 'Anonymous',
                   email: a.email || 'No email provided',
-                  status: a.checkInStatus === 'checked-in' ? 'checked-in' : 
-                        a.checkInStatus === 'absent' ? 'pending' : 'pending'
+                  status: a.checkInStatus === 'absent' ? 'pending' : a.checkInStatus
                 }))}
-                onUpdateAttendee={(attendeeId: string, status: 'pending' | 'checked-in' | 'absent') => {
-                  eventService.updateAttendeeStatus(id.toString(), attendeeId, status);
+                onUpdateAttendee={(attendeeId: string, status: string) => {
+                  eventService.updateAttendeeStatus(
+                    id.toString(), 
+                    attendeeId, 
+                    status as 'pending' | 'checked-in' | 'absent'
+                  );
                   // Refresh attendees
                   fetchEventDetails();
                 }}
@@ -428,7 +428,7 @@ export default function EventDetailsScreen() {
           </View>
         )}
 
-        {/* Attendees List */}
+        {/* Attendees List (don't show for organizer, who sees management view) */}
         {!isOrganizer && (
           <View style={styles.attendeesSection}>
             <Text style={styles.sectionTitle}>Attendees</Text>
@@ -481,8 +481,8 @@ export default function EventDetailsScreen() {
           </View>
         )}
 
-        {/* QR Code for Check-in */}
-        {!event.requireFaceRecognition && (
+        {/* QR Code for Check-in - Only shown to attendees who have paid if required */}
+        {shouldShowQRCode && (
           <View style={styles.qrSection}>
             <Text style={styles.sectionTitle}>Check-In QR Code</Text>
             <View style={styles.qrContainer}>
@@ -498,14 +498,26 @@ export default function EventDetailsScreen() {
             </View>
           </View>
         )}
+        
+        {/* Payment reminder for unpaid attendees */}
+        {isAttending && event.isPaid && !hasUserPaid && (
+          <View style={styles.paymentReminderContainer}>
+            <FontAwesome name="exclamation-circle" size={24} color="#DC2626" />
+            <Text style={styles.paymentReminderText}>
+              Please complete payment to receive your QR code for check-in
+            </Text>
+            <TouchableOpacity style={styles.completePaymentButton}>
+              <Text style={styles.completePaymentText}>Complete Payment</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Attend Button (don't show for organizer) */}
-        {!isOrganizer && (
+        {!isOrganizer && !isAttending && (
           <TouchableOpacity
             style={[
               styles.attendButton,
-              isAttending && styles.attendingButton,
-              event.isPaid && !isAttending && styles.paymentButton
+              event.isPaid && styles.paymentButton
             ]}
             onPress={handleAttend}
             disabled={isLoading}
@@ -514,7 +526,7 @@ export default function EventDetailsScreen() {
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <>
-                {event.isPaid && !isAttending ? (
+                {event.isPaid ? (
                   <View style={styles.payButtonContent}>
                     <FontAwesome name="credit-card" size={20} color="#FFFFFF" style={styles.paymentIcon} />
                     <Text style={styles.attendButtonText}>
@@ -522,11 +534,24 @@ export default function EventDetailsScreen() {
                     </Text>
                   </View>
                 ) : (
-                  <Text style={styles.attendButtonText}>
-                    {isAttending ? 'CANCEL ATTENDANCE' : 'ATTEND THIS EVENT'}
-                  </Text>
+                  <Text style={styles.attendButtonText}>ATTEND THIS EVENT</Text>
                 )}
               </>
+            )}
+          </TouchableOpacity>
+        )}
+        
+        {/* Cancel attendance button (if already attending) */}
+        {!isOrganizer && isAttending && (
+          <TouchableOpacity
+            style={[styles.attendButton, styles.attendingButton]}
+            onPress={handleAttend}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.attendButtonText}>CANCEL ATTENDANCE</Text>
             )}
           </TouchableOpacity>
         )}
@@ -639,17 +664,6 @@ const styles = StyleSheet.create({
     flex: 1,
     color: '#374151',
   },
-  mapButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: '#EFF6FF',
-    borderRadius: 12,
-  },
-  mapButtonText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#2563EB',
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -687,23 +701,18 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     color: '#9CA3AF',
   },
-  mapSection: {
-    marginTop: 16,
+  locationSection: {
+    marginTop: 24,
   },
-  mapContainer: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  map: {
-    height: 200,
-    width: '100%',
-  },
-  addressContainer: {
+  locationContainer: {
     padding: 16,
     backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   buildingName: {
     fontSize: 16,
@@ -718,6 +727,23 @@ const styles = StyleSheet.create({
   cityStateZip: {
     fontSize: 14,
     color: '#4B5563',
+    marginBottom: 16,
+  },
+  directionsButton: {
+    backgroundColor: '#007AFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  directionsButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 8,
   },
   attendeesSection: {
     marginTop: 16,
@@ -874,5 +900,30 @@ const styles = StyleSheet.create({
   },
   attendeeManagementContainer: {
     marginTop: 8,
-  }
+  },
+  paymentReminderContainer: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  paymentReminderText: {
+    color: '#B91C1C',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  completePaymentButton: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  completePaymentText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
 });

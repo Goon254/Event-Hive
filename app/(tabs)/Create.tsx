@@ -18,6 +18,8 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../AuthContext';
 import eventService from '../services/eventServices';
+import ImageUpload from '../container/events/ImageUpload';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface EventForm {
   title: string;
@@ -34,6 +36,7 @@ interface EventForm {
   isPaid: boolean;
   price: string;
   paymentOptions: string[];
+  imageUri: string | null;
 }
 
 interface FormErrors {
@@ -74,10 +77,12 @@ export default function CreateEventScreen() {
     isPrivate: false,
     isPaid: false,
     price: '',
-    paymentOptions: ['Credit Card', 'PayPal']
+    paymentOptions: ['Credit Card', 'PayPal'],
+    imageUri: null,
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -85,6 +90,33 @@ export default function CreateEventScreen() {
       router.replace('/(auth)/login');
     }
   }, [user, authLoading, router]);
+
+  const handleImageSelected = (uri: string) => {
+    setFormData({ ...formData, imageUri: uri });
+  };
+
+  // Function to upload image to Firebase Storage
+  const uploadImage = async (uri: string): Promise<string> => {
+    try {
+      const storage = getStorage();
+      const filename = uri.substring(uri.lastIndexOf('/') + 1);
+      const eventImagesRef = ref(storage, `event-images/${Date.now()}_${filename}`);
+      
+      // Fetch the image as a blob
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      
+      // Upload blob to Firebase Storage
+      await uploadBytes(eventImagesRef, blob);
+      
+      // Get download URL
+      const downloadURL = await getDownloadURL(eventImagesRef);
+      return downloadURL;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      throw new Error('Failed to upload image');
+    }
+  };
 
   const validateForm = (): boolean => {
     const errors: FormErrors = {};
@@ -167,6 +199,12 @@ export default function CreateEventScreen() {
     try {
       setIsSubmitting(true);
 
+      // Upload image if selected
+      let imageUrl = null;
+      if (formData.imageUri) {
+        imageUrl = await uploadImage(formData.imageUri);
+      }
+
       // Format a complete location string
       const locationString = `${formData.buildingName ? formData.buildingName + ', ' : ''}${formData.address}, ${formData.city}, ${formData.state} ${formData.zipCode}`.trim();
 
@@ -192,6 +230,7 @@ export default function CreateEventScreen() {
         createdBy: user.id,
         organizerName: user.name || 'Event Host',
         createdAt: new Date(),
+        imageUrl: imageUrl,
       };
 
       // Save to Firebase using the event service
@@ -203,7 +242,10 @@ export default function CreateEventScreen() {
         [
           { 
             text: 'View Event', 
-            onPress: () => router.push(`/screens/eventdetails?${createdEvent.id}`) 
+            onPress: () => router.push({
+              pathname: "/screens/eventdetails",
+              params: { id: createdEvent.id }
+            })
           },
           { 
             text: 'Create Another', 
@@ -223,7 +265,8 @@ export default function CreateEventScreen() {
                 isPrivate: false,
                 isPaid: false,
                 price: '',
-                paymentOptions: ['Credit Card', 'PayPal']
+                paymentOptions: ['Credit Card', 'PayPal'],
+                imageUri: null,
               });
             }
           }
@@ -266,6 +309,15 @@ export default function CreateEventScreen() {
         </View>
 
         <View style={styles.form}>
+          {/* Event Image Upload */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>Event Image</Text>
+            <ImageUpload
+              onImageSelected={handleImageSelected}
+              initialImage={formData.imageUri || undefined}
+            />
+          </View>
+
           {/* Basic Event Info */}
           <View style={styles.formGroup}>
             <Text style={styles.label}>Event Title*</Text>
