@@ -37,6 +37,7 @@ interface CreateEventData {
   organizerName?: string;
   createdAt?: Date;
   duration?: number; // Event duration in milliseconds
+  imageUrl?: string;
 }
 
 export interface Attendee {
@@ -49,7 +50,7 @@ export interface Attendee {
 }
 
 export interface Event extends Omit<CreateEventData, 'date' | 'time' | 'createdAt'> {
-  imageUrl: any;
+  
   requireFaceRecognition: any;
   id: string;
   date: Timestamp | Date;
@@ -62,6 +63,7 @@ export interface Event extends Omit<CreateEventData, 'date' | 'time' | 'createdA
   organizerName?: string;
   duration?: number;
   attendees?: string[];
+  imageUrl?: string;
 }
 
 class EventService {

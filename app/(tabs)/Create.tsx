@@ -230,7 +230,7 @@ export default function CreateEventScreen() {
         createdBy: user.id,
         organizerName: user.name || 'Event Host',
         createdAt: new Date(),
-        imageUrl: imageUrl,
+        imageUrl: imageUrl || undefined,
       };
 
       // Save to Firebase using the event service

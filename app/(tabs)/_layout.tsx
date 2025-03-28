@@ -9,6 +9,7 @@ export default function TabsLayout() {
       <Tabs
         initialRouteName="Home"
         screenOptions={{
+          headerShown: false, // Hide the header completely
           tabBarActiveTintColor: '#007AFF',
           tabBarInactiveTintColor: '#6B7280',
           tabBarStyle: {
@@ -28,26 +29,12 @@ export default function TabsLayout() {
             fontSize: 12,
             fontWeight: '500',
           },
-          headerStyle: {
-            backgroundColor: '#FFFFFF',
-            height: 100,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.05,
-            shadowRadius: 2,
-            elevation: 3,
-          },
-          headerTitleStyle: {
-            fontWeight: 'bold',
-            fontSize: 18,
-            color: '#1F2937',
-          },
         }}
       >
         <Tabs.Screen
           name="Home"
           options={{
-            title: '',
+            title: 'Home',
             tabBarIcon: ({ color }) => (
               <FontAwesome5 name="home" size={22} color={color} />
             ),
