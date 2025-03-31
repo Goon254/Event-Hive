@@ -1,4 +1,4 @@
-// app/(tabs)/explore.tsx
+//app/(tabs)/Explore.tsx
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -11,11 +11,13 @@ import {
   Alert,
   Image,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
 import eventService, { Event as EventType } from '../services/eventServices';
+import { createShadow, safeTopPadding } from '../utils/platformUtils';
 
 // Types for filtering
 type FilterType = 'all' | 'upcoming' | 'ongoing' | 'completed' | 'attending';
@@ -324,13 +326,18 @@ export default function EventsScreen() {
   );
 }
 
+// Create platform-specific shadows
+const cardShadow = createShadow(3);
+const searchShadow = createShadow(2);
+const buttonShadow = createShadow(5);
+
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: '#F9FAFB',
   },
   header: {
-    paddingTop: 60,
+    ...safeTopPadding(16), // Use platform-specific safe top padding
     paddingBottom: 16,
     paddingHorizontal: 16,
     backgroundColor: '#FFFFFF',
@@ -339,7 +346,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: Platform.OS === 'ios' ? '700' : 'bold', // More natural font weight per platform
     color: '#1F2937',
   },
   loadingContainer: {
@@ -354,15 +361,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 10,
+    borderRadius: Platform.OS === 'ios' ? 10 : 8, // Slightly different radius per platform
     marginHorizontal: 16,
     marginTop: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...searchShadow, // Platform-specific shadow
   },
   searchIcon: {
     marginRight: 10,
@@ -405,13 +408,9 @@ const styles = StyleSheet.create({
   },
   eventCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: Platform.OS === 'ios' ? 12 : 8, // Platform-specific radius
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...cardShadow, // Platform-specific shadow
     overflow: 'hidden',
   },
   eventImageContainer: {
@@ -441,6 +440,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     backgroundColor: '#F3F4F6',
+    // Add zIndex for iOS to ensure proper rendering of absolute positioned elements
+    ...Platform.select({
+      ios: { zIndex: 1 }
+    }),
   },
   upcomingBadge: {
     backgroundColor: '#EFF6FF',
@@ -466,13 +469,17 @@ const styles = StyleSheet.create({
     height: 28,
     justifyContent: 'center',
     alignItems: 'center',
+    // Add zIndex for iOS
+    ...Platform.select({
+      ios: { zIndex: 1 }
+    }),
   },
   eventContent: {
     padding: 16,
   },
   eventTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: Platform.OS === 'ios' ? '700' : 'bold',
     marginBottom: 10,
     color: '#1F2937',
   },
@@ -509,17 +516,13 @@ const styles = StyleSheet.create({
   createButton: {
     position: 'absolute',
     right: 24,
-    bottom: 32,
+    bottom: Platform.OS === 'ios' ? 32 : 24, // Platform-specific positioning
     backgroundColor: '#007AFF',
     width: 56,
     height: 56,
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 5,
+    ...buttonShadow, // Platform-specific shadow
   },
 });

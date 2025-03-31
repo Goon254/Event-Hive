@@ -2,39 +2,49 @@
 import { Tabs } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
 import ErrorBoundary from '../container/shared/ErrorBoundary';
+import { Platform, StyleSheet } from 'react-native';
+import { createShadow } from '../utils/platformUtils';
 
 export default function TabsLayout() {
+  // Create platform-specific tab bar shadow
+  const tabBarShadow = createShadow(Platform.OS === 'ios' ? 3 : 5);
+  
   return (
     <ErrorBoundary>
       <Tabs
         initialRouteName="Home"
         screenOptions={{
-          headerShown: false, // Hide the header completely
           tabBarActiveTintColor: '#007AFF',
           tabBarInactiveTintColor: '#6B7280',
           tabBarStyle: {
             height: 60,
-            paddingBottom: 10,
-            paddingTop: 10,
+            paddingBottom: Platform.OS === 'ios' ? 10 : 8,
+            paddingTop: Platform.OS === 'ios' ? 10 : 8,
             backgroundColor: '#FFFFFF',
             borderTopWidth: 1,
             borderTopColor: '#E5E7EB',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: -2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 3,
-            elevation: 5,
+            ...tabBarShadow,
           },
           tabBarLabelStyle: {
             fontSize: 12,
             fontWeight: '500',
+          },
+          headerStyle: {
+            backgroundColor: '#FFFFFF',
+            height: Platform.OS === 'ios' ? 100 : 80,
+            ...createShadow(1),
+          },
+          headerTitleStyle: {
+            fontWeight: Platform.OS === 'ios' ? '700' : 'bold',
+            fontSize: 18,
+            color: '#1F2937',
           },
         }}
       >
         <Tabs.Screen
           name="Home"
           options={{
-            title: 'Home',
+            title: '',
             tabBarIcon: ({ color }) => (
               <FontAwesome5 name="home" size={22} color={color} />
             ),
@@ -56,6 +66,7 @@ export default function TabsLayout() {
             tabBarIcon: ({ color }) => (
               <FontAwesome5 name="compass" size={22} color={color} />
             ),
+            headerShown: false, // Hide the header as we have a custom one in the explore component
           }}
         />
         <Tabs.Screen
@@ -71,3 +82,23 @@ export default function TabsLayout() {
     </ErrorBoundary>
   );
 }
+
+const styles = StyleSheet.create({
+  badge: {
+    position: 'absolute',
+    right: -6,
+    top: -3,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+});
