@@ -119,7 +119,7 @@ export default function ProfileScreen() {
       icon: 'question-circle',
       title: 'Help & Support',
       description: 'Get assistance and FAQs',
-      onPress: () => router.push('//screens/help'),
+      onPress: () => router.push('/screens/help'),
     },
   ];
 
