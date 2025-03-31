@@ -156,7 +156,7 @@ export default function EventsScreen() {
     return (
       <TouchableOpacity
         style={styles.eventCard}
-        onPress={() => router.push(`/screens/eventdetails?${item.id}`)}
+        onPress={() => router.push(`/screens/eventdetails?${item.id}`)} 
       >
         {/* Event image or placeholder */}
         <View style={styles.eventImageContainer}>
