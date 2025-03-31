@@ -12,6 +12,7 @@ import {
   Share,
   Linking,
   Platform,
+  StatusBar,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
@@ -20,6 +21,8 @@ import { useAuth } from '../AuthContext';
 import eventService, { Event, Attendee } from '../services/eventServices';
 import AttendeeManagement from '../container/AttendeeManagement';
 import { Timestamp } from 'firebase/firestore';
+import { createShadow, safeTopPadding } from '../utils/platformUtils';
+import { formatDate, formatTime } from '../utils/dateUtils';
 
 export default function EventDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -31,6 +34,17 @@ export default function EventDetailsScreen() {
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [hasUserPaid, setHasUserPaid] = useState(false);
   const [showAllAttendees, setShowAllAttendees] = useState(false);
+
+  // Set status bar for better visibility with content
+  useEffect(() => {
+    // Set light content for better visibility on colored headers
+    StatusBar.setBarStyle('dark-content');
+    
+    // Clean up on unmount
+    return () => {
+      StatusBar.setBarStyle('default');
+    };
+  }, []);
 
   const fetchEventDetails = async () => {
     try {
@@ -79,27 +93,6 @@ export default function EventDetailsScreen() {
   useEffect(() => {
     fetchEventDetails();
   }, [id, user]);
-
-  const formatDate = (date: Date | Timestamp | null) => {
-    if (!date) return 'No date';
-    // Handle both Date objects and Firestore Timestamps
-    const eventDate = date instanceof Date ? date : date.toDate();
-    return eventDate.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
-  const formatTime = (time: Date | Timestamp) => {
-    if (!time) return 'No time';
-    // Handle both Date objects and Firestore Timestamps
-    const eventTime = time instanceof Date ? time : time.toDate();
-    return eventTime.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
 
   const getEventStatus = () => {
     if (!event || !event.date) return 'unknown';
@@ -194,21 +187,32 @@ export default function EventDetailsScreen() {
     // Encode the address for use in a URL
     const address = encodeURIComponent(event.location);
     
-    // Create a Google Maps URL (works on both iOS and Android)
-    const url = `https://www.google.com/maps/search/?api=1&query=${address}`;
+    // Platform-specific map options
+    let url: string;
     
-    Linking.canOpenURL(url)
-      .then(supported => {
-        if (supported) {
+    if (Platform.OS === 'ios') {
+      // Try Apple Maps first on iOS
+      url = `maps://?q=${address}`;
+      Linking.canOpenURL(url).then(supported => {
+        if (!supported) {
+          // Fall back to Google Maps if Apple Maps isn't available
+          url = `https://www.google.com/maps/search/?api=1&query=${address}`;
           return Linking.openURL(url);
         } else {
-          Alert.alert('Error', 'Cannot open maps application');
+          return Linking.openURL(url);
         }
-      })
-      .catch(err => {
+      }).catch(err => {
         console.error('Error opening directions:', err);
-        Alert.alert('Error', 'Failed to open directions');
+        Alert.alert('Error', 'Failed to open maps application');
       });
+    } else {
+      // Use Google Maps on Android
+      url = `https://www.google.com/maps/search/?api=1&query=${address}`;
+      Linking.openURL(url).catch(err => {
+        console.error('Error opening directions:', err);
+        Alert.alert('Error', 'Failed to open maps application');
+      });
+    }
   };
 
   const handleDelete = async () => {
@@ -263,14 +267,20 @@ export default function EventDetailsScreen() {
   const shouldShowQRCode = !isOrganizer && isAttending && (!event.isPaid || hasUserPaid);
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* Header with back button and share */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity 
+          onPress={() => router.back()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <FontAwesome name="arrow-left" size={24} color="#007AFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Event Details</Text>
-        <TouchableOpacity onPress={handleShare}>
+        <TouchableOpacity 
+          onPress={handleShare}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <FontAwesome name="share" size={24} color="#007AFF" />
         </TouchableOpacity>
       </View>
@@ -388,7 +398,7 @@ export default function EventDetailsScreen() {
               <TouchableOpacity 
                 style={styles.managementButton}
                 onPress={() => router.push({
-                  pathname: "/screens/scan",
+                  pathname: "/screens/QRScannerScreen",
                   params: { eventId: id }
                 })}
               >
@@ -560,10 +570,17 @@ export default function EventDetailsScreen() {
   );
 }
 
+// Create platform-specific shadows
+const cardShadow = createShadow(3);
+const buttonShadow = createShadow(2);
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  contentContainer: {
+    paddingBottom: Platform.OS === 'ios' ? 50 : 30, // Extra padding for iOS
   },
   loadingContainer: {
     flex: 1,
@@ -576,14 +593,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    paddingTop: 50,
+    ...safeTopPadding(4), // Platform-specific top padding
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
     color: '#1F2937',
   },
   imageContainer: {
@@ -612,7 +629,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: Platform.OS === 'ios' ? '700' : 'bold',
     marginBottom: 12,
     color: '#1F2937',
   },
@@ -629,6 +646,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     alignSelf: 'flex-start',
+    overflow: 'hidden', // Ensure text doesn't overflow on Android
   },
   upcomingStatus: {
     backgroundColor: '#EFF6FF',
@@ -666,7 +684,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: Platform.OS === 'ios' ? '700' : 'bold',
     marginTop: 24,
     marginBottom: 12,
     color: '#1F2937',
@@ -683,6 +701,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginTop: 8,
+    gap: Platform.OS === 'ios' ? 8 : undefined, // gap property works better on iOS
   },
   paymentOption: {
     backgroundColor: '#F3F4F6',
@@ -708,11 +727,7 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: 'white',
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...cardShadow, // Platform-specific shadow
   },
   buildingName: {
     fontSize: 16,
@@ -736,12 +751,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: Platform.OS === 'ios' ? 8 : 4,
     marginTop: 8,
+    ...buttonShadow,
   },
   directionsButtonText: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
     fontSize: 14,
     marginLeft: 8,
   },
@@ -827,11 +843,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    ...cardShadow, // Platform-specific shadow
   },
   qrInstructions: {
     fontSize: 14,
@@ -843,87 +855,92 @@ const styles = StyleSheet.create({
   attendButton: {
     backgroundColor: '#007AFF',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: Platform.OS === 'ios' ? 12 : 6,
     alignItems: 'center',
     marginTop: 24,
     marginBottom: 32,
+    ...buttonShadow, // Platform-specific shadow
   },
   attendingButton: {
     backgroundColor: '#DC2626',
   },
   paymentButton: {
     backgroundColor: '#047857',
-  },
-  attendButtonText: {
+},
+attendButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  payButtonContent: {
+    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
+},
+payButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  paymentIcon: {
+},
+paymentIcon: {
     marginRight: 8,
-  },
-  managementSection: {
+},
+managementSection: {
     marginTop: 24,
     backgroundColor: '#F9FAFB',
     borderRadius: 12,
     padding: 16,
-  },
-  managementButtons: {
+    ...cardShadow,
+},
+managementButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginVertical: 16,
-  },
-  managementButton: {
+    gap: Platform.OS === 'ios' ? 16 : 8,
+},
+managementButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#007AFF',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: Platform.OS === 'ios' ? 8 : 4,
     flex: 1,
-    marginHorizontal: 4,
     justifyContent: 'center',
-  },
-  deleteButton: {
+    ...buttonShadow,
+},
+deleteButton: {
     backgroundColor: '#EF4444',
-  },
-  managementButtonText: {
+},
+managementButtonText: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
     fontSize: 14,
     marginLeft: 8,
-  },
-  attendeeManagementContainer: {
+},
+attendeeManagementContainer: {
     marginTop: 8,
-  },
-  paymentReminderContainer: {
+},
+paymentReminderContainer: {
     backgroundColor: '#FEF2F2',
     borderRadius: 12,
     padding: 16,
     marginTop: 16,
     alignItems: 'center',
-  },
-  paymentReminderText: {
+    ...cardShadow,
+},
+paymentReminderText: {
     color: '#B91C1C',
     fontSize: 14,
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 16,
-  },
-  completePaymentButton: {
+},
+completePaymentButton: {
     backgroundColor: '#DC2626',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
-  },
-  completePaymentText: {
+    borderRadius: Platform.OS === 'ios' ? 8 : 4,
+    ...buttonShadow,
+},
+completePaymentText: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
     fontSize: 14,
-  },
+},
 });
