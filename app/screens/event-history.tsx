@@ -19,7 +19,12 @@ import { FontAwesome, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createShadow, safeTopPadding } from '../utils/platformUtils';
 import { formatDate, formatTime, getRelativeDays } from '../utils/dateUtils';
-import eventService, { Event } from '../services/eventServices';
+import eventService, { Event as BaseEvent } from '../services/eventServices';
+
+// Extend the Event type to include the 'source' property
+interface Event extends BaseEvent {
+  source: 'attended' | 'created';
+}
 import { Timestamp } from 'firebase/firestore';
 
 // Type for the grouped events by month

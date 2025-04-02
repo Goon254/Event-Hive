@@ -3,6 +3,8 @@
  * https://docs.expo.io/guides/color-schemes/
  */
 
+
+//components/Themed.tsx
 import { Text as DefaultText, View as DefaultView } from 'react-native';
 
 import Colors from '@/constants/Colors';
@@ -21,13 +23,22 @@ export function useThemeColor(
   colorName: keyof typeof Colors.light & keyof typeof Colors.dark
 ) {
   const theme = useColorScheme() ?? 'light';
-  const colorFromProps = props[theme];
-
-  if (colorFromProps) {
-    return colorFromProps;
-  } else {
+  
+  // Check if props and theme key exist
+  if (props && theme in props) {
+    const colorFromProps = props[theme];
+    if (colorFromProps) {
+      return colorFromProps;
+    }
+  }
+  
+  // Check if Colors and theme key exist
+  if (Colors && theme in Colors && colorName in Colors[theme]) {
     return Colors[theme][colorName];
   }
+  
+  // Fallback to a safe color if everything else fails
+  return theme === 'dark' ? '#FFFFFF' : '#000000';
 }
 
 export function Text(props: TextProps) {

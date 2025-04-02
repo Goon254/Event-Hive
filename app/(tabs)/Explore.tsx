@@ -1,5 +1,5 @@
 //app/(tabs)/Explore.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,16 @@ import {
   Image,
   RefreshControl,
   Platform,
+  Animated,
+  Easing,
+  ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
 import eventService, { Event as EventType } from '../services/eventServices';
 import { createShadow, safeTopPadding } from '../utils/platformUtils';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Types for filtering
 type FilterType = 'all' | 'upcoming' | 'ongoing' | 'completed' | 'attending';
@@ -32,6 +36,10 @@ export default function EventsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [attendingEvents, setAttendingEvents] = useState<string[]>([]);
+  
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
 
   // Fetch events from service
   const fetchEvents = async () => {
@@ -52,6 +60,21 @@ export default function EventsScreen() {
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
+      
+      // Start animations when content loads
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateY, {
+          toValue: 0,
+          duration: 400,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        })
+      ]).start();
     }
   };
 
@@ -149,72 +172,124 @@ export default function EventsScreen() {
     });
   };
 
-  const renderEventCard = ({ item }: { item: EventType }) => {
+  const renderEventCard = ({ item, index }: { item: EventType; index: number }) => {
     const status = getEventStatus(item);
     const isAttending = attendingEvents.includes(item.id);
     
+    // Calculate staggered animation delay based on index
+    const itemFadeAnim = useRef(new Animated.Value(0)).current;
+    const itemTranslateY = useRef(new Animated.Value(20)).current;
+    
+    useEffect(() => {
+      const delay = index * 100; // Stagger effect - 100ms delay per item
+      Animated.parallel([
+        Animated.timing(itemFadeAnim, {
+          toValue: 1,
+          duration: 400,
+          delay,
+          useNativeDriver: true,
+        }),
+        Animated.timing(itemTranslateY, {
+          toValue: 0,
+          duration: 400,
+          delay,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        })
+      ]).start();
+    }, []);
+    
     return (
-      <TouchableOpacity
-        style={styles.eventCard}
-        onPress={() => router.push(`/screens/eventdetails?${item.id}`)} 
+      <Animated.View
+        style={{
+          opacity: itemFadeAnim,
+          transform: [{ translateY: itemTranslateY }]
+        }}
       >
-        {/* Event image or placeholder */}
-        <View style={styles.eventImageContainer}>
-          {item.imageUrl ? (
-            <Image source={{ uri: item.imageUrl }} style={styles.eventImage} />
-          ) : (
-            <View style={[styles.eventImagePlaceholder, { backgroundColor: getColorForEvent(item.title) }]}>
-              <Text style={styles.eventImageText}>{item.title.charAt(0).toUpperCase()}</Text>
-            </View>
-          )}
-          
-          {/* Status badge */}
-          <View style={[
-            styles.statusBadge,
-            status === 'upcoming' && styles.upcomingBadge,
-            status === 'ongoing' && styles.ongoingBadge,
-            status === 'completed' && styles.completedBadge,
-          ]}>
-            <Text style={styles.statusText}>{status.toUpperCase()}</Text>
-          </View>
-          
-          {/* Attending indicator */}
-          {isAttending && (
-            <View style={styles.attendingBadge}>
-              <MaterialIcons name="check-circle" size={18} color="#FFF" />
-            </View>
-          )}
-        </View>
-      
-        <View style={styles.eventContent}>
-          <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
-          
-          <View style={styles.eventInfo}>
-            <View style={styles.infoRow}>
-              <FontAwesome name="calendar" size={14} color="#6B7280" />
-              <Text style={styles.eventDetails}>
-                {formatDate(item.date)} • {formatTime(item.time)}
+        <TouchableOpacity
+          style={styles.eventCard}
+          onPress={() => router.push(`/screens/eventdetails?id=${item.id}`)} 
+          activeOpacity={0.7}
+        >
+          {/* Event image or placeholder */}
+          <View style={styles.eventImageContainer}>
+            {item.imageUrl ? (
+              <View style={styles.imageWrapper}>
+                <Image source={{ uri: item.imageUrl }} style={styles.eventImage} />
+                <LinearGradient
+                  colors={['transparent', 'rgba(0,0,0,0.7)']}
+                  style={styles.imageGradient}
+                />
+              </View>
+            ) : (
+              <View style={[styles.eventImagePlaceholder, { backgroundColor: getColorForEvent(item.title) }]}>
+                <Text style={styles.eventImageText}>{item.title.charAt(0).toUpperCase()}</Text>
+              </View>
+            )}
+            
+            {/* Status badge */}
+            <View style={[
+              styles.statusBadge,
+              status === 'upcoming' && styles.upcomingBadge,
+              status === 'ongoing' && styles.ongoingBadge,
+              status === 'completed' && styles.completedBadge,
+            ]}>
+              <Text style={[
+                styles.statusText,
+                status === 'upcoming' && styles.upcomingText,
+                status === 'ongoing' && styles.ongoingText,
+                status === 'completed' && styles.completedText,
+              ]}>
+                {status.toUpperCase()}
               </Text>
             </View>
             
-            <View style={styles.infoRow}>
-              <FontAwesome name="map-marker" size={14} color="#6B7280" />
-              <Text style={styles.eventDetails} numberOfLines={1}>
-                {item.location || 'Location TBD'}
-              </Text>
-            </View>
-            
-            {item.isPaid && (
-              <View style={styles.infoRow}>
-                <FontAwesome name="ticket" size={14} color="#6B7280" />
-                <Text style={styles.eventDetails}>
-                  ${item.price?.toFixed(2) || '0.00'}
-                </Text>
+            {/* Attending indicator */}
+            {isAttending && (
+              <View style={styles.attendingBadge}>
+                <MaterialIcons name="check-circle" size={18} color="#FFF" />
               </View>
             )}
           </View>
-        </View>
-      </TouchableOpacity>
+        
+          <View style={styles.eventContent}>
+            <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
+            
+            <View style={styles.eventInfo}>
+              <View style={styles.infoRow}>
+                <FontAwesome name="calendar" size={14} color="#6B7280" />
+                <Text style={styles.eventDetails}>
+                  {formatDate(item.date)} • {formatTime(item.time)}
+                </Text>
+              </View>
+              
+              <View style={styles.infoRow}>
+                <FontAwesome name="map-marker" size={14} color="#6B7280" />
+                <Text style={styles.eventDetails} numberOfLines={1}>
+                  {item.location || 'Location TBD'}
+                </Text>
+              </View>
+              
+              {item.isPaid && (
+                <View style={styles.infoRow}>
+                  <FontAwesome name="ticket" size={14} color="#6B7280" />
+                  <Text style={styles.eventDetails}>
+                    ${item.price?.toFixed(2) || '0.00'}
+                  </Text>
+                </View>
+              )}
+            </View>
+            
+            {/* Added attendee count indicator */}
+            {item.attendees && item.attendees.length > 0 && (
+              <View style={styles.attendeeCount}>
+                <FontAwesome name="users" size={12} color="#6B7280" />
+                <Text style={styles.attendeeCountText}>{item.attendees.length} attending</Text>
+              </View>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
     );
   };
   
@@ -246,11 +321,27 @@ export default function EventsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <Animated.View 
+        style={[
+          styles.header,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: translateY }]
+          }
+        ]}
+      >
         <Text style={styles.headerTitle}>Explore Events</Text>
-      </View>
+      </Animated.View>
       
-      <View style={styles.searchContainer}>
+      <Animated.View 
+        style={[
+          styles.searchContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: translateY }]
+          }
+        ]}
+      >
         <FontAwesome name="search" size={18} color="#6B7280" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
@@ -264,29 +355,39 @@ export default function EventsScreen() {
             <FontAwesome name="times-circle" size={18} color="#6B7280" />
           </TouchableOpacity>
         )}
-      </View>
+      </Animated.View>
 
-      <View style={styles.filterContainer}>
-        {['all', 'upcoming', 'ongoing', 'completed', ...(user ? ['attending'] : [])].map(filter => (
-          <TouchableOpacity
-            key={filter}
-            style={[
-              styles.filterButton,
-              selectedFilter === filter && styles.filterButtonActive,
-            ]}
-            onPress={() => setSelectedFilter(filter as FilterType)}
-          >
-            <Text
+      <Animated.View 
+        style={[
+          styles.filterContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: translateY }]
+          }
+        ]}
+      >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+          {['all', 'upcoming', 'ongoing', 'completed', ...(user ? ['attending'] : [])].map(filter => (
+            <TouchableOpacity
+              key={filter}
               style={[
-                styles.filterButtonText,
-                selectedFilter === filter && styles.filterButtonTextActive,
+                styles.filterButton,
+                selectedFilter === filter && styles.filterButtonActive,
               ]}
+              onPress={() => setSelectedFilter(filter as FilterType)}
             >
-              {filter.charAt(0).toUpperCase() + filter.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  selectedFilter === filter && styles.filterButtonTextActive,
+                ]}
+              >
+                {filter.charAt(0).toUpperCase() + filter.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </Animated.View>
 
       <FlatList
         data={filteredEvents}
@@ -301,7 +402,15 @@ export default function EventsScreen() {
           />
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
+          <Animated.View 
+            style={[
+              styles.emptyContainer,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: translateY }]
+              }
+            ]}
+          >
             <MaterialIcons name="event-busy" size={64} color="#D1D5DB" />
             <Text style={styles.emptyText}>No events found</Text>
             {searchQuery.length > 0 && (
@@ -310,7 +419,7 @@ export default function EventsScreen() {
             {selectedFilter !== 'all' && searchQuery.length === 0 && (
               <Text style={styles.emptySubtext}>Try changing your filter</Text>
             )}
-          </View>
+          </Animated.View>
         }
       />
       
@@ -318,6 +427,7 @@ export default function EventsScreen() {
         <TouchableOpacity
           style={styles.createButton}
           onPress={() => router.push('/(tabs)/Create')}
+          activeOpacity={0.8}
         >
           <FontAwesome name="plus" size={20} color="#FFFFFF" />
         </TouchableOpacity>
@@ -377,11 +487,11 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
     paddingVertical: 8,
-    flexWrap: 'wrap',
-    gap: 8,
+  },
+  filterScroll: {
+    paddingHorizontal: 16,
+    paddingRight: 8,
   },
   filterButton: {
     paddingHorizontal: 14,
@@ -389,7 +499,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#F3F4F6',
     marginRight: 8,
-    marginBottom: 8,
   },
   filterButtonActive: {
     backgroundColor: '#007AFF',
@@ -416,6 +525,18 @@ const styles = StyleSheet.create({
   eventImageContainer: {
     position: 'relative',
     height: 120,
+  },
+  imageWrapper: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  imageGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
   },
   eventImage: {
     width: '100%',
@@ -459,6 +580,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#4B5563',
   },
+  upcomingText: {
+    color: '#1D4ED8',
+  },
+  ongoingText: {
+    color: '#047857',
+  },
+  completedText: {
+    color: '#B91C1C',
+  },
   attendingBadge: {
     position: 'absolute',
     top: 12,
@@ -495,6 +625,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
   },
+  attendeeCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  attendeeCountText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginLeft: 4,
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -524,5 +669,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     ...buttonShadow, // Platform-specific shadow
+    elevation: 6, // Increased elevation for better appearance on Android
   },
 });
