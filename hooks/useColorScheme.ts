@@ -1,13 +1,12 @@
-import { Platform } from 'react-native';
+// components/useColorScheme.ts or hooks/useColorScheme.ts
 import { useColorScheme as useRNColorScheme } from 'react-native';
 
 export function useColorScheme() {
-  // Use the web implementation if on web platform
-  if (Platform.OS === 'web') {
-    // Always return light for server rendering on web
-    return 'light';
+  try {
+    const colorScheme = useRNColorScheme();
+    return colorScheme || 'light'; // Return 'light' if colorScheme is null/undefined
+  } catch (error) {
+    console.warn('Error in useColorScheme:', error);
+    return 'light'; // Fallback to light mode on error
   }
-  
-  // For native platforms, use the React Native implementation
-  return useRNColorScheme();
 }

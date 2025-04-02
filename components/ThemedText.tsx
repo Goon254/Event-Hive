@@ -1,5 +1,5 @@
+// components/ThemedText.tsx
 import { Text, type TextProps, StyleSheet } from 'react-native';
-
 import { useThemeColor } from '@/hooks/useThemeColor';
 
 export type ThemedTextProps = TextProps & {
@@ -15,19 +15,34 @@ export function ThemedText({
   type = 'default',
   ...rest
 }: ThemedTextProps) {
-  const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+  // Safely get color with fallback
+  let color;
+  try {
+    color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+  } catch (error) {
+    console.warn('Error in useThemeColor:', error);
+    color = '#000000'; // Fallback to black
+  }
+
+  // Create a safe styles array
+  const styleArray = [{ color }];
+  
+  // Only add defined styles
+  if (type === 'default' && styles.default) styleArray.push({ ...styles.default, color });
+  if (type === 'title' && styles.title) styleArray.push({ ...styles.title, color });
+  if (type === 'defaultSemiBold' && styles.defaultSemiBold) styleArray.push({ ...styles.defaultSemiBold, color });
+  if (type === 'subtitle' && styles.subtitle) styleArray.push({ ...styles.subtitle, color });
+  if (type === 'link' && styles.link) styleArray.push({ ...styles.link, color });
+  
+  // Add custom style if defined
+  if (style) {
+    const flattenedStyle = StyleSheet.flatten(style);
+    styleArray.push({ ...flattenedStyle, color: flattenedStyle.color ?? color });
+  }
 
   return (
     <Text
-      style={[
-        { color },
-        type === 'default' ? styles.default : undefined,
-        type === 'title' ? styles.title : undefined,
-        type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
-        type === 'subtitle' ? styles.subtitle : undefined,
-        type === 'link' ? styles.link : undefined,
-        style,
-      ]}
+      style={styleArray}
       {...rest}
     />
   );
