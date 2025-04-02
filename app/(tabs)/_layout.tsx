@@ -52,11 +52,11 @@ export default function TabsLayout() {
           }}
         />
         <Tabs.Screen
-          name="Create"
+          name="Feed"
           options={{
-            title: 'Create',
+            title: 'Feed',
             tabBarIcon: ({ color }) => (
-              <FontAwesome5 name="plus-circle" size={22} color={color} />
+              <FontAwesome5 name="fa-rss" size={22} color={color} />
             ),
           }}
         />
