@@ -1,4 +1,4 @@
-// app/(tabs)/index.tsx
+// app/(tabs)/Home.tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -14,10 +14,12 @@ import {
   useColorScheme as RNUseColorScheme,
   Animated,
   Easing,
-  Platform
+  Platform,
+  TextInput,
+  Modal
 } from 'react-native';
 import { router } from 'expo-router';
-import { FontAwesome } from '@expo/vector-icons';
+import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import eventService, { Event } from '../services/eventServices';
 import { useAuth } from '../AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,24 +27,48 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { HelloWave } from '@/components/HelloWave';
 import { createShadow } from '../utils/platformUtils';
+import { formatDate, formatTime, getRelativeDays } from '../utils/dateUtils';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.75;
 
-export default function HomeScreen() {
+// Filter types for events
+type FilterType = 'all' | 'upcoming' | 'ongoing' | 'completed';
+
+// Categories for events
+const EVENT_CATEGORIES = [
+  { id: 'music', name: 'Music', icon: 'music' },
+  { id: 'business', name: 'Business', icon: 'briefcase' },
+  { id: 'tech', name: 'Technology', icon: 'laptop' },
+  { id: 'sports', name: 'Sports', icon: 'futbol-o' },
+  { id: 'food', name: 'Food', icon: 'cutlery' },
+  { id: 'arts', name: 'Arts', icon: 'paint-brush' },
+  { id: 'education', name: 'Education', icon: 'graduation-cap' },
+  { id: 'health', name: 'Health', icon: 'heartbeat' }
+];
+
+export default function EnhancedHomeScreen() {
   const colorScheme = useColorScheme();
   const systemColorScheme = RNUseColorScheme();
   const { user } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
+  const [nearbyEvents, setNearbyEvents] = useState<Event[]>([]);
   const [myEvents, setMyEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [featuredEvent, setFeaturedEvent] = useState<Event | null>(null);
+  const [showExploreModal, setShowExploreModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+  const [attendingEvents, setAttendingEvents] = useState<string[]>([]);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
+  const exploreModalTranslateY = useRef(new Animated.Value(Dimensions.get('window').height)).current;
 
   const loadEvents = useCallback(async () => {
     try {
@@ -71,11 +97,22 @@ export default function HomeScreen() {
         setFeaturedEvent(upcoming[0]);
       }
       
+      // Simulate nearby events by taking a random subset
+      const shuffled = [...sortedEvents].sort(() => 0.5 - Math.random());
+      setNearbyEvents(shuffled.slice(0, 5));
+      
       // Filter for user's events if user is logged in
       if (user?.id) {
         const userEvents = sortedEvents.filter(event => event.createdBy === user.id);
         setMyEvents(userEvents);
+        
+        // Fetch events the user is attending
+        const attending = await eventService.getUserAttendingEvents(user.id);
+        setAttendingEvents(attending.map(event => event.id));
       }
+      
+      // Set filtered events initially to all events
+      setFilteredEvents(sortedEvents);
       
       // Start animations when content loads
       Animated.parallel([
@@ -100,6 +137,47 @@ export default function HomeScreen() {
     }
   }, [user?.id]);
 
+  // Filter events for the explore modal
+  useEffect(() => {
+    if (!events.length) {
+      setFilteredEvents([]);
+      return;
+    }
+    
+    let result = [...events];
+    
+    // Apply status filter
+    if (selectedFilter !== 'all') {
+      result = result.filter(event => getEventStatus(event) === selectedFilter);
+    }
+    
+    // Apply category filter
+    if (selectedCategory) {
+      // In a real app, you'd have a category field in your events
+      // For demo, we'll filter based on the title containing the category name
+      const category = EVENT_CATEGORIES.find(cat => cat.id === selectedCategory);
+      if (category) {
+        result = result.filter(event => 
+          event.title.toLowerCase().includes(category.name.toLowerCase()) ||
+          (event.description && event.description.toLowerCase().includes(category.name.toLowerCase()))
+        );
+      }
+    }
+    
+    // Apply search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(event =>
+        event.title.toLowerCase().includes(query) ||
+        (event.location && event.location.toLowerCase().includes(query)) ||
+        (event.locationDetails && event.locationDetails.city && 
+         event.locationDetails.city.toLowerCase().includes(query))
+      );
+    }
+    
+    setFilteredEvents(result);
+  }, [selectedFilter, selectedCategory, searchQuery, events]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadEvents();
@@ -109,23 +187,52 @@ export default function HomeScreen() {
     loadEvents();
   }, [loadEvents]);
 
-  const formatDate = (date: Date | any) => {
-    if (!date) return 'No date';
-    const eventDate = date instanceof Date ? date : date.toDate();
-    return eventDate.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+  // Get event status
+  const getEventStatus = (event: Event) => {
+    if (!event || !event.date) return 'unknown';
+    
+    const now = new Date();
+    const eventDate = event.date instanceof Date ? event.date : event.date.toDate();
+    const eventTime = event.time instanceof Date ? event.time : event.time.toDate();
+    
+    // Combine date and time
+    const eventDateTime = new Date(
+      eventDate.getFullYear(),
+      eventDate.getMonth(),
+      eventDate.getDate(),
+      eventTime.getHours(),
+      eventTime.getMinutes()
+    );
+    
+    // Add event duration (assuming 3 hours if not specified)
+    const eventDuration = event.duration || 3 * 60 * 60 * 1000; // 3 hours in ms
+    const eventEndTime = new Date(eventDateTime.getTime() + eventDuration);
+    
+    if (now < eventDateTime) {
+      return 'upcoming';
+    } else if (now >= eventDateTime && now <= eventEndTime) {
+      return 'ongoing';
+    } else {
+      return 'completed';
+    }
   };
-
-  const formatTime = (date: Date | any) => {
-    if (!date) return '';
-    const eventDate = date instanceof Date ? date : date.toDate();
-    return eventDate.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  
+  // Generate consistent colors based on text
+  const getEventColor = (text: string) => {
+    const colors = [
+      '#4F46E5', '#7C3AED', '#EC4899', '#F59E0B', '#10B981', 
+      '#3B82F6', '#8B5CF6', '#EF4444', '#F97316', '#06B6D4'
+    ];
+    
+    // Simple hash function for string
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      hash = text.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    // Get a consistent index in our color array
+    const index = Math.abs(hash) % colors.length;
+    return colors[index];
   };
 
   const getDaysUntil = (date: Date | any) => {
@@ -137,10 +244,42 @@ export default function HomeScreen() {
     return diffDays === 1 ? '1 day' : `${diffDays} days`;
   };
 
+  // Show explore modal with animation
+  const handleShowExplore = () => {
+    setShowExploreModal(true);
+    Animated.timing(exploreModalTranslateY, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+      easing: Easing.out(Easing.ease)
+    }).start();
+  };
+
+  // Hide explore modal with animation
+  const handleHideExplore = () => {
+    Animated.timing(exploreModalTranslateY, {
+      toValue: Dimensions.get('window').height,
+      duration: 300,
+      useNativeDriver: true,
+      easing: Easing.in(Easing.ease)
+    }).start(() => {
+      setShowExploreModal(false);
+    });
+  };
+
+  // Reset explore filters
+  const handleResetFilters = () => {
+    setSelectedFilter('all');
+    setSelectedCategory(null);
+    setSearchQuery('');
+  };
+
   const renderEventCard = ({ item, index }: { item: Event, index: number }) => {
     // Create individual animations for each card
     const itemFadeAnim = useRef(new Animated.Value(0)).current;
     const itemTranslateY = useRef(new Animated.Value(20)).current;
+    const isAttending = attendingEvents.includes(item.id);
+    const status = getEventStatus(item);
     
     useEffect(() => {
       const delay = index * 100; // Stagger effect
@@ -198,9 +337,16 @@ export default function HomeScreen() {
             {/* Event status badge */}
             <View style={styles.eventStatusBadge}>
               <Text style={styles.eventStatusText}>
-                {getEventStatus(item)}
+                {status.toUpperCase()}
               </Text>
             </View>
+            
+            {/* Attending indicator */}
+            {isAttending && (
+              <View style={styles.attendingBadge}>
+                <MaterialIcons name="check-circle" size={16} color="#FFF" />
+              </View>
+            )}
           </View>
 
           <View style={styles.eventContent}>
@@ -219,11 +365,11 @@ export default function HomeScreen() {
                 {item.location}
               </Text>
             </View>
-            {item.attendees && (
+            {item.isPaid && (
               <View style={styles.eventMetaRow}>
-                <FontAwesome name="users" size={14} color={Colors[colorScheme ?? 'light'].tint} />
+                <FontAwesome name="ticket" size={14} color={Colors[colorScheme ?? 'light'].tint} />
                 <Text style={[styles.eventMetaText, { color: Colors[colorScheme ?? 'light'].text }]}>
-                  {item.attendees.length} attending
+                  ${item.price?.toFixed(2) || '0.00'}
                 </Text>
               </View>
             )}
@@ -231,54 +377,6 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </Animated.View>
     );
-  };
-
-  // Get event status
-  const getEventStatus = (event: Event) => {
-    if (!event || !event.date) return 'Unknown';
-    
-    const now = new Date();
-    const eventDate = event.date instanceof Date ? event.date : event.date.toDate();
-    const eventTime = event.time instanceof Date ? event.time : event.time.toDate();
-    
-    // Combine date and time
-    const eventDateTime = new Date(
-      eventDate.getFullYear(),
-      eventDate.getMonth(),
-      eventDate.getDate(),
-      eventTime.getHours(),
-      eventTime.getMinutes()
-    );
-    
-    // Add event duration (assuming 3 hours if not specified)
-    const eventDuration = event.duration || 3 * 60 * 60 * 1000; // 3 hours in ms
-    const eventEndTime = new Date(eventDateTime.getTime() + eventDuration);
-    
-    if (now < eventDateTime) {
-      return 'Upcoming';
-    } else if (now >= eventDateTime && now <= eventEndTime) {
-      return 'Live';
-    } else {
-      return 'Past';
-    }
-  };
-  
-  // Generate consistent colors based on text
-  const getEventColor = (text: string) => {
-    const colors = [
-      '#4F46E5', '#7C3AED', '#EC4899', '#F59E0B', '#10B981', 
-      '#3B82F6', '#8B5CF6', '#EF4444', '#F97316', '#06B6D4'
-    ];
-    
-    // Simple hash function for string
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-      hash = text.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    
-    // Get a consistent index in our color array
-    const index = Math.abs(hash) % colors.length;
-    return colors[index];
   };
 
   const renderFeaturedEvent = () => {
@@ -337,6 +435,39 @@ export default function HomeScreen() {
             </View>
           </View>
         </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
+  const renderCategoryButtons = () => {
+    return (
+      <Animated.View 
+        style={{
+          opacity: fadeAnim,
+          transform: [{ translateY: translateY }]
+        }}
+      >
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesContainer}
+        >
+          {EVENT_CATEGORIES.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              style={styles.categoryButton}
+              onPress={() => {
+                setSelectedCategory(category.id);
+                handleShowExplore();
+              }}
+            >
+              <View style={[styles.categoryIcon, { backgroundColor: getEventColor(category.name) }]}>
+                <FontAwesome name={category.icon as any} size={18} color="#FFFFFF" />
+              </View>
+              <Text style={styles.categoryText}>{category.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </Animated.View>
     );
   };
@@ -405,48 +536,60 @@ export default function HomeScreen() {
     );
   };
 
-  return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={[Colors[colorScheme ?? 'light'].tint]}
-          tintColor={Colors[colorScheme ?? 'light'].tint}
-        />
-      }
-    >
-      {/* Header with welcome message */}
-      <View style={styles.header}>
-        <View>
-          <View style={styles.welcomeContainer}>
-            <Text style={[styles.welcomeText, { color: Colors[colorScheme ?? 'light'].invertedText }]}>
-              Welcome{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
-            </Text>
-            <HelloWave />
-          </View>
-          <Text style={[styles.subtitleText, { color: Colors[colorScheme ?? 'light'].invertedText }]}>
-            Discover exciting events near you
+  const renderNearbyEventsSection = () => {
+    return (
+      <Animated.View 
+        style={[
+          styles.section,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: translateY }]
+          }
+        ]}
+      >
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: Colors[colorScheme ?? 'light'].text }]}>
+            Events Near You
           </Text>
-        </View>
-        <View style={styles.headerButtons}>
           <TouchableOpacity 
-            style={styles.scanButton}
-            onPress={() => router.push('/screens/scan')}
+            onPress={handleShowExplore}
+            style={styles.seeAllButton}
             activeOpacity={0.7}
           >
-            <FontAwesome name="qrcode" size={20} color="#FFF" />
+            <Text style={[styles.sectionAction, { color: Colors[colorScheme ?? 'light'].tint }]}>
+              See All
+            </Text>
+            <FontAwesome name="chevron-right" size={12} color={Colors[colorScheme ?? 'light'].tint} style={{marginLeft: 4}} />
           </TouchableOpacity>
         </View>
-      </View>
+        
+        {loading ? (
+          <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].tint} style={styles.loader} />
+        ) : nearbyEvents.length > 0 ? (
+          <FlatList
+            data={nearbyEvents}
+            renderItem={renderEventCard}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalList}
+            snapToInterval={CARD_WIDTH + 16}
+            decelerationRate="fast"
+            initialNumToRender={2}
+          />
+        ) : (
+          <View style={[styles.emptyContainer, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
+            <Text style={[styles.emptyText, { color: Colors[colorScheme ?? 'light'].secondaryText }]}>
+              No nearby events found.
+            </Text>
+          </View>
+        )}
+      </Animated.View>
+    );
+  };
 
-      {/* Featured Event */}
-      {!loading && featuredEvent && renderFeaturedEvent()}
-
-      {/* Upcoming Events Section */}
+  const renderUpcomingEventsSection = () => {
+    return (
       <Animated.View 
         style={[
           styles.section,
@@ -462,7 +605,7 @@ export default function HomeScreen() {
           </Text>
           {upcomingEvents.length > 0 && (
             <TouchableOpacity 
-              onPress={() => router.push('/(tabs)/Explore')}
+              onPress={handleShowExplore}
               style={styles.seeAllButton}
               activeOpacity={0.7}
             >
@@ -504,65 +647,274 @@ export default function HomeScreen() {
           </View>
         )}
       </Animated.View>
+    );
+  };
 
-      {/* My Events Section */}
-      {renderMyEventsSection()}
-
-      {/* Activity Feed Section */}
-      <Animated.View 
-        style={[
-          styles.section,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: translateY }]
-          }
-        ]}
+  // Render Explore Modal
+  const renderExploreModal = () => {
+    if (!showExploreModal) return null;
+    
+    return (
+      <Modal
+        visible={showExploreModal}
+        animationType="none"
+        transparent={true}
+        onRequestClose={handleHideExplore}
       >
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: Colors[colorScheme ?? 'light'].text }]}>
-            Recent Activity
-          </Text>
-        </View>
-        
-        {loading ? (
-          <ActivityIndicator size="small" color={Colors[colorScheme ?? 'light'].tint} style={styles.loader} />
-        ) : (
-          <View style={[styles.activityContainer, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-            {events.length > 0 ? (
-              events.slice(0, 3).map((event, index) => (
-                <TouchableOpacity 
-                  key={event.id}
-                  style={[
-                    styles.activityItem,
-                    index < events.slice(0, 3).length - 1 && styles.activityItemBorder,
-                    { borderBottomColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }
-                  ]}
-                  onPress={() => router.push(`/screens/eventdetails?id=${event.id}`)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.activityIconContainer, { backgroundColor: getEventColor(event.title) }]}>
-                    <FontAwesome name="calendar-plus-o" size={16} color="#FFF" />
-                  </View>
-                  <View style={styles.activityContent}>
-                    <Text style={[styles.activityTitle, { color: Colors[colorScheme ?? 'light'].text }]}>
-                      New Event Added
-                    </Text>
-                    <Text style={[styles.activityMessage, { color: Colors[colorScheme ?? 'light'].secondaryText }]}>
-                      {event.title} on {formatDate(event.date)}
-                    </Text>
-                  </View>
-                  <FontAwesome name="chevron-right" size={14} color="#9CA3AF" />
+        <View style={styles.modalOverlay}>
+          <Animated.View 
+            style={[
+              styles.exploreModalContainer,
+              {
+                transform: [{ translateY: exploreModalTranslateY }]
+              }
+            ]}
+          >
+            {/* Modal Header */}
+            <View style={styles.exploreHeader}>
+              <TouchableOpacity 
+                onPress={handleHideExplore}
+                style={styles.closeButton}
+              >
+                <FontAwesome name="times" size={24} color="#1F2937" />
+              </TouchableOpacity>
+              <Text style={styles.exploreTitle}>Explore Events</Text>
+              <TouchableOpacity 
+                onPress={handleResetFilters}
+                style={styles.resetButton}
+              >
+                <Text style={styles.resetText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {/* Search Bar */}
+            <View style={styles.exploreSearchContainer}>
+              <FontAwesome name="search" size={18} color="#6B7280" style={styles.searchIcon} />
+              <TextInput
+                style={styles.exploreSearchInput}
+                placeholder="Search events by title or location"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholderTextColor="#9CA3AF"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <FontAwesome name="times-circle" size={18} color="#6B7280" />
                 </TouchableOpacity>
-              ))
+              )}
+            </View>
+            
+            {/* Filter Tabs */}
+            <View style={styles.exploreFilterContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {['all', 'upcoming', 'ongoing', 'completed'].map(filter => (
+                  <TouchableOpacity
+                    key={filter}
+                    style={[
+                      styles.exploreFilterButton,
+                      selectedFilter === filter && styles.exploreFilterButtonActive,
+                    ]}
+                    onPress={() => setSelectedFilter(filter as FilterType)}
+                  >
+                    <Text
+                      style={[
+                        styles.exploreFilterButtonText,
+                        selectedFilter === filter && styles.exploreFilterButtonTextActive,
+                      ]}
+                    >
+                      {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            
+            {/* Category Chips */}
+            <View style={styles.exploreCategoriesContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {EVENT_CATEGORIES.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.exploreCategoryChip,
+                      selectedCategory === category.id && styles.exploreCategoryChipSelected
+                    ]}
+                    onPress={() => setSelectedCategory(
+                      selectedCategory === category.id ? null : category.id
+                    )}
+                  >
+                    <FontAwesome 
+                      name={category.icon as any} 
+                      size={16} 
+                      color={selectedCategory === category.id ? "#FFFFFF" : "#6B7280"} 
+                    />
+                    <Text style={[
+                      styles.exploreCategoryChipText,
+                      selectedCategory === category.id && styles.exploreCategoryChipTextSelected
+                    ]}>
+                      {category.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            
+            {/* Event List */}
+            {loading ? (
+              <View style={styles.exploreLoadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.exploreLoadingText}>Loading events...</Text>
+              </View>
             ) : (
-              <Text style={[styles.emptyText, { color: Colors[colorScheme ?? 'light'].secondaryText, padding: 16 }]}>
-                No recent activity.
-              </Text>
+              <FlatList
+                data={filteredEvents}
+                renderItem={({ item, index }) => (
+                  <TouchableOpacity
+                    style={styles.exploreEventCard}
+                    onPress={() => {
+                      handleHideExplore();
+                      router.push(`/screens/eventdetails?id=${item.id}`);
+                    }}
+                  >
+                    <View style={styles.exploreEventImageContainer}>
+                      {item.imageUrl ? (
+                        <Image source={{ uri: item.imageUrl }} style={styles.exploreEventImage} />
+                      ) : (
+                        <View style={[
+                          styles.exploreEventImagePlaceholder,
+                          { backgroundColor: getEventColor(item.title) }
+                        ]}>
+                          <Text style={styles.exploreEventImageText}>
+                            {item.title.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    
+                    <View style={styles.exploreEventContent}>
+                      <Text style={styles.exploreEventTitle} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      
+                      <View style={styles.exploreEventInfo}>
+                        <View style={styles.exploreInfoRow}>
+                          <FontAwesome name="calendar" size={14} color="#6B7280" />
+                          <Text style={styles.exploreEventDetails}>
+                            {formatDate(item.date)}
+                          </Text>
+                        </View>
+                        
+                        <View style={styles.exploreInfoRow}>
+                          <FontAwesome name="map-marker" size={14} color="#6B7280" />
+                          <Text style={styles.exploreEventDetails} numberOfLines={1}>
+                            {item.location || "Location TBD"}
+                          </Text>
+                        </View>
+                      </View>
+                      
+                      {/* Status Badge */}
+                      <View style={[
+                        styles.exploreStatusBadge,
+                        getEventStatus(item) === 'upcoming' && styles.exploreUpcomingBadge,
+                        getEventStatus(item) === 'ongoing' && styles.exploreOngoingBadge,
+                        getEventStatus(item) === 'completed' && styles.exploreCompletedBadge
+                      ]}>
+                        <Text style={[
+                          styles.exploreStatusText,
+                          getEventStatus(item) === 'upcoming' && styles.exploreUpcomingText,
+                          getEventStatus(item) === 'ongoing' && styles.exploreOngoingText,
+                          getEventStatus(item) === 'completed' && styles.exploreCompletedText
+                        ]}>
+                          {getEventStatus(item).toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                keyExtractor={item => item.id}
+                contentContainerStyle={styles.exploreEventList}
+                ListEmptyComponent={
+                  <View style={styles.exploreEmptyContainer}>
+                    <MaterialIcons name="event-busy" size={64} color="#D1D5DB" />
+                    <Text style={styles.exploreEmptyText}>No events found</Text>
+                    <Text style={styles.exploreEmptySubtext}>
+                      {searchQuery ? 'Try adjusting your search or filters' : 'No events match your current filters'}
+                    </Text>
+                  </View>
+                }
+              />
             )}
+          </Animated.View>
+        </View>
+      </Modal>
+    );
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
+      <ScrollView 
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[Colors[colorScheme ?? 'light'].tint]}
+            tintColor={Colors[colorScheme ?? 'light'].tint}
+          />
+        }
+      >
+        {/* Header with welcome message */}
+        <View style={styles.header}>
+          <View>
+            <View style={styles.welcomeContainer}>
+              <Text style={[styles.welcomeText, { color: Colors[colorScheme ?? 'light'].invertedText }]}>
+                Welcome{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
+              </Text>
+              
+            </View>
+            <Text style={[styles.subtitleText, { color: Colors[colorScheme ?? 'light'].invertedText }]}>
+              Discover exciting events near you
+            </Text>
           </View>
-        )}
-      </Animated.View>
-    </ScrollView>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity 
+              style={styles.scanButton}
+              onPress={() => router.push('/screens/scan')}
+              activeOpacity={0.7}
+            >
+              <FontAwesome name="qrcode" size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Explore Button */}
+        <TouchableOpacity 
+          style={styles.exploreButton}
+          onPress={handleShowExplore}
+          activeOpacity={0.8}
+        >
+          <FontAwesome name="search" size={16} color="#6B7280" />
+          <Text style={styles.exploreButtonText}>Explore all events</Text>
+          <MaterialIcons name="arrow-forward" size={18} color="#6B7280" />
+        </TouchableOpacity>
+
+        {/* Categories */}
+        {renderCategoryButtons()}
+
+        {/* Featured Event */}
+        {!loading && featuredEvent && renderFeaturedEvent()}
+
+        {/* Events by section */}
+        {renderUpcomingEventsSection()}
+        {renderNearbyEventsSection()}
+        {renderMyEventsSection()}
+      </ScrollView>
+
+      {/* Explore Events Modal */}
+      {renderExploreModal()}
+    </View>
   );
 }
 
@@ -614,11 +966,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  exploreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'white',
+    marginHorizontal: 20,
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 12,
+    ...cardShadow,
+  },
+  exploreButtonText: {
+    fontSize: 16,
+    color: '#1F2937',
+    fontWeight: '500',
+    flex: 1,
+    marginLeft: 10,
+  },
+  categoriesContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  categoryButton: {
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  categoryIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    ...buttonShadow,
+  },
+  categoryText: {
+    fontSize: 12,
+    color: '#4B5563',
+  },
   featuredContainer: {
     width: width - 32,
     height: 200,
     marginHorizontal: 16,
-    marginTop: -20,
     borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: '#E5E7EB',
@@ -779,6 +1169,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1F2937',
   },
+  attendingBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: '#10B981',
+    borderRadius: 20,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Platform.select({
+      ios: { zIndex: 1 }
+    }),
+  },
   eventContent: {
     padding: 12,
   },
@@ -823,39 +1227,225 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  activityContainer: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    ...cardShadow,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    padding: 16,
-    alignItems: 'center',
-  },
-  activityItemBorder: {
-    borderBottomWidth: 1,
-  },
-  activityIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontWeight: '600',
-    fontSize: 15,
-    marginBottom: 2,
-  },
-  activityMessage: {
-    fontSize: 14,
-  },
   loader: {
     marginVertical: 20,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  exploreModalContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    ...cardShadow,
+  },
+  exploreHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    paddingTop: Platform.OS === 'ios' ? 40 : 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  exploreTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  resetButton: {
+    padding: 8,
+  },
+  resetText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  exploreSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    margin: 16,
+    borderRadius: 10,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  exploreSearchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  exploreFilterContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  exploreFilterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+  },
+  exploreFilterButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  exploreFilterButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+  },
+  exploreFilterButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  exploreCategoriesContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  exploreCategoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+  },
+  exploreCategoryChipSelected: {
+    backgroundColor: '#007AFF',
+  },
+  exploreCategoryChipText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
+    marginLeft: 6,
+  },
+  exploreCategoryChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  exploreEventList: {
+    padding: 16,
+    paddingBottom: 120,
+  },
+  exploreEventCard: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+    ...cardShadow,
+  },
+  exploreEventImageContainer: {
+    width: 100,
+    height: 100,
+  },
+  exploreEventImage: {
+    width: '100%',
+    height: '100%',
+  },
+  exploreEventImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exploreEventImageText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
+  },
+  exploreEventContent: {
+    flex: 1,
+    padding: 12,
+    position: 'relative',
+  },
+  exploreEventTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 6,
+  },
+  exploreEventInfo: {
+    flex: 1,
+  },
+  exploreInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  exploreEventDetails: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 8,
+  },
+  exploreStatusBadge: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  exploreUpcomingBadge: {
+    backgroundColor: '#EFF6FF',
+  },
+  exploreOngoingBadge: {
+    backgroundColor: '#ECFDF5',
+  },
+  exploreCompletedBadge: {
+    backgroundColor: '#FEF2F2',
+  },
+  exploreStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  exploreUpcomingText: {
+    color: '#1D4ED8',
+  },
+  exploreOngoingText: {
+    color: '#047857',
+  },
+  exploreCompletedText: {
+    color: '#B91C1C',
+  },
+  exploreLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  exploreLoadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  exploreEmptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    marginTop: 40,
+  },
+  exploreEmptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginTop: 16,
+  },
+  exploreEmptySubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 8,
+  }
 });
+

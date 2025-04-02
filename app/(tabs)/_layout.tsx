@@ -44,10 +44,11 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="Home"
           options={{
-            title: '',
+            title: 'Home',
             tabBarIcon: ({ color }) => (
               <FontAwesome5 name="home" size={22} color={color} />
             ),
+            headerShown: false, // Hide the header for the home tab
           }}
         />
         <Tabs.Screen
@@ -60,13 +61,12 @@ export default function TabsLayout() {
           }}
         />
         <Tabs.Screen
-          name="explore"
+          name="Connections"
           options={{
-            title: 'Explore',
+            title: 'Connections',
             tabBarIcon: ({ color }) => (
-              <FontAwesome5 name="compass" size={22} color={color} />
+              <FontAwesome5 name="users" size={22} color={color} />
             ),
-            headerShown: false, // Hide the header as we have a custom one in the explore component
           }}
         />
         <Tabs.Screen
