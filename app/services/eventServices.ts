@@ -38,6 +38,10 @@ interface CreateEventData {
   createdAt?: Date;
   duration?: number; // Event duration in milliseconds
   imageUrl?: string;
+  galleryImages?: string[]; // Array of image URLs for the event gallery
+  endDate?: Date; // Optional end date for the event
+  endTime?: Date; // Optional end time for the event
+  registrationDeadline?: Date; // Optional registration deadline for the event
 }
 
 export interface Attendee {
@@ -67,41 +71,70 @@ export interface Event extends Omit<CreateEventData, 'date' | 'time' | 'createdA
 }
 
 class EventService {
-  async createEvent(eventData: CreateEventData): Promise<Event> {
-    try {
-      console.log("Creating event with data:", JSON.stringify(eventData, null, 2));
-      
-      // Convert dates to Firestore Timestamps
-      const firestoreData = {
-        ...eventData,
-        date: Timestamp.fromDate(eventData.date),
-        time: Timestamp.fromDate(eventData.time),
-        createdAt: Timestamp.now(),
-        // Default duration to 3 hours if not specified
-        duration: eventData.duration || 3 * 60 * 60 * 1000, // 3 hours in milliseconds
-        // Ensure isPaid is a boolean, default to false
-        isPaid: eventData.isPaid === true,
-        // Only include price and payment options if it's a paid event
-        ...(eventData.isPaid ? {
-          price: Number(eventData.price) || 0,
-          paymentOptions: Array.isArray(eventData.paymentOptions) ? eventData.paymentOptions : []
-        } : {
-          price: 0,
-          paymentOptions: []
-        })
-      };
+ // Updated createEvent function for app/services/eventServices.ts
 
-      const docRef = await addDoc(collection(db, "events"), firestoreData);
-      console.log("Event created with ID:", docRef.id);
-      return { id: docRef.id, ...firestoreData, imageUrl: null, requireFaceRecognition: false };
-    } catch (error) {
-      console.error("Error creating event:", error);
-      if (error instanceof Error && 'code' in error) {
+async createEvent(eventData: CreateEventData): Promise<Event> {
+  try {
+    console.log("Creating event with data:", JSON.stringify(eventData, null, 2));
+    
+    // Convert dates to Firestore Timestamps
+    const firestoreData = {
+      ...eventData,
+      date: Timestamp.fromDate(eventData.date),
+      time: Timestamp.fromDate(eventData.time),
+      createdAt: Timestamp.now(),
+      // Default duration to 3 hours if not specified
+      duration: eventData.duration || 3 * 60 * 60 * 1000, // 3 hours in milliseconds
+      // Ensure isPaid is a boolean, default to false
+      isPaid: eventData.isPaid === true,
+      // Only include price and payment options if it's a paid event
+      ...(eventData.isPaid ? {
+        price: Number(eventData.price) || 0,
+        paymentOptions: Array.isArray(eventData.paymentOptions) ? eventData.paymentOptions : []
+      } : {
+        price: 0,
+        paymentOptions: []
+      }),
+      // Handle optional fields to avoid undefined values
+      ...(eventData.endDate && { endDate: Timestamp.fromDate(eventData.endDate) }),
+      ...(eventData.endTime && { endTime: Timestamp.fromDate(eventData.endTime) }),
+      ...(eventData.registrationDeadline && { 
+        registrationDeadline: Timestamp.fromDate(eventData.registrationDeadline) 
+      })
+    };
+
+    // Add imageUrl only if defined
+    if (eventData.imageUrl) {
+      firestoreData.imageUrl = eventData.imageUrl;
+    }
+
+    // Add galleryImages only if defined and not empty
+    if (eventData.galleryImages && eventData.galleryImages.length > 0) {
+      firestoreData.galleryImages = eventData.galleryImages;
+    }
+
+    // Create a new document in the events collection
+    const docRef = await addDoc(collection(db, "events"), firestoreData);
+    console.log("Event created with ID:", docRef.id);
+    
+    // Return the created event with its ID
+    return { 
+      id: docRef.id, 
+      ...firestoreData,
+      // Set default values for properties that might be undefined
+      //requireFaceRecognition: firestoreData.enableFaceRecognition || false
+    } as Event;
+  } catch (error) {
+    console.error("Error creating event:", error);
+    if (error instanceof Error) {
+      // Log Firebase error code if available
+      if ('code' in error) {
         console.error(`Firebase error code: ${error.code}`);
       }
-      throw error;
     }
+    throw error;
   }
+}
 
   async getEventAttendees(eventId: string): Promise<Attendee[]> {
     try {

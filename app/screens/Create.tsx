@@ -245,23 +245,57 @@ export default function CreateEventScreen() {
   // Function to upload image to Firebase Storage
   const uploadImage = async (uri: string): Promise<string> => {
     try {
+      console.log("Starting image upload for URI:", uri);
+      
+      // If no URI is provided, return null
+      if (!uri) {
+        console.log("No image URI provided, skipping upload");
+        return "";
+      }
+      
       const storage = getStorage();
       const filename = uri.substring(uri.lastIndexOf('/') + 1);
       const eventImagesRef = ref(storage, `event-images/${Date.now()}_${filename}`);
       
-      // Fetch the image as a blob
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // For React Native, we need to prepare the URI properly
+      // Remove the 'file://' prefix if it exists (for iOS)
+      const fileUri = Platform.OS === 'ios' ? uri.replace('file://', '') : uri;
       
-      // Upload blob to Firebase Storage
-      await uploadBytes(eventImagesRef, blob);
+      // Fetch the image and convert to blob
+      const response = await fetch(uri);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      if (!blob) {
+        throw new Error("Failed to create blob from image");
+      }
+      
+      console.log("Blob created successfully, size:", blob.size);
+      
+      // Upload the blob
+      console.log("Starting Firebase upload...");
+      const uploadTask = await uploadBytes(eventImagesRef, blob);
+      console.log("Upload completed:", uploadTask);
       
       // Get download URL
       const downloadURL = await getDownloadURL(eventImagesRef);
+      console.log("Download URL obtained:", downloadURL);
+      
       return downloadURL;
     } catch (error) {
       console.error('Error uploading image:', error);
-      throw new Error('Failed to upload image');
+      // Add more detailed error logging
+      if ((error as { code?: string }).code) {
+        if (error instanceof Error && 'code' in error) {
+          console.error(`Firebase error code: ${(error as { code: string }).code}`);
+        }
+      }
+      
+      // Return empty string instead of throwing an error,
+      // so event creation can continue even if image upload fails
+      return "";
     }
   };
 
@@ -566,37 +600,55 @@ export default function CreateEventScreen() {
       Alert.alert('Validation Error', 'Please check all required fields');
       return;
     }
-
+  
     if (!user) {
       Alert.alert('Authentication Error', 'You must be logged in to create an event');
       return;
     }
-
+  
     try {
       setIsSubmitting(true);
-
-      // Upload images
+  
+      // Upload main image
       let mainImageUrl = null;
-      if (formData.imageUri) {
-        mainImageUrl = await uploadImage(formData.imageUri);
+      try {
+        if (formData.imageUri) {
+          mainImageUrl = await uploadImage(formData.imageUri);
+        }
+      } catch (imageError) {
+        console.warn('Main image upload failed, continuing without image:', imageError);
+        // Show warning but continue with event creation
+        Alert.alert(
+          'Image Upload Warning',
+          'We encountered an issue uploading your main image, but will continue creating your event.',
+          [{ text: 'Continue' }]
+        );
       }
-
-      // Upload gallery images
-      const galleryImageUrls = await Promise.all(
-        formData.galleryImages.map(uri => uploadImage(uri))
-      );
-
-      // Upload speaker images
-      const speakersWithImages = await Promise.all(
-        formData.speakers.map(async (speaker) => {
-          if (speaker.imageUri) {
-            const imageUrl = await uploadImage(speaker.imageUri);
-            return { ...speaker, imageUrl };
+  
+      // Upload gallery images - continue even if some fail
+      let galleryImageUrls: string[] = [];
+      if (formData.galleryImages.length > 0) {
+        try {
+          // Try to upload all images but filter out any that fail
+          const uploadPromises = formData.galleryImages.map(uri => uploadImage(uri));
+          const results = await Promise.allSettled(uploadPromises);
+          
+          // Filter out failed uploads
+          galleryImageUrls = results
+            .filter(result => result.status === 'fulfilled' && result.value)
+            .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
+            .map(result => result.value);
+          
+          // Warn if some uploads failed
+          const failedCount = results.filter(result => result.status === 'rejected').length;
+          if (failedCount > 0) {
+            console.warn(`${failedCount} gallery images failed to upload`);
           }
-          return speaker;
-        })
-      );
-
+        } catch (galleryError) {
+          console.warn('Gallery images upload failed:', galleryError);
+        }
+      }
+  
       // Format location string based on event type
       let locationString = '';
       if (formData.isVirtual) {
@@ -604,7 +656,7 @@ export default function CreateEventScreen() {
       } else {
         locationString = `${formData.buildingName ? formData.buildingName + ', ' : ''}${formData.address}, ${formData.city}, ${formData.state} ${formData.zipCode}`.trim();
       }
-
+  
       // Combine date and time for start and end
       const startDateTime = new Date(formData.date);
       startDateTime.setHours(
@@ -613,7 +665,7 @@ export default function CreateEventScreen() {
         0,
         0
       );
-
+  
       const endDateTime = new Date(formData.endDate);
       endDateTime.setHours(
         formData.endTime.getHours(),
@@ -621,54 +673,67 @@ export default function CreateEventScreen() {
         0,
         0
       );
-
+  
       // Calculate duration in milliseconds
       const duration = endDateTime.getTime() - startDateTime.getTime();
+  
+      // Create event data with or without images
+      // Update the handleSubmit function in app/screens/Create.tsx
 
-      // Convert form data to the structure expected by the service
-      const eventData = {
-        title: formData.title,
-        description: formData.description,
-        category: formData.category,
-        tags: formData.tags,
-        date: startDateTime,
-        time: startDateTime, // For backward compatibility
-        endDate: endDateTime,
-        endTime: endDateTime, // For backward compatibility
-        timeZone: formData.timeZone,
-        duration, // Event duration in milliseconds
-        isVirtual: formData.isVirtual,
-        location: locationString,
-        virtualLink: formData.isVirtual ? formData.virtualLink : undefined,
-        locationDetails: !formData.isVirtual ? {
-          buildingName: formData.buildingName.trim(),
-          address: formData.address.trim(),
-          city: formData.city.trim(),
-          state: formData.state.trim(),
-          zipCode: formData.zipCode.trim()
-        } : undefined,
-        capacity: Number(formData.capacity) || 0,
-        registrationDeadline: formData.registrationDeadline,
-        isPrivate: formData.isPrivate,
-        isPaid: formData.isPaid,
-        price: formData.isPaid && formData.ticketTypes.length === 0 ? Number(formData.price) : 0,
-        paymentOptions: formData.isPaid ? formData.paymentOptions : [],
-        ticketTypes: formData.isPaid ? formData.ticketTypes : [],
-        customFields: formData.customFields,
-        speakers: speakersWithImages,
-        createdBy: user.id,
-        organizerName: user.name || 'Event Host',
-        createdAt: new Date(),
-        imageUrl: mainImageUrl || undefined,
-        galleryImages: galleryImageUrls,
-        cancellationPolicy: formData.cancellationPolicy,
-        enableComments: formData.enableComments,
-        enableFaceRecognition: formData.enableFaceRecognition,
-      };
+// Inside the handleSubmit function, modify the eventData object creation:
 
-      // Save to Firebase using the event service
-      const createdEvent = await eventService.createEvent(eventData);
+// Create event data with proper handling of undefined values
+const eventData = {
+  title: formData.title,
+  description: formData.description,
+  category: formData.category,
+  tags: formData.tags,
+  date: startDateTime,
+  time: startDateTime,
+  endDate: endDateTime,
+  endTime: endDateTime,
+  timeZone: formData.timeZone,
+  duration,
+  isVirtual: formData.isVirtual,
+  location: locationString,
+  // Fix for the undefined virtualLink error
+  // Only add virtualLink if it's a virtual event AND the link exists
+  ...(formData.isVirtual && formData.virtualLink ? { virtualLink: formData.virtualLink } : {}),
+  // Only add locationDetails if it's not a virtual event
+  ...(formData.isVirtual ? {} : {
+    locationDetails: {
+      buildingName: formData.buildingName.trim(),
+      address: formData.address.trim(),
+      city: formData.city.trim(),
+      state: formData.state.trim(),
+      zipCode: formData.zipCode.trim()
+    }
+  }),
+  capacity: Number(formData.capacity) || 0,
+  // Only add registrationDeadline if it exists
+  ...(formData.registrationDeadline ? { registrationDeadline: formData.registrationDeadline } : {}),
+  isPrivate: formData.isPrivate,
+  isPaid: formData.isPaid,
+  price: formData.isPaid && formData.ticketTypes.length === 0 ? Number(formData.price) : 0,
+  paymentOptions: formData.isPaid ? formData.paymentOptions : [],
+  ticketTypes: formData.isPaid ? formData.ticketTypes : [],
+  customFields: formData.customFields,
+  createdBy: user.id,
+  organizerName: user.name || 'Event Host',
+  createdAt: new Date(),
+  // Only add imageUrl if it exists
+  ...(mainImageUrl ? { imageUrl: mainImageUrl } : {}),
+  // Only add galleryImages if it exists and has items
+  ...(galleryImageUrls.length > 0 ? { galleryImages: galleryImageUrls } : {}),
+  // Other fields
+  cancellationPolicy: formData.cancellationPolicy || '',
+  enableComments: formData.enableComments,
+  enableFaceRecognition: formData.enableFaceRecognition,
+};
 
+// Now create the event with the properly formatted data
+const createdEvent = await eventService.createEvent(eventData);
+  
       Alert.alert(
         'Success', 
         'Event created successfully', 
