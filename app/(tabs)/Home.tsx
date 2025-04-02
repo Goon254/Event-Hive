@@ -69,6 +69,55 @@ export default function EnhancedHomeScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
   const exploreModalTranslateY = useRef(new Animated.Value(Dimensions.get('window').height)).current;
+  
+  // Create a shared pool of animation values for list items
+  const itemAnimations = useRef<{
+    fadeAnim: Animated.Value[],
+    translateY: Animated.Value[]
+  }>({
+    fadeAnim: [],
+    translateY: []
+  });
+
+  // Initialize animations when component mounts
+  useEffect(() => {
+    // Pre-allocate animation values for a reasonable number of items
+    const maxItems = 20;
+    itemAnimations.current = {
+      fadeAnim: Array(maxItems).fill(0).map(() => new Animated.Value(0)),
+      translateY: Array(maxItems).fill(0).map(() => new Animated.Value(20))
+    };
+  }, []);
+
+  // Function to animate list items
+  const animateListItems = useCallback((count: number) => {
+    const animations: Animated.CompositeAnimation[] = [];
+    
+    for (let i = 0; i < count; i++) {
+      if (i < itemAnimations.current.fadeAnim.length) {
+        const delay = i * 50;
+        animations.push(
+          Animated.timing(itemAnimations.current.fadeAnim[i], {
+            toValue: 1,
+            duration: 300,
+            delay,
+            useNativeDriver: true,
+          })
+        );
+        animations.push(
+          Animated.timing(itemAnimations.current.translateY[i], {
+            toValue: 0,
+            duration: 300,
+            delay,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          })
+        );
+      }
+    }
+    
+    Animated.parallel(animations).start();
+  }, []);
 
   const loadEvents = useCallback(async () => {
     try {
@@ -129,13 +178,21 @@ export default function EnhancedHomeScreen() {
         })
       ]).start();
       
+      // Trigger animations for list items
+      const maxCount = Math.max(
+        upcoming.length,
+        shuffled.slice(0, 5).length,
+        user?.id ? sortedEvents.filter(event => event.createdBy === user.id).length : 0
+      );
+      animateListItems(maxCount);
+      
     } catch (error) {
       console.error('Error loading events:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id]);
+  }, [user?.id, animateListItems]);
 
   // Filter events for the explore modal
   useEffect(() => {
@@ -274,37 +331,25 @@ export default function EnhancedHomeScreen() {
     setSearchQuery('');
   };
 
-  const renderEventCard = ({ item, index }: { item: Event, index: number }) => {
-    // Create individual animations for each card
-    const itemFadeAnim = useRef(new Animated.Value(0)).current;
-    const itemTranslateY = useRef(new Animated.Value(20)).current;
+  // Render event card with animations from the shared pool
+  const renderEventCard = ({ item, index }: { item: Event; index: number }) => {
     const isAttending = attendingEvents.includes(item.id);
     const status = getEventStatus(item);
     
-    useEffect(() => {
-      const delay = index * 100; // Stagger effect
-      Animated.parallel([
-        Animated.timing(itemFadeAnim, {
-          toValue: 1,
-          duration: 400,
-          delay,
-          useNativeDriver: true,
-        }),
-        Animated.timing(itemTranslateY, {
-          toValue: 0,
-          duration: 400,
-          delay,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        })
-      ]).start();
-    }, []);
+    // Safely access animation values from the pool
+    const fadeValue = index < itemAnimations.current.fadeAnim.length 
+      ? itemAnimations.current.fadeAnim[index] 
+      : new Animated.Value(1);
+    
+    const translateValue = index < itemAnimations.current.translateY.length 
+      ? itemAnimations.current.translateY[index] 
+      : new Animated.Value(0);
     
     return (
       <Animated.View
         style={{
-          opacity: itemFadeAnim,
-          transform: [{ translateY: itemTranslateY }]
+          opacity: fadeValue,
+          transform: [{ translateY: translateValue }]
         }}
       >
         <TouchableOpacity
@@ -491,7 +536,7 @@ export default function EnhancedHomeScreen() {
           </Text>
           {myEvents.length > 0 && (
             <TouchableOpacity 
-              onPress={() => router.push('/screens/my-events')}
+              onPress={() => router.push('/screens/event-history')}
               style={styles.seeAllButton}
               activeOpacity={0.7}
             >
@@ -638,7 +683,7 @@ export default function EnhancedHomeScreen() {
             </Text>
             <TouchableOpacity 
               style={styles.createButton}
-              onPress={() => router.push('/screens/Explore')}
+              onPress={() => router.push('/(tabs)/Feed')}
               activeOpacity={0.7}
             >
               <FontAwesome name="search" size={14} color="#FFF" style={{marginRight: 8}} />
@@ -749,7 +794,7 @@ export default function EnhancedHomeScreen() {
                       color={selectedCategory === category.id ? "#FFFFFF" : "#6B7280"} 
                     />
                     <Text style={[
-                      styles.exploreCategoryChipText,
+                      styles.                      exploreCategoryChipText,
                       selectedCategory === category.id && styles.exploreCategoryChipTextSelected
                     ]}>
                       {category.name}
@@ -1448,4 +1493,3 @@ const styles = StyleSheet.create({
     marginTop: 8,
   }
 });
-

@@ -398,7 +398,7 @@ export default function EventDetailsScreen() {
               <TouchableOpacity 
                 style={styles.managementButton}
                 onPress={() => router.push({
-                  pathname: "/screens/QRScannerScreen",
+                  pathname: "/screens/scan",
                   params: { eventId: id }
                 })}
               >
