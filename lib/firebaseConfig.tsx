@@ -12,7 +12,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyD0tQSu3VwqjLRdE1QW1L4y-2Q-VkHAh68",
   authDomain: "scanngo-c3bf7.firebaseapp.com",
   projectId: "scanngo-c3bf7",
-  storageBucket: "scanngo-c3bf7.firebasestorage.app",
+  storageBucket: "scanngo-c3bf7.appspot.com",
   messagingSenderId: "936316225705",
   appId: "1:936316225705:web:ca7c6cab343d735e43c1b8",
   measurementId: "G-SN3STFQ2ZK"

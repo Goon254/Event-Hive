@@ -131,18 +131,18 @@ export default function EventDetailsScreen() {
       ]);
       return;
     }
-
+  
     try {
       setIsLoading(true);
       
       if (isAttending) {
         // Logic to cancel attendance
         Alert.alert('Feature Coming Soon', 'Cancellation will be available in the next update');
-        
       } else {
-        // Add the user as an attendee
+        // Add the user as an attendee with all required fields
         const newAttendee = await eventService.addEventAttendee(id.toString(), {
           name: user.name || 'Anonymous',
+          email: user.email || '',  // Make sure to include email
           checkInStatus: 'pending',
           avatar: user.avatar || undefined
         });
