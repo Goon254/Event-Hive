@@ -1,4 +1,4 @@
-// app/(auth)/login.tsx
+// app/(auth)/reset-password.tsx
 
 import React, { useState } from 'react';
 import {
@@ -16,9 +16,8 @@ import {
 } from 'react-native';
 import { useAuth } from '../AuthContext';
 import validationUtils from '../utils/validation';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 
 // Enhanced form input component
 const EnhancedInput = ({ 
@@ -50,38 +49,73 @@ const EnhancedInput = ({
   </View>
 );
 
-export default function Login() {
-  const { signIn, isLoading, error } = useAuth();
+export default function ResetPassword() {
+  const { resetPassword } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const validateForm = () => {
     const emailValidation = validationUtils.validateEmail(email);
-    const passwordValidation = validationUtils.validatePassword(password);
-
     setEmailError(emailValidation.errors.join(', '));
-    setPasswordError(passwordValidation.errors.join(', '));
-
-    return emailValidation.isValid && passwordValidation.isValid;
+    return emailValidation.isValid;
   };
 
-  const handleLogin = async () => {
+  const handleResetPassword = async () => {
     if (validateForm()) {
+      setIsLoading(true);
       try {
-        await signIn(email, password);
-        // Navigation will be handled by AuthContext
+        await resetPassword(email);
+        setIsSuccess(true);
+        setIsLoading(false);
       } catch (err) {
-        // Fallback error handling if not caught by context
-        let errorMessage = 'An unknown error occurred';
+        setIsLoading(false);
+        let errorMessage = 'Failed to send password reset email. Please try again.';
         if (err instanceof Error) {
           errorMessage = err.message;
         }
-        Alert.alert('Login Failed', errorMessage);
+        Alert.alert('Reset Password Failed', errorMessage);
       }
     }
   };
+
+  if (isSuccess) {
+    return (
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.formContainer}>
+            <View style={styles.headerContainer}>
+              <FontAwesome name="check-circle" size={60} color="#34D399" style={styles.successIcon} />
+              <Text style={styles.title}>Email Sent</Text>
+              <Text style={styles.subtitle}>
+                A password reset link has been sent to {email}. Please check your email inbox and follow the instructions to reset your password.
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => router.push('/(auth)/login')}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.buttonText}>Return to Login</Text>
+            </TouchableOpacity>
+
+            <View style={styles.registerContainer}>
+              <Text style={styles.registerText}>Didn't receive the email? </Text>
+              <TouchableOpacity onPress={handleResetPassword} activeOpacity={0.7}>
+                <Text style={styles.registerLink}>Resend Email</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -91,16 +125,9 @@ export default function Login() {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.formContainer}>
           <View style={styles.headerContainer}>
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>Sign in to continue to ScanGo</Text>
+            <Text style={styles.title}>Reset Password</Text>
+            <Text style={styles.subtitle}>Enter your email address to receive a password reset link</Text>
           </View>
-          
-          {error && (
-            <View style={styles.errorContainer}>
-              <FontAwesome name="exclamation-circle" size={18} color="#FF3B30" style={styles.errorIcon} />
-              <Text style={styles.generalError}>{error}</Text>
-            </View>
-          )}
 
           <EnhancedInput
             label="Email Address"
@@ -118,56 +145,28 @@ export default function Login() {
             icon={<FontAwesome name="envelope" size={16} color="#6B7280" />}
           />
 
-          <EnhancedInput
-            label="Password"
-            placeholder="Enter your password"
-            value={password}
-            onChangeText={(text) => {
-              setPassword(text);
-              setPasswordError('');
-            }}
-            secureTextEntry
-            autoCapitalize="none"
-            editable={!isLoading}
-            error={passwordError}
-            icon={<FontAwesome name="lock" size={16} color="#6B7280" />}
-          />
-
           <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={handleLogin}
+            onPress={handleResetPassword}
             disabled={isLoading}
             activeOpacity={0.8}
           >
             {isLoading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
+              <Text style={styles.buttonText}>Send Reset Link</Text>
             )}
           </TouchableOpacity>
 
-          <Link href="/(auth)/reset-password" asChild>
-          <TouchableOpacity style={styles.forgotPassword} activeOpacity={0.7}>
-            <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-          </TouchableOpacity> 
-          </Link>
-
-          
-          
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>Don't have an account? </Text>
-            <Link href="/(auth)/register" asChild>
-              <TouchableOpacity activeOpacity={0.7}>
-                <Text style={styles.registerLink}>Sign Up</Text>
-              </TouchableOpacity>
-            </Link>
+          <View style={styles.backToLoginContainer}>
+            <TouchableOpacity 
+              onPress={() => router.back()} 
+              style={styles.backButton}
+              activeOpacity={0.7}
+            >
+              <FontAwesome name="arrow-left" size={16} color="#6B7280" style={styles.backIcon} />
+              <Text style={styles.backToLoginText}>Back to Login</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -211,22 +210,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
-  },
-  errorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
-    borderRadius: 8,
-    padding: 12,
     marginBottom: 16,
   },
-  errorIcon: {
-    marginRight: 8,
-  },
-  generalError: {
-    color: '#FF3B30',
-    fontSize: 14,
-    flex: 1,
+  successIcon: {
+    marginBottom: 16,
   },
   button: {
     backgroundColor: '#007AFF',
@@ -243,33 +230,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  forgotPassword: {
+  backToLoginContainer: {
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 24,
   },
-  forgotPasswordText: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  divider: {
+  backButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    padding: 8,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E5E7EB',
+  backIcon: {
+    marginRight: 8,
   },
-  dividerText: {
-    paddingHorizontal: 16,
-    color: '#9CA3AF',
+  backToLoginText: {
+    color: '#6B7280',
     fontSize: 14,
+    fontWeight: '500',
   },
   registerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
+    marginTop: 24,
   },
   registerText: {
     fontSize: 14,

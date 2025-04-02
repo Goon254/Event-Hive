@@ -15,7 +15,8 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User as FirebaseUser,
-  updateProfile
+  updateProfile,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth } from '../lib/firebaseConfig'; // Your Firebase config
 
@@ -38,6 +39,7 @@ interface AuthContextType extends AuthState {
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
+  resetPassword: (email: string) => Promise<void>;
 }
 
 const INITIAL_STATE: AuthState = {
@@ -121,6 +123,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ ...state, error: null });
   };
 
+  const resetPassword = async (email: string) => {
+    setState({ ...state, isLoading: true, error: null });
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setState({ ...state, isLoading: false });
+    } catch (error) {
+      setState({ 
+        ...state, 
+        error: handleAuthError(error), 
+        isLoading: false 
+      });
+      throw error; // Re-throw to handle in the component
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -129,6 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signOut,
         clearError,
+        resetPassword
       }}
     >
       {children}
@@ -145,6 +163,7 @@ function handleAuthError(error: unknown): string {
       case 'auth/user-disabled':
         return 'Account disabled';
       case 'auth/user-not-found':
+        return 'No user found with this email address';
       case 'auth/wrong-password':
         return 'Invalid email or password';
       case 'auth/email-already-in-use':

@@ -32,6 +32,7 @@ function RootLayoutNav() {
             <Stack.Screen name="index" />
             <Stack.Screen name="(auth)/login" />
             <Stack.Screen name="(auth)/register" />
+            <Stack.Screen name="(auth)/reset-password" /> 
           </>
         )}
         
@@ -71,15 +72,16 @@ export default function RootLayout() {
     // Set up the error handler
     if (__DEV__) {
       // In development, keep the default error handler too
-      const originalErrorHandler = global.ErrorUtils.getGlobalHandler();
-      
-      global.ErrorUtils.setGlobalHandler((error, isFatal) => {
+      const originalErrorHandler = ErrorUtils?.getGlobalHandler?.();
+
+      ErrorUtils?.setGlobalHandler?.((error, isFatal) => {
         errorHandler(error);
-        originalErrorHandler(error, isFatal);
+        originalErrorHandler?.(error, isFatal);
       });
     } else {
       // In production, replace the error handler
-      global.ErrorUtils.setGlobalHandler(errorHandler);
+      // Add a type declaration for ErrorUtils to avoid TypeScript errors
+            (global as any).ErrorUtils?.setGlobalHandler?.(errorHandler);
     }
     
     return () => {
