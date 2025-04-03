@@ -13,6 +13,7 @@ import {
   Linking,
   Platform,
   StatusBar,
+  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
@@ -23,6 +24,8 @@ import AttendeeManagement from '../container/AttendeeManagement';
 import { Timestamp } from 'firebase/firestore';
 import { createShadow, safeTopPadding } from '../utils/platformUtils';
 import { formatDate, formatTime } from '../utils/dateUtils';
+import paymentService from '../services/paymentService';
+import { useStripe } from '@stripe/stripe-react-native';
 
 export default function EventDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -34,10 +37,12 @@ export default function EventDetailsScreen() {
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [hasUserPaid, setHasUserPaid] = useState(false);
   const [showAllAttendees, setShowAllAttendees] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentBreakdown, setPaymentBreakdown] = useState<any>(null);
+  const stripe = useStripe();
 
   // Set status bar for better visibility with content
   useEffect(() => {
-    // Set light content for better visibility on colored headers
     StatusBar.setBarStyle('dark-content');
     
     // Clean up on unmount
@@ -62,12 +67,13 @@ export default function EventDetailsScreen() {
 
         // Check if current user is attending
         if (user) {
-          const userAttending = attendeesList.some(a => a.id === user.id);
+          const userAttendee = attendeesList.find(a => a.id === user.id);
+          const userAttending = !!userAttendee;
           setIsAttending(userAttending);
           
           // Check if user has paid (for paid events)
           if (userAttending && eventData.isPaid) {
-            setHasUserPaid(checkPaymentStatus(user.id, attendeesList));
+            setHasUserPaid(checkPaymentStatus(userAttendee));
           }
         }
       } else {
@@ -83,11 +89,9 @@ export default function EventDetailsScreen() {
   };
 
   // Check if user has paid for the event
-  const checkPaymentStatus = (userId: string, attendeesList: Attendee[]): boolean => {
-    const userAttendee = attendeesList.find(a => a.id === userId);
-    // In a real app, you would have a 'paymentStatus' field in your attendee data
-    // For now, we'll assume they've paid if they're checked in
-    return userAttendee?.checkInStatus === 'checked-in';
+  const checkPaymentStatus = (attendee?: Attendee): boolean => {
+    if (!attendee) return false;
+    return attendee.paymentStatus === 'completed';
   };
 
   useEffect(() => {
@@ -131,36 +135,143 @@ export default function EventDetailsScreen() {
       ]);
       return;
     }
-  
+
     try {
-      setIsLoading(true);
-      
       if (isAttending) {
         // Logic to cancel attendance
         Alert.alert('Feature Coming Soon', 'Cancellation will be available in the next update');
-      } else {
-        // Add the user as an attendee with all required fields
-        const newAttendee = await eventService.addEventAttendee(id.toString(), {
-          name: user.name || 'Anonymous',
-          email: user.email || '',  // Make sure to include email
-          checkInStatus: 'pending',
-          avatar: user.avatar || undefined
-        });
-        
-        setIsAttending(true);
-        setAttendees([...attendees, newAttendee]);
-        
-        // If it's a paid event, handle payment process here
-        if (event?.isPaid) {
-          // In a real app, this would open a payment flow
-          Alert.alert('Payment Required', 'Please complete payment to receive your QR code');
-        } else {
-          Alert.alert('Success', 'You are now attending this event');
-        }
+        return;
       }
+      
+      // For paid events, show payment breakdown first
+      if (event?.isPaid && event.price && event.price > 0) {
+        // Calculate fees
+        const fees = paymentService.calculateFeesForDisplay(event.price);
+        setPaymentBreakdown(fees);
+        setShowPaymentModal(true);
+        return;
+      }
+      
+      // For free events, proceed with registration
+      await registerForEvent();
     } catch (error) {
       console.error('Attendance error:', error);
-      Alert.alert('Error', 'Failed to update attendance status');
+      
+      // More descriptive error message with error details
+      let errorMessage = 'Failed to update attendance status';
+      if (error instanceof Error) {
+        errorMessage += ': ' + error.message;
+        console.error('Error details:', error.stack);
+      }
+      
+      Alert.alert('Error', errorMessage);
+    }
+  };
+
+  const registerForEvent = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Check if event ID is valid
+      if (!id || !event) {
+        throw new Error('Invalid event ID or event data');
+      }
+      
+      // Debug logging
+      console.log("Adding attendee with data:", {
+        eventId: id.toString(),
+        userId: user?.id,
+        name: user?.name || 'Anonymous',
+        email: user?.email || '',
+        checkInStatus: 'pending'
+      });
+      
+      // Create a complete attendee object with all required fields
+      const attendeeData = {
+        name: user?.name || 'Anonymous',
+        email: user?.email || '',
+        checkInStatus: 'pending' as const, // Type assertion for TypeScript
+        // For paid events, mark payment as pending
+        ...(event.isPaid ? { paymentStatus: 'pending' as const } : {}),
+        // Only include avatar if it exists
+        ...(user?.avatar ? { avatar: user.avatar } : {})
+      };
+      
+      // Add the user as an attendee
+      const newAttendee = await eventService.addEventAttendee(id.toString(), attendeeData);
+      
+      // For free events, we're done
+      if (!event.isPaid) {
+        setIsAttending(true);
+        setAttendees([...attendees, newAttendee]);
+        Alert.alert('Success', 'You are now attending this event');
+        return;
+      }
+      
+      // For paid events, proceed with payment process
+      // Check if this event has Stripe setup
+      if (!event.stripeAccountId) {
+        // Fallback if no Stripe account is set up
+        setIsAttending(true);
+        setAttendees([...attendees, newAttendee]);
+        Alert.alert('Payment Required', 'The organizer needs to set up payment processing. You will be contacted for payment details.');
+        return;
+      }
+      
+      // Calculate amount in cents
+      const amountInCents = Math.round(event.price * 100);
+      
+      // Get payment intent
+      const { clientSecret, paymentIntentId } = await paymentService.processTicketPayment(
+        id.toString(),
+        newAttendee.id,
+        amountInCents,
+        event.stripeAccountId,
+        `Ticket for ${event.title}`
+      );
+      
+      // Initialize payment sheet
+      const { error: initError } = await stripe.initPaymentSheet({
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: 'Event-Hive',
+        applePay: { merchantCountryCode: 'US' },
+        googlePay: { merchantCountryCode: 'US', testEnv: __DEV__ }
+      });
+      
+      if (initError) {
+        throw new Error(`Payment initialization failed: ${initError.message}`);
+      }
+      
+      // Present the payment sheet
+      const { error: presentError } = await stripe.presentPaymentSheet();
+      
+      if (presentError) {
+        if (presentError.code === 'Canceled') {
+          throw new Error('Payment canceled');
+        }
+        throw new Error(`Payment failed: ${presentError.message}`);
+      }
+      
+      // Payment successful - update attendee status
+      await paymentService.confirmAttendeePayment(
+        id.toString(),
+        newAttendee.id,
+        paymentIntentId
+      );
+      
+      setIsAttending(true);
+      setHasUserPaid(true);
+      setAttendees([...attendees, { ...newAttendee, paymentStatus: 'completed' }]);
+      
+      Alert.alert('Success', 'Payment successful! You are now registered for this event.');
+      
+    } catch (error) {
+      console.error('Registration error:', error);
+      let errorMessage = 'Failed to complete registration';
+      if (error instanceof Error) {
+        errorMessage += `: ${error.message}`;
+      }
+      Alert.alert('Error', errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -241,6 +352,69 @@ export default function EventDetailsScreen() {
       ]
     );
   };
+
+  // Render payment breakdown modal
+  const renderPaymentModal = () => (
+    <Modal
+      visible={showPaymentModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowPaymentModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.paymentModal}>
+          <Text style={styles.paymentModalTitle}>Ticket Purchase</Text>
+          
+          <View style={styles.paymentBreakdown}>
+            <View style={styles.paymentRow}>
+              <Text style={styles.paymentLabel}>Ticket Price</Text>
+              <Text style={styles.paymentValue}>${event?.price?.toFixed(2)}</Text>
+            </View>
+            
+            <View style={styles.paymentRow}>
+              <Text style={styles.paymentLabel}>Platform Fee (5%)</Text>
+              <Text style={styles.paymentValue}>${paymentBreakdown?.platformFee?.toFixed(2)}</Text>
+            </View>
+            
+            <View style={styles.paymentRow}>
+              <Text style={styles.paymentLabel}>Payment Processing</Text>
+              <Text style={styles.paymentValue}>${paymentBreakdown?.stripeFee?.toFixed(2)}</Text>
+            </View>
+            
+            <View style={styles.divider} />
+            
+            <View style={styles.paymentRow}>
+              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalValue}>${paymentBreakdown?.totalPrice?.toFixed(2)}</Text>
+            </View>
+            
+            <Text style={styles.organizerNote}>
+              ${paymentBreakdown?.creatorReceives?.toFixed(2)} goes to the event organizer
+            </Text>
+          </View>
+          
+          <View style={styles.modalButtons}>
+            <TouchableOpacity 
+              style={styles.cancelButton}
+              onPress={() => setShowPaymentModal(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.confirmButton}
+              onPress={() => {
+                setShowPaymentModal(false);
+                registerForEvent();
+              }}
+            >
+              <Text style={styles.confirmButtonText}>Continue to Payment</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (isLoading) {
     return (
@@ -360,6 +534,13 @@ export default function EventDetailsScreen() {
                 <Text style={styles.noOptionsText}>No payment options specified</Text>
               )}
             </View>
+
+            {/* Fee Breakdown */}
+            <View style={styles.feeInfoContainer}>
+              <Text style={styles.feeTitle}>Fee Structure:</Text>
+              <Text style={styles.feeText}>• Event-Hive fee: 5% of ticket price</Text>
+              <Text style={styles.feeText}>• Payment processing: 2.9% + $0.30 per transaction</Text>
+            </View>
           </View>
         )}
 
@@ -471,6 +652,11 @@ export default function EventDetailsScreen() {
                              attendee.checkInStatus === 'absent' ? 'Absent' : 'Not Checked In'}
                           </Text>
                         </View>
+                        {attendee.paymentStatus === 'completed' && (
+                          <View style={styles.paidStatus}>
+                            <Text style={styles.paidStatusText}>Paid</Text>
+                          </View>
+                        )}
                       </View>
                     </View>
                   ))}
@@ -516,7 +702,15 @@ export default function EventDetailsScreen() {
             <Text style={styles.paymentReminderText}>
               Please complete payment to receive your QR code for check-in
             </Text>
-            <TouchableOpacity style={styles.completePaymentButton}>
+            <TouchableOpacity 
+              style={styles.completePaymentButton}
+              onPress={() => {
+                // Calculate fees
+                const fees = paymentService.calculateFeesForDisplay(event.price || 0);
+                setPaymentBreakdown(fees);
+                setShowPaymentModal(true);
+              }}
+            >
               <Text style={styles.completePaymentText}>Complete Payment</Text>
             </TouchableOpacity>
           </View>
@@ -566,6 +760,9 @@ export default function EventDetailsScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Payment Modal */}
+      {renderPaymentModal()}
     </ScrollView>
   );
 }
@@ -720,6 +917,25 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     color: '#9CA3AF',
   },
+  feeInfoContainer: {
+    marginTop: 12,
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  feeTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4B5563',
+    marginBottom: 8,
+  },
+  feeText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
   locationSection: {
     marginTop: 24,
   },
@@ -813,6 +1029,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignSelf: 'flex-start',
     marginTop: 4,
+    marginRight: 4,
   },
   checkedInStatus: {
     backgroundColor: '#D1FAE5',
@@ -823,6 +1040,18 @@ const styles = StyleSheet.create({
   checkInStatusText: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  paidStatus: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  paidStatusText: {
+    fontSize: 12,
+    color: '#2563EB',
   },
   showMoreButton: {
     alignItems: 'center',
@@ -866,34 +1095,34 @@ const styles = StyleSheet.create({
   },
   paymentButton: {
     backgroundColor: '#047857',
-},
-attendButtonText: {
+  },
+  attendButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
-},
-payButtonContent: {
+  },
+  payButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-},
-paymentIcon: {
+  },
+  paymentIcon: {
     marginRight: 8,
-},
-managementSection: {
+  },
+  managementSection: {
     marginTop: 24,
     backgroundColor: '#F9FAFB',
     borderRadius: 12,
     padding: 16,
     ...cardShadow,
-},
-managementButtons: {
+  },
+  managementButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginVertical: 16,
     gap: Platform.OS === 'ios' ? 16 : 8,
-},
-managementButton: {
+  },
+  managementButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#007AFF',
@@ -903,44 +1132,136 @@ managementButton: {
     flex: 1,
     justifyContent: 'center',
     ...buttonShadow,
-},
-deleteButton: {
+  },
+  deleteButton: {
     backgroundColor: '#EF4444',
-},
-managementButtonText: {
+  },
+  managementButtonText: {
     color: '#FFFFFF',
     fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
     fontSize: 14,
     marginLeft: 8,
-},
-attendeeManagementContainer: {
+  },
+  attendeeManagementContainer: {
     marginTop: 8,
-},
-paymentReminderContainer: {
+  },
+  paymentReminderContainer: {
     backgroundColor: '#FEF2F2',
     borderRadius: 12,
     padding: 16,
     marginTop: 16,
     alignItems: 'center',
     ...cardShadow,
-},
-paymentReminderText: {
+  },
+  paymentReminderText: {
     color: '#B91C1C',
     fontSize: 14,
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 16,
-},
-completePaymentButton: {
+  },
+  completePaymentButton: {
     backgroundColor: '#DC2626',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: Platform.OS === 'ios' ? 8 : 4,
     ...buttonShadow,
-},
-completePaymentText: {
+  },
+  completePaymentText: {
     color: '#FFFFFF',
     fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
     fontSize: 14,
-},
+  },
+  // Payment modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  paymentModal: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+    ...cardShadow,
+  },
+  paymentModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  paymentBreakdown: {
+    marginBottom: 20,
+  },
+  paymentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  paymentLabel: {
+    fontSize: 15,
+    color: '#4B5563',
+  },
+  paymentValue: {
+    fontSize: 15,
+    color: '#1F2937',
+    fontWeight: '500',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 12,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  totalValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  organizerNote: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  cancelButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginRight: 8,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  confirmButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#047857',
+    marginLeft: 8,
+    alignItems: 'center',
+    ...buttonShadow,
+  },
+  confirmButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
 });

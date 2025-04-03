@@ -50,6 +50,8 @@ export interface Attendee {
   avatar?: string;
   email?: string;
   checkInStatus: 'pending' | 'checked-in' | 'absent';
+  PayemetStatus?: 'paid' | 'unpaid'; // Optional field for payment status
+  createdAt: Timestamp; // Timestamp of when the attendee was added
   checkedInAt?: Timestamp;
 }
 
@@ -149,18 +151,43 @@ async createEvent(eventData: CreateEventData): Promise<Event> {
 
   async addEventAttendee(eventId: string, attendeeData: Omit<Attendee, 'id'>): Promise<Attendee> {
     try {
+      console.log(`Adding attendee to event ${eventId}:`, attendeeData);
+      
+      // Validate required fields
+      if (!attendeeData.name) {
+        throw new Error("Attendee name is required");
+      }
+      
+      if (!attendeeData.checkInStatus) {
+        throw new Error("CheckInStatus is required");
+      }
+      
+      // Ensure collection path is valid
       const attendeesRef = collection(db, "events", eventId, "attendees");
+      
+      // Create the document with all attendee data
       const docRef = await addDoc(attendeesRef, {
         ...attendeeData,
-        checkInStatus: attendeeData.checkInStatus || 'pending'
+        // Add creation timestamp
+        createdAt: Timestamp.now()
       });
-      return { id: docRef.id, ...attendeeData };
+      
+      console.log(`Attendee added with ID: ${docRef.id}`);
+      
+      // Return the complete attendee object with id
+      return { 
+        id: docRef.id, 
+        ...attendeeData 
+      };
     } catch (error) {
       console.error("Error adding attendee:", error);
+      // Rethrow with more context
+      if (error instanceof Error) {
+        throw new Error(`Failed to add attendee: ${error.message}`);
+      }
       throw new Error("Failed to add attendee");
     }
   }
-
   async checkInAttendee(eventId: string, attendeeId: string): Promise<void> {
     try {
       const attendeeRef = doc(db, "events", eventId, "attendees", attendeeId);

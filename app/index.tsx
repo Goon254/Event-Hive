@@ -28,7 +28,7 @@ export default function LandingPage() {
         <View style={styles.descriptionContainer}>
           <Text style={styles.descriptionTitle}>Simplify Event Management</Text>
           <Text style={styles.descriptionText}>
-            ScanGo helps you create and manage events with ease. Use QR codes for seamless check-ins,
+            Event-Hive helps you create and manage events with ease. Use QR codes for seamless check-ins,
             track attendance, and connect with participants all in one place.
           </Text>
         </View>
