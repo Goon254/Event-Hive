@@ -1,4 +1,4 @@
-// app/_layout.tsx with Stripe provider added
+// app/_layout.tsx
 import { Stack } from 'expo-router';
 import { AuthProvider, useAuth } from './AuthContext';
 import ErrorBoundary from './container/shared/ErrorBoundary';
@@ -19,8 +19,8 @@ function RootLayoutNav() {
 
   return (
     <ErrorBoundary>
-      <Stack 
-        screenOptions={{ 
+      <Stack
+        screenOptions={{
           headerShown: false,
           animation: Platform.OS === 'android' ? 'fade_from_bottom' : 'default',
           // Add consistent styling for all screens
@@ -36,7 +36,7 @@ function RootLayoutNav() {
             <Stack.Screen name="index" />
             <Stack.Screen name="(auth)/login" />
             <Stack.Screen name="(auth)/register" />
-            <Stack.Screen name="(auth)/reset-password" /> 
+            <Stack.Screen name="(auth)/reset-password" />
           </>
         )}
         
@@ -54,6 +54,16 @@ function RootLayoutNav() {
           options={{ 
             animation: 'slide_from_right',
             presentation: 'card'
+          }} 
+        />
+        
+        {/* Add Payment History screen */}
+        <Stack.Screen 
+          name="screens/PaymentHistory" 
+          options={{ 
+            animation: 'slide_from_right',
+            presentation: 'card',
+            title: 'Payment History'
           }} 
         />
       </Stack>
@@ -97,7 +107,9 @@ export default function RootLayout() {
     <ErrorBoundary>
       <StripeProvider
         publishableKey={STRIPE_PUBLISHABLE_KEY}
-        merchantIdentifier="merchant.com.your.app" // Only required for Apple Pay
+        merchantIdentifier="merchant.com.eventhive" // For Apple Pay
+        urlScheme="eventhive" // Required for 3D Secure
+        setReturnUrlSchemeOnAndroid={true}
       >
         <SafeAreaProvider>
           {/* Set default status bar style */}

@@ -1,4 +1,4 @@
-// app/screens/eventdetails.tsx
+// app/screens/eventdetails.tsx - Updated with improved payment flow
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,7 +13,6 @@ import {
   Linking,
   Platform,
   StatusBar,
-  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
@@ -24,8 +23,8 @@ import AttendeeManagement from '../container/AttendeeManagement';
 import { Timestamp } from 'firebase/firestore';
 import { createShadow, safeTopPadding } from '../utils/platformUtils';
 import { formatDate, formatTime } from '../utils/dateUtils';
-import paymentService from '../services/paymentService';
 import { useStripe } from '@stripe/stripe-react-native';
+import enhancedPaymentService from '../services/enhancedPaymentService';
 
 export default function EventDetailsScreen() {
   const { id } = useLocalSearchParams();
@@ -34,11 +33,10 @@ export default function EventDetailsScreen() {
   const [event, setEvent] = useState<Event | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAttending, setIsAttending] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [hasUserPaid, setHasUserPaid] = useState(false);
   const [showAllAttendees, setShowAllAttendees] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentBreakdown, setPaymentBreakdown] = useState<any>(null);
   const stripe = useStripe();
 
   // Set status bar for better visibility with content
@@ -143,91 +141,70 @@ export default function EventDetailsScreen() {
         return;
       }
       
-      // For paid events, show payment breakdown first
+      // For paid events, start the registration and payment flow
       if (event?.isPaid && event.price && event.price > 0) {
-        // Calculate fees
-        const fees = paymentService.calculateFeesForDisplay(event.price);
-        setPaymentBreakdown(fees);
-        setShowPaymentModal(true);
-        return;
+        // Start with registration first, then initiate payment
+        await initiateRegistrationAndPayment();
+      } else {
+        // For free events, proceed with registration
+        await registerForEvent(false);
       }
-      
-      // For free events, proceed with registration
-      await registerForEvent();
     } catch (error) {
       console.error('Attendance error:', error);
-      
-      // More descriptive error message with error details
       let errorMessage = 'Failed to update attendance status';
       if (error instanceof Error) {
         errorMessage += ': ' + error.message;
-        console.error('Error details:', error.stack);
       }
-      
       Alert.alert('Error', errorMessage);
     }
   };
 
-  const registerForEvent = async () => {
+  const initiateRegistrationAndPayment = async () => {
+    if (!event || !id) return;
+    
     try {
       setIsLoading(true);
-      
-      // Check if event ID is valid
-      if (!id || !event) {
-        throw new Error('Invalid event ID or event data');
-      }
-      
-      // Debug logging
-      console.log("Adding attendee with data:", {
-        eventId: id.toString(),
-        userId: user?.id,
-        name: user?.name || 'Anonymous',
-        email: user?.email || '',
-        checkInStatus: 'pending'
-      });
       
       // Create a complete attendee object with all required fields
       const attendeeData = {
         name: user?.name || 'Anonymous',
         email: user?.email || '',
-        checkInStatus: 'pending' as const, // Type assertion for TypeScript
-        // For paid events, mark payment as pending
-        ...(event.isPaid ? { paymentStatus: 'pending' as const } : {}),
-        // Only include avatar if it exists
+        checkInStatus: 'pending' as const,
+        paymentStatus: 'pending' as const,
         ...(user?.avatar ? { avatar: user.avatar } : {})
       };
       
-      // Add the user as an attendee
+      // Add the user as an attendee first
       const newAttendee = await eventService.addEventAttendee(id.toString(), attendeeData);
       
-      // For free events, we're done
-      if (!event.isPaid) {
-        setIsAttending(true);
-        setAttendees([...attendees, newAttendee]);
-        Alert.alert('Success', 'You are now attending this event');
-        return;
-      }
+      // Now initiate the payment flow
+      await processPayment(newAttendee);
       
-      // For paid events, proceed with payment process
-      // Check if this event has Stripe setup
-      if (!event.stripeAccountId) {
-        // Fallback if no Stripe account is set up
-        setIsAttending(true);
-        setAttendees([...attendees, newAttendee]);
-        Alert.alert('Payment Required', 'The organizer needs to set up payment processing. You will be contacted for payment details.');
-        return;
-      }
+    } catch (error) {
+      console.error('Error initiating registration and payment:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const processPayment = async (attendee: Attendee) => {
+    if (!event || !id) return;
+    
+    try {
+      // Set payment mode
+      setIsPaying(true);
       
       // Calculate amount in cents
-      const amountInCents = Math.round(event.price * 100);
+      const amountInCents = Math.round((event.price || 0) * 100);
       
       // Get payment intent
-      const { clientSecret, paymentIntentId } = await paymentService.processTicketPayment(
+      const { clientSecret, paymentIntentId } = await enhancedPaymentService.processTicketPayment(
         id.toString(),
-        newAttendee.id,
+        attendee.id,
         amountInCents,
-        event.stripeAccountId,
-        `Ticket for ${event.title}`
+        `Ticket for ${event.title}`,
+        { userId: user?.id }
       );
       
       // Initialize payment sheet
@@ -247,31 +224,75 @@ export default function EventDetailsScreen() {
       
       if (presentError) {
         if (presentError.code === 'Canceled') {
-          throw new Error('Payment canceled');
+          // User canceled the payment - this is not a failure
+          console.log('Payment canceled by user');
+          setIsPaying(false);
+          return;
         }
+        
         throw new Error(`Payment failed: ${presentError.message}`);
       }
       
       // Payment successful - update attendee status
-      await paymentService.confirmAttendeePayment(
+      await enhancedPaymentService.confirmAttendeePayment(
         id.toString(),
-        newAttendee.id,
+        attendee.id,
         paymentIntentId
       );
       
+      // Update local state
       setIsAttending(true);
       setHasUserPaid(true);
-      setAttendees([...attendees, { ...newAttendee, paymentStatus: 'completed' }]);
       
+      // Add the new attendee to the list with completed payment status
+      setAttendees(prev => [...prev, { ...attendee, paymentStatus: 'completed' }]);
+      
+      // Success message
       Alert.alert('Success', 'Payment successful! You are now registered for this event.');
       
     } catch (error) {
-      console.error('Registration error:', error);
-      let errorMessage = 'Failed to complete registration';
-      if (error instanceof Error) {
-        errorMessage += `: ${error.message}`;
+      console.error('Payment error:', error);
+      Alert.alert(
+        'Payment Error', 
+        error instanceof Error ? error.message : 'There was an error processing your payment'
+      );
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const registerForEvent = async (isPaid = false) => {
+    try {
+      setIsLoading(true);
+      
+      // Check if event ID is valid
+      if (!id || !event) {
+        throw new Error('Invalid event ID or event data');
       }
-      Alert.alert('Error', errorMessage);
+      
+      // Create a complete attendee object with all required fields
+      const attendeeData = {
+        name: user?.name || 'Anonymous',
+        email: user?.email || '',
+        checkInStatus: 'pending' as const,
+        // Only include payment status for paid events
+        ...(isPaid ? { paymentStatus: 'pending' as const } : {}),
+        // Only include avatar if it exists
+        ...(user?.avatar ? { avatar: user.avatar } : {})
+      };
+      
+      // Add the user as an attendee
+      const newAttendee = await eventService.addEventAttendee(id.toString(), attendeeData);
+      
+      // Update UI state
+      setIsAttending(true);
+      setAttendees([...attendees, newAttendee]);
+      
+      // Show success message
+      Alert.alert('Success', 'You are now attending this event');
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -281,7 +302,7 @@ export default function EventDetailsScreen() {
     if (!event) return;
     
     try {
-      const url = `https://scangoapp.com/events/${id}`;
+      const url = `https://eventhive.com/events/${id}`;
       await Share.share({
         title: event.title,
         message: `Join me at ${event.title} on ${formatDate(event.date)} at ${formatTime(event.time)}. Location: ${event.location || 'TBD'}\n\n${url}`,
@@ -353,73 +374,45 @@ export default function EventDetailsScreen() {
     );
   };
 
-  // Render payment breakdown modal
-  const renderPaymentModal = () => (
-    <Modal
-      visible={showPaymentModal}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => setShowPaymentModal(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.paymentModal}>
-          <Text style={styles.paymentModalTitle}>Ticket Purchase</Text>
-          
-          <View style={styles.paymentBreakdown}>
-            <View style={styles.paymentRow}>
-              <Text style={styles.paymentLabel}>Ticket Price</Text>
-              <Text style={styles.paymentValue}>${event?.price?.toFixed(2)}</Text>
-            </View>
-            
-            <View style={styles.paymentRow}>
-              <Text style={styles.paymentLabel}>Platform Fee (5%)</Text>
-              <Text style={styles.paymentValue}>${paymentBreakdown?.platformFee?.toFixed(2)}</Text>
-            </View>
-            
-            <View style={styles.paymentRow}>
-              <Text style={styles.paymentLabel}>Payment Processing</Text>
-              <Text style={styles.paymentValue}>${paymentBreakdown?.stripeFee?.toFixed(2)}</Text>
-            </View>
-            
-            <View style={styles.divider} />
-            
-            <View style={styles.paymentRow}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>${paymentBreakdown?.totalPrice?.toFixed(2)}</Text>
-            </View>
-            
-            <Text style={styles.organizerNote}>
-              ${paymentBreakdown?.creatorReceives?.toFixed(2)} goes to the event organizer
-            </Text>
-          </View>
-          
-          <View style={styles.modalButtons}>
-            <TouchableOpacity 
-              style={styles.cancelButton}
-              onPress={() => setShowPaymentModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.confirmButton}
-              onPress={() => {
-                setShowPaymentModal(false);
-                registerForEvent();
-              }}
-            >
-              <Text style={styles.confirmButtonText}>Continue to Payment</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+  const handlePaymentHistory = () => {
+    router.push('/screens/PaymentHistory');
+  };
+
+  const completePayment = async () => {
+    if (!event || !id) return;
+
+    try {
+      setIsPaying(true);
+      
+      // Find the user's attendee record
+      const userAttendee = attendees.find(a => a.id === user?.id);
+      if (!userAttendee) {
+        throw new Error('Attendee record not found');
+      }
+      
+      // Process the payment
+      await processPayment(userAttendee);
+    } catch (error) {
+      console.error('Error completing payment:', error);
+      Alert.alert('Error', 'Failed to complete payment');
+    } finally {
+      setIsPaying(false);
+    }
+  };
 
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#007AFF" />
+      </View>
+    );
+  }
+
+  if (isPaying) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Processing payment...</Text>
       </View>
     );
   }
@@ -533,13 +526,6 @@ export default function EventDetailsScreen() {
               {(!event.paymentOptions || event.paymentOptions.length === 0) && (
                 <Text style={styles.noOptionsText}>No payment options specified</Text>
               )}
-            </View>
-
-            {/* Fee Breakdown */}
-            <View style={styles.feeInfoContainer}>
-              <Text style={styles.feeTitle}>Fee Structure:</Text>
-              <Text style={styles.feeText}>• Event-Hive fee: 5% of ticket price</Text>
-              <Text style={styles.feeText}>• Payment processing: 2.9% + $0.30 per transaction</Text>
             </View>
           </View>
         )}
@@ -683,7 +669,7 @@ export default function EventDetailsScreen() {
             <Text style={styles.sectionTitle}>Check-In QR Code</Text>
             <View style={styles.qrContainer}>
               <QRCode
-                value={`scangoapp://event-checkin/${id}/${user?.id || 'guest'}`}
+                value={`eventhive://event-checkin/${id}/${user?.id || 'guest'}`}
                 size={200}
                 color="#1F2937"
                 backgroundColor="#FFFFFF"
@@ -704,14 +690,14 @@ export default function EventDetailsScreen() {
             </Text>
             <TouchableOpacity 
               style={styles.completePaymentButton}
-              onPress={() => {
-                // Calculate fees
-                const fees = paymentService.calculateFeesForDisplay(event.price || 0);
-                setPaymentBreakdown(fees);
-                setShowPaymentModal(true);
-              }}
+              onPress={completePayment}
+              disabled={isPaying}
             >
-              <Text style={styles.completePaymentText}>Complete Payment</Text>
+              {isPaying ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.completePaymentText}>Complete Payment</Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -724,9 +710,9 @@ export default function EventDetailsScreen() {
               event.isPaid && styles.paymentButton
             ]}
             onPress={handleAttend}
-            disabled={isLoading}
+            disabled={isLoading || isPaying}
           >
-            {isLoading ? (
+            {isLoading || isPaying ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <>
@@ -745,14 +731,25 @@ export default function EventDetailsScreen() {
           </TouchableOpacity>
         )}
         
+        {/* View payment history button (for paid attendees) */}
+        {isAttending && hasUserPaid && (
+          <TouchableOpacity
+            style={styles.viewHistoryButton}
+            onPress={handlePaymentHistory}
+          >
+            <FontAwesome name="history" size={16} color="#4B5563" />
+            <Text style={styles.viewHistoryText}>View Payment History</Text>
+          </TouchableOpacity>
+        )}
+        
         {/* Cancel attendance button (if already attending) */}
         {!isOrganizer && isAttending && (
           <TouchableOpacity
             style={[styles.attendButton, styles.attendingButton]}
             onPress={handleAttend}
-            disabled={isLoading}
+            disabled={isLoading || isPaying}
           >
-            {isLoading ? (
+            {isLoading || isPaying ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <Text style={styles.attendButtonText}>CANCEL ATTENDANCE</Text>
@@ -760,9 +757,6 @@ export default function EventDetailsScreen() {
           </TouchableOpacity>
         )}
       </View>
-
-      {/* Payment Modal */}
-      {renderPaymentModal()}
     </ScrollView>
   );
 }
@@ -784,6 +778,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F9FAFB',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
   },
   header: {
     flexDirection: 'row',
@@ -916,25 +915,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
     color: '#9CA3AF',
-  },
-  feeInfoContainer: {
-    marginTop: 12,
-    backgroundColor: '#F9FAFB',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  feeTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4B5563',
-    marginBottom: 8,
-  },
-  feeText: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 4,
   },
   locationSection: {
     marginTop: 24,
@@ -1172,96 +1152,18 @@ const styles = StyleSheet.create({
     fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
     fontSize: 14,
   },
-  // Payment modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  viewHistoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
+    padding: 12,
+    marginTop: -16,
+    marginBottom: 24,
   },
-  paymentModal: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    width: '90%',
-    maxWidth: 400,
-    ...cardShadow,
-  },
-  paymentModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  paymentBreakdown: {
-    marginBottom: 20,
-  },
-  paymentRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  paymentLabel: {
-    fontSize: 15,
+  viewHistoryText: {
     color: '#4B5563',
-  },
-  paymentValue: {
-    fontSize: 15,
-    color: '#1F2937',
+    fontSize: 14,
     fontWeight: '500',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginVertical: 12,
-  },
-  totalLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  totalValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  organizerNote: {
-    fontSize: 13,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-  },
-  cancelButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginRight: 8,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  confirmButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#047857',
     marginLeft: 8,
-    alignItems: 'center',
-    ...buttonShadow,
-  },
-  confirmButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
+  }
 });

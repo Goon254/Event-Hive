@@ -15,7 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
-import paymentService from '../services/paymentService';
+import paymentService from '../services/enhancedPaymentService';
 import { createShadow } from '../utils/platformUtils';
 
 export default function StripeAccountScreen() {
