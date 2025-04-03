@@ -1,4 +1,4 @@
-// app/components/PaymentModal.tsx
+// app/payments/PaymentModal.tsx
 import React, { useState, useEffect } from 'react';
 import { 
   Modal, 
@@ -12,7 +12,7 @@ import {
   Platform
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { usePayment } from '../../hooks/usePayment';
+import { usePayment } from '../services/usePayment';
 import PaymentBreakdown from './PaymentBreakdown';
 import { createShadow } from '../utils/platformUtils';
 
@@ -129,7 +129,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
           </View>
           <Text style={styles.errorTitle}>Payment Failed</Text>
           <Text style={styles.errorMessage}>{error}</Text>
-          <TouchableOpacity style={styles.tryAgainButton} onPress={handlePayment}>
+          <TouchableOpacity 
+            style={styles.tryAgainButton} 
+            onPress={handlePayment}
+            accessibilityLabel="Try payment again"
+          >
             <Text style={styles.tryAgainText}>Try Again</Text>
           </TouchableOpacity>
         </View>
@@ -145,6 +149,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       transparent={true}
       animationType="none"
       onRequestClose={onClose}
+      accessible={true}
+      accessibilityLabel="Payment modal"
     >
       <View style={styles.overlay}>
         <Animated.View 
@@ -161,6 +167,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
               style={styles.closeButton} 
               onPress={onClose}
               disabled={isLoading || isPaying}
+              accessibilityLabel="Close payment modal"
             >
               <MaterialIcons name="close" size={24} color="#6B7280" />
             </TouchableOpacity>
@@ -190,3 +197,96 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
       </View>
     </Modal>
   );
+};
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: width * 0.9,
+    maxHeight: height * 0.8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
+    ...createShadow(5),
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  resultContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 200,
+  },
+  successIcon: {
+    marginBottom: 16,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  successMessage: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  errorIcon: {
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#EF4444',
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  tryAgainButton: {
+    backgroundColor: '#3B82F6',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  tryAgainText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  }
+});
+
+export default PaymentModal;

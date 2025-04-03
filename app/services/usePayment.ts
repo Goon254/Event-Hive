@@ -2,8 +2,8 @@
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useStripe } from '@stripe/stripe-react-native';
-import enhancedPaymentService, { PaymentDetails } from '../services/paymentService';
-import { createPaymentSheetConfig } from '../lib/stripeConfig';
+import enhancedPaymentService, { PaymentDetails } from '../services/enhancedPaymentService';
+import { createPaymentSheetConfig } from '../../lib/stripeConfig';
 
 interface PaymentHookResult {
   isLoading: boolean;
