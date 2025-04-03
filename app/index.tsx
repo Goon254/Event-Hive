@@ -20,7 +20,7 @@ export default function LandingPage() {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* Header/Logo Section */}
         <View style={styles.headerContainer}>
-          <Text style={styles.logo}>ScanGo</Text>
+          <Text style={styles.logo}>Event-Hive</Text>
           <Text style={styles.tagline}>Scan, Attend, Connect</Text>
         </View>
 
