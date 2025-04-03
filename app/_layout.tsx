@@ -1,4 +1,4 @@
-// app/_layout.tsx
+// app/_layout.tsx with Stripe provider added
 import { Stack } from 'expo-router';
 import { AuthProvider, useAuth } from './AuthContext';
 import ErrorBoundary from './container/shared/ErrorBoundary';
@@ -6,6 +6,10 @@ import { View, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StripeProvider } from '@stripe/stripe-react-native';
+
+// Your Stripe publishable key - in production, use environment variables
+const STRIPE_PUBLISHABLE_KEY = 'pk_test_YOUR_PUBLISHABLE_KEY';
 
 // Navigation component that uses authentication state
 function RootLayoutNav() {
@@ -81,7 +85,7 @@ export default function RootLayout() {
     } else {
       // In production, replace the error handler
       // Add a type declaration for ErrorUtils to avoid TypeScript errors
-            (global as any).ErrorUtils?.setGlobalHandler?.(errorHandler);
+      (global as any).ErrorUtils?.setGlobalHandler?.(errorHandler);
     }
     
     return () => {
@@ -91,13 +95,18 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary>
-      <SafeAreaProvider>
-        {/* Set default status bar style */}
-        <StatusBar style="auto" />
-        <AuthProvider>
-          <RootLayoutNav />
-        </AuthProvider>
-      </SafeAreaProvider>
+      <StripeProvider
+        publishableKey={STRIPE_PUBLISHABLE_KEY}
+        merchantIdentifier="merchant.com.your.app" // Only required for Apple Pay
+      >
+        <SafeAreaProvider>
+          {/* Set default status bar style */}
+          <StatusBar style="auto" />
+          <AuthProvider>
+            <RootLayoutNav />
+          </AuthProvider>
+        </SafeAreaProvider>
+      </StripeProvider>
     </ErrorBoundary>
   );
 }

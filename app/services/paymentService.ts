@@ -4,8 +4,11 @@ import { doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebaseConfig';
 import Constants from 'expo-constants';
 
-// This would normally come from your environment variables or config
-const STRIPE_API_URL = 'https://api.stripe.com/v1';
+// Your server-side API endpoint for secure Stripe operations
+// This should be your own backend server that handles Stripe securely
+const BACKEND_API_URL = 'https://your-backend-api.com';
+
+// Stripe configuration
 const PLATFORM_FEE_PERCENTAGE = 5; // 5% platform fee
 
 class PaymentService {
@@ -25,7 +28,7 @@ class PaymentService {
     };
   }
 
-  // Process ticket payment
+  // Process ticket payment using a secure backend
   async processTicketPayment(
     eventId: string,
     attendeeId: string,
@@ -36,13 +39,8 @@ class PaymentService {
     try {
       console.log(`Processing payment for event ${eventId}, attendee ${attendeeId}`);
       
-      // In a production app, this would call your backend to create a payment intent
-      // For demo purposes, we'll simulate this response
-      // In a real app, NEVER expose your Stripe secret key in the client
-      
-      // Example of what your backend would do:
-      /*
-      const response = await fetch(`YOUR_BACKEND_URL/create-payment-intent`, {
+      // Make a secure call to your backend
+      const response = await fetch(`${BACKEND_API_URL}/create-payment-intent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -56,16 +54,15 @@ class PaymentService {
         }),
       });
       
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create payment intent');
+      }
+      
       const result = await response.json();
-      return result;
-      */
       
-      // For demo purposes, return a simulated response:
-      console.log("Creating simulated payment intent");
-      const simulatedPaymentIntentId = `pi_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-      
-      // Store a record in Firestore for the payment
-      await setDoc(doc(db, "payments", simulatedPaymentIntentId), {
+      // Store payment record in Firestore
+      await setDoc(doc(db, "payments", result.paymentIntentId), {
         eventId,
         attendeeId,
         amount,
@@ -77,11 +74,36 @@ class PaymentService {
       });
       
       return {
-        clientSecret: `seti_${simulatedPaymentIntentId}_secret_${Math.floor(Math.random() * 10000)}`,
-        paymentIntentId: simulatedPaymentIntentId
+        clientSecret: result.clientSecret,
+        paymentIntentId: result.paymentIntentId
       };
     } catch (error) {
       console.error('Error creating payment intent:', error);
+      
+      // If in dev mode and backend isn't available, use simulation
+      if (__DEV__) {
+        console.log("DEV MODE: Using simulated payment intent");
+        const simulatedPaymentIntentId = `pi_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+        
+        // Store a record in Firestore for the payment
+        await setDoc(doc(db, "payments", simulatedPaymentIntentId), {
+          eventId,
+          attendeeId,
+          amount,
+          creatorStripeId: eventCreatorStripeId,
+          description,
+          createdAt: new Date(),
+          platformFeeAmount: Math.round(amount * (PLATFORM_FEE_PERCENTAGE / 100)),
+          status: 'pending',
+          simulated: true
+        });
+        
+        return {
+          clientSecret: `seti_${simulatedPaymentIntentId}_secret_${Math.floor(Math.random() * 10000)}`,
+          paymentIntentId: simulatedPaymentIntentId
+        };
+      }
+      
       if (error instanceof Error) {
         throw new Error(`Payment processing failed: ${error.message}`);
       }
@@ -124,10 +146,7 @@ class PaymentService {
   // Function for event creators to connect Stripe account
   async createConnectAccount(userId: string, email: string, name: string) {
     try {
-      // In a production app, this would call your backend
-      // For demo purposes only - NEVER do this on the client side
-      /*
-      const response = await fetch(`YOUR_BACKEND_URL/create-connect-account`, {
+      const response = await fetch(`${BACKEND_API_URL}/create-connect-account`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -139,14 +158,22 @@ class PaymentService {
         }),
       });
       
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create connect account');
+      }
+      
       const result = await response.json();
       return result.accountLinkUrl;
-      */
-      
-      // For demo purposes, just return a simulated URL
-      return 'https://connect.stripe.com/setup/s/acct_example';
     } catch (error) {
       console.error('Error creating Stripe Connect account:', error);
+      
+      // For development purposes, simulate a successful response
+      if (__DEV__) {
+        console.log("DEV MODE: Simulating Stripe Connect account");
+        return 'https://connect.stripe.com/setup/s/acct_example';
+      }
+      
       throw new Error('Failed to set up payment processing account');
     }
   }
@@ -163,8 +190,13 @@ class PaymentService {
     }
   }
 
-  // For testing/demonstration purposes only
+  // For testing/demonstration purposes only (use only in development)
   async simulateStripeAccountConnection(userId: string) {
+    if (!__DEV__) {
+      console.warn('Stripe account simulation only available in development mode');
+      return false;
+    }
+    
     try {
       const userRef = doc(db, "users", userId);
       await updateDoc(userRef, {
