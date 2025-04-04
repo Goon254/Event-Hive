@@ -426,7 +426,7 @@ export default function EventsScreen() {
       {user && (
         <TouchableOpacity
           style={styles.createButton}
-          onPress={() => router.push('/(tabs)/Create')}
+          onPress={() => router.push('/screens/Create')}
           activeOpacity={0.8}
         >
           <FontAwesome name="plus" size={20} color="#FFFFFF" />

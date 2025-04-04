@@ -6,9 +6,9 @@ import { initStripe } from '@stripe/stripe-react-native';
 // Publishable key - this would normally come from your environment variables
 // For a real app, you'd use different keys for iOS and Android
 const STRIPE_PUBLISHABLE_KEY = Platform.select({
-  ios: 'pk_test_YOUR_TEST_KEY_HERE',
-  android: 'pk_test_YOUR_TEST_KEY_HERE',
-  default: 'pk_test_YOUR_TEST_KEY_HERE'
+  ios: 'pk_test_51R9phj03PVcdX2kJz8vj5IoRvVamTukQXjH6cnwPQyEp7G856KD22qB0GBcv8YdiCLfw3fIm5OJhUIUDAoR7Xivv0043UooPNC',
+  android: 'pk_test_51R9phj03PVcdX2kJz8vj5IoRvVamTukQXjH6cnwPQyEp7G856KD22qB0GBcv8YdiCLfw3fIm5OJhUIUDAoR7Xivv0043UooPNC',
+  default: 'pk_test_51R9phj03PVcdX2kJz8vj5IoRvVamTukQXjH6cnwPQyEp7G856KD22qB0GBcv8YdiCLfw3fIm5OJhUIUDAoR7Xivv0043UooPNC'
 });
 
 // Your backend URL for creating payment intents
@@ -24,7 +24,7 @@ export const initializeStripe = async () => {
       publishableKey: STRIPE_PUBLISHABLE_KEY,
       merchantIdentifier: 'merchant.com.eventhive', // Only needed for Apple Pay
       urlScheme: 'eventhive', // Only needed for 3D Secure
-      setUrlSchemeOnAndroid: true,
+      setReturnUrlSchemeOnAndroid: true,
     });
     console.log('Stripe initialized successfully');
     return true;

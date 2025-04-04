@@ -306,7 +306,7 @@ export default function MyEventsScreen() {
         
         <TouchableOpacity
           style={styles.createButton}
-          onPress={() => router.push('/(tabs)/Create')}
+          onPress={() => router.push('/screens/Create')}
         >
           <FontAwesome name="plus" size={14} color="#FFFFFF" style={{marginRight: 8}} />
           <Text style={styles.createButtonText}>Create Event</Text>
@@ -336,7 +336,7 @@ export default function MyEventsScreen() {
         
         <TouchableOpacity
           style={styles.createHeaderButton}
-          onPress={() => router.push('/(tabs)/Create')}
+          onPress={() => router.push('/screens/Create')}
         >
           <FontAwesome name="plus" size={20} color="#007AFF" />
         </TouchableOpacity>
