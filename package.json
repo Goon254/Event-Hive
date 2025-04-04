@@ -19,6 +19,7 @@
     "@react-native-picker/picker": "2.9.0",
     "@react-navigation/native": "^7.0.14",
     "@stripe/stripe-react-native": "^0.38.6",
+    "date-fns": "^4.1.0",
     "expo": "52.0.42",
     "expo-application": "~6.0.2",
     "expo-barcode-scanner": "^13.0.1",
@@ -51,6 +52,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@types/date-fns": "^2.5.3",
     "@types/react": "~18.3.12",
     "@types/stripe": "^8.0.416",
     "jest": "^29.2.1",
