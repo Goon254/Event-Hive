@@ -38,6 +38,7 @@ export default function EventDetailsScreen() {
   const [hasUserPaid, setHasUserPaid] = useState(false);
   const [showAllAttendees, setShowAllAttendees] = useState(false);
   const stripe = useStripe();
+  const [imageLoading, setImageLoading] = useState(false);
 
   // Set status bar for better visibility with content
   useEffect(() => {
@@ -125,6 +126,38 @@ export default function EventDetailsScreen() {
     }
   };
 
+  const cancelAttendance = async () => {
+    try {
+      if (!id || !user || !event) return;
+      
+      setIsLoading(true);
+      
+      // Find the user's attendee record
+      const userAttendee = attendees.find(a => a.id === user.id);
+      if (!userAttendee) {
+        throw new Error('Attendee record not found');
+      }
+      
+      // Call API to remove attendee
+      await eventService.removeEventAttendee(id.toString(), user.id);
+      
+      // Update UI
+      setIsAttending(false);
+      setHasUserPaid(false);
+      setAttendees(prev => prev.filter(a => a.id !== user.id));
+      
+      Alert.alert('Success', 'Your attendance has been cancelled');
+    } catch (error) {
+      console.error('Cancellation error:', error);
+      Alert.alert(
+        'Error Cancelling Attendance', 
+        error instanceof Error ? error.message : 'An unknown error occurred'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleAttend = async () => {
     if (!user) {
       Alert.alert('Login Required', 'Please log in to attend this event', [
@@ -137,9 +170,11 @@ export default function EventDetailsScreen() {
     try {
       if (isAttending) {
         // Logic to cancel attendance
-        Alert.alert('Feature Coming Soon', 'Cancellation will be available in the next update');
+        await cancelAttendance();
         return;
       }
+      
+
       
       // For paid events, start the registration and payment flow
       if (event?.isPaid && event.price && event.price > 0) {
@@ -175,7 +210,10 @@ export default function EventDetailsScreen() {
       };
       
       // Add the user as an attendee first
-      const newAttendee = await eventService.addEventAttendee(id.toString(), attendeeData);
+      const newAttendee = await eventService.addEventAttendee(id.toString(), {
+        ...attendeeData,
+        createdAt: Timestamp.now(),
+      });
       
       // Now initiate the payment flow
       await processPayment(newAttendee);
@@ -270,6 +308,13 @@ export default function EventDetailsScreen() {
         throw new Error('Invalid event ID or event data');
       }
       
+      // Check if user is already in attendees list to prevent duplicates
+      if (user?.id && attendees.some(a => a.id === user.id)) {
+        Alert.alert('Already Registered', 'You are already registered for this event.');
+        setIsAttending(true); // Ensure state is consistent
+        return;
+      }
+      
       // Create a complete attendee object with all required fields
       const attendeeData = {
         name: user?.name || 'Anonymous',
@@ -282,7 +327,10 @@ export default function EventDetailsScreen() {
       };
       
       // Add the user as an attendee
-      const newAttendee = await eventService.addEventAttendee(id.toString(), attendeeData);
+      const newAttendee = await eventService.addEventAttendee(id.toString(), {
+        ...attendeeData,
+        createdAt: Timestamp.now(),
+      });
       
       // Update UI state
       setIsAttending(true);
@@ -453,20 +501,30 @@ export default function EventDetailsScreen() {
       </View>
 
       {/* Event Image */}
-      <View style={styles.imageContainer}>
-        {event.imageUrl ? (
-          <Image 
-            source={{ uri: event.imageUrl }} 
-            style={styles.eventImage} 
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.imagePlaceholder}>
-            <MaterialIcons name="event" size={60} color="#9CA3AF" />
-            <Text style={styles.imagePlaceholderText}>{event.title}</Text>
-          </View>
-        )}
-      </View>
+      {/* Event Image */}
+<View style={styles.imageContainer}>
+  {event.imageUrl ? (
+    <Image 
+      source={{ uri: event.imageUrl }} 
+      style={styles.eventImage} 
+      resizeMode="cover"
+      // Add loading placeholder
+      onLoadStart={() => setImageLoading(true)}
+      onLoadEnd={() => setImageLoading(false)}
+    />
+  ) : (
+    <View style={styles.imagePlaceholder}>
+      <MaterialIcons name="event" size={60} color="#9CA3AF" />
+      <Text style={styles.imagePlaceholderText}>{event.title}</Text>
+    </View>
+  )}
+  {/* Image loading indicator */}
+  {imageLoading && (
+    <View style={styles.imageLoadingOverlay}>
+      <ActivityIndicator size="large" color="#FFFFFF" />
+    </View>
+  )}
+</View>
 
       {/* Event Details */}
       <View style={styles.detailsContainer}>
@@ -770,6 +828,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
+ imageLoadingOverlay: {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
   contentContainer: {
     paddingBottom: Platform.OS === 'ios' ? 50 : 30, // Extra padding for iOS
   },

@@ -683,7 +683,7 @@ export default function EnhancedHomeScreen() {
             </Text>
             <TouchableOpacity 
               style={styles.createButton}
-              onPress={() => router.push('/(tabs)/Feed')}
+              onPress={() => router.push('/screens/Explore')}
               activeOpacity={0.7}
             >
               <FontAwesome name="search" size={14} color="#FFF" style={{marginRight: 8}} />

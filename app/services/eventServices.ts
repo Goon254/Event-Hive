@@ -47,6 +47,7 @@ interface CreateEventData {
 export interface Attendee {
   id: string;
   name: string;
+  userId?: string;
   avatar?: string;
   email?: string;
   checkInStatus: 'pending' | 'checked-in' | 'absent';
@@ -162,12 +163,30 @@ async createEvent(eventData: CreateEventData): Promise<Event> {
         throw new Error("CheckInStatus is required");
       }
       
+      // Check if user is already registered for this event
+      // First, we need to get the user ID from the context that's adding the attendee
+      const userId = attendeeData.userId || auth.currentUser?.uid;
+      
+      if (userId) {
+        // Get all attendees for this event
+        const attendeesRef = collection(db, "events", eventId, "attendees");
+        const q = query(attendeesRef, where("userId", "==", userId));
+        const querySnapshot = await getDocs(q);
+        
+        // If attendee with this user ID already exists, return an error
+        if (!querySnapshot.empty) {
+          throw new Error("You are already registered for this event");
+        }
+      }
+      
       // Ensure collection path is valid
       const attendeesRef = collection(db, "events", eventId, "attendees");
       
       // Create the document with all attendee data
       const docRef = await addDoc(attendeesRef, {
         ...attendeeData,
+        // Add the user ID explicitly
+        userId: userId || 'anonymous',
         // Add creation timestamp
         createdAt: Timestamp.now()
       });
@@ -177,8 +196,9 @@ async createEvent(eventData: CreateEventData): Promise<Event> {
       // Return the complete attendee object with id
       return { 
         id: docRef.id, 
-        ...attendeeData 
-      };
+        ...attendeeData,
+        userId: userId || 'anonymous'
+      } as Attendee;
     } catch (error) {
       console.error("Error adding attendee:", error);
       // Rethrow with more context
@@ -188,6 +208,25 @@ async createEvent(eventData: CreateEventData): Promise<Event> {
       throw new Error("Failed to add attendee");
     }
   }
+
+  
+  async removeEventAttendee(eventId: string, attendeeId: string): Promise<boolean> {
+    try {
+      console.log(`Removing attendee ${attendeeId} from event ${eventId}`);
+      
+      // Reference to the attendee document
+      const attendeeRef = doc(db, "events", eventId, "attendees", attendeeId);
+      
+      // Delete the document
+      await deleteDoc(attendeeRef);
+      
+      return true;
+    } catch (error) {
+      console.error("Error removing attendee:", error);
+      throw new Error("Failed to cancel attendance");
+    }
+  }
+
   async checkInAttendee(eventId: string, attendeeId: string): Promise<void> {
     try {
       const attendeeRef = doc(db, "events", eventId, "attendees", attendeeId);
