@@ -22,8 +22,8 @@ import socialService from '../services/socialService';
 import { SocialPost, ContentType, PrivacyLevel } from '../models/social';
 import * as ImagePicker from 'expo-image-picker';
 import { createShadow } from '../utils/platformUtils';
-import  formatDistance  from 'date-fns';
-
+import { format, parseISO } from 'date-fns';
+import { formatDistance } from "date-fns";
 export default function SocialFeedScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -271,7 +271,7 @@ export default function SocialFeedScreen() {
   };
 
   // Render each post item
-  const renderPostItem = ({ item }: { item: SocialPost }) => {
+  function renderPostItem({ item }: { item: SocialPost; }) {
     return (
       <View style={styles.postCard}>
         {/* Post Header */}
@@ -283,57 +283,56 @@ export default function SocialFeedScreen() {
               <Text style={styles.avatarInitial}>{item.userName.charAt(0).toUpperCase()}</Text>
             </View>
           )}
-          
+
           <View style={styles.postHeaderInfo}>
             <Text style={styles.userName}>{item.userName}</Text>
             <Text style={styles.postTime}>{formatTimestamp(item.createdAt)}</Text>
           </View>
-          
+
           <TouchableOpacity style={styles.moreButton}>
             <MaterialIcons name="more-horiz" size={24} color="#6B7280" />
           </TouchableOpacity>
         </View>
-        
+
         {/* Post Content */}
         <View style={styles.postContent}>
           {item.content && (
             <Text style={styles.postText}>{item.content}</Text>
           )}
-          
+
           {item.mediaUrls && item.mediaUrls.length > 0 && (
-            <Image 
-              source={{ uri: item.mediaUrls[0] }} 
-              style={styles.postImage} 
-              resizeMode="cover"
-            />
+            <Image
+              source={{ uri: item.mediaUrls[0] }}
+              style={styles.postImage}
+              resizeMode="cover" />
           )}
         </View>
-        
+
         {/* Post Metrics */}
         <View style={styles.postMetrics}>
           <Text style={styles.likeCount}>{item.likes} likes</Text>
           <Text style={styles.commentCount}>{item.comments} comments</Text>
         </View>
-        
+
         {/* Post Actions */}
         <View style={styles.postActions}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={() => handleLikePost(item.id)}
           >
             <FontAwesome name="thumbs-o-up" size={20} color="#6B7280" />
             <Text style={styles.actionText}>Like</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={() => viewComments(item)}
           >
             <FontAwesome name="comment-o" size={20} color="#6B7280" />
             <Text style={styles.actionText}>Comment</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={() => sharePost(item)}
           >
@@ -343,7 +342,7 @@ export default function SocialFeedScreen() {
         </View>
       </View>
     );
-  };
+  }
 
   // Render post creation form
   const renderPostCreation = () => (
@@ -522,7 +521,7 @@ export default function SocialFeedScreen() {
         <Text style={styles.headerTitle}>Social Feed</Text>
         <TouchableOpacity 
           style={styles.searchButton}
-          onPress={() => router.push('/screens/search')}
+          onPress={() => router.push('//screens/search')}
         >
           <MaterialIcons name="search" size={24} color="#1F2937" />
         </TouchableOpacity>
@@ -1013,6 +1012,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  }
+    sendButtonDisabled: {
+      opacity: 0.5,
+    },
+  });

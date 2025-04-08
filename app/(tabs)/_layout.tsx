@@ -56,7 +56,7 @@ export default function TabsLayout() {
           options={{
             title: 'Feed',
             tabBarIcon: ({ color }) => (
-              <FontAwesome5 name="fa-rss" size={22} color={color} />
+              <FontAwesome5 name="newspaper" size={22} color={color} />
             ),
           }}
         />
@@ -65,7 +65,7 @@ export default function TabsLayout() {
           options={{
             title: 'Connections',
             tabBarIcon: ({ color }) => (
-              <FontAwesome5 name="users" size={22} color={color} />
+              <FontAwesome5 name="network-wired" size={22} color={color} />
             ),
           }}
         />
