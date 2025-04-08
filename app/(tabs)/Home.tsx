@@ -959,6 +959,23 @@ export default function EnhancedHomeScreen() {
 
       {/* Explore Events Modal */}
       {renderExploreModal()}
+{/* Floating Action Button for Event Creation */}
+<TouchableOpacity 
+  style={styles.createEventFAB}
+  onPress={() => router.push('/screens/Create')}
+  activeOpacity={0.8}
+>
+  <LinearGradient
+    colors={['#007AFF', '#4F46E5']}
+    style={styles.fabGradient}
+    start={{ x: 0, y: 0 }}
+    end={{ x: 1, y: 1 }}
+  >
+    <FontAwesome name="plus" size={24} color="#FFFFFF" />
+  </LinearGradient>
+</TouchableOpacity>
+
+
     </View>
   );
 }
@@ -1267,6 +1284,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...buttonShadow,
   },
+  createEventFAB: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    ...buttonShadow,
+    borderRadius: 28,
+    elevation: 8,
+  },
   createButtonText: {
     color: 'white',
     fontWeight: '600',
@@ -1491,5 +1516,13 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     marginTop: 8,
+  }
+  ,
+  fabGradient: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
   }
 });
