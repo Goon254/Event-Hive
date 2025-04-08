@@ -71,6 +71,11 @@ export interface Event extends Omit<CreateEventData, 'date' | 'time' | 'createdA
   duration?: number;
   attendees?: string[];
   imageUrl?: string;
+  timeZone?: string;
+  isVirtual?: boolean;
+  virtualLink?: string;
+  cancellationPolicy?: string;
+  speakers?: { name: string; role: string; bio?: string; imageUri?: string }[];
 }
 
 class EventService {
