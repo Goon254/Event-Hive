@@ -19,6 +19,7 @@
     "@react-native-picker/picker": "2.9.0",
     "@react-navigation/native": "^7.0.14",
     "@stripe/stripe-react-native": "^0.38.6",
+    "axios": "^1.8.4",
     "date-fns": "^4.1.0",
     "expo": "52.0.42",
     "expo-application": "~6.0.2",
