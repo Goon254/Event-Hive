@@ -1,5 +1,4 @@
-//app/context/AuthContext.tsx
-// Code for the AuthContext component
+//app/AuthContext.tsx
 import { 
   createContext, 
   useContext, 
@@ -18,13 +17,27 @@ import {
   updateProfile,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { auth } from '../lib/firebaseConfig'; // Your Firebase config
+import { doc, setDoc, getFirestore } from 'firebase/firestore';
+import { auth, db } from '../lib/firebaseConfig'; // Your Firebase config
+
+interface UserProfile {
+  name: string;
+  email: string;
+  phoneNumber: string | null;
+  city: string | null;
+  country: string | null;
+  interests: string[];
+  userType: string;
+  organizationName: string | null;
+  profileImageUrl: string | null;
+  createdAt: string;
+}
 
 interface User {
-  avatar: undefined;
   id: string;
   email: string;
   name: string;
+  avatar?: string;
 }
 
 interface AuthState {
@@ -36,7 +49,7 @@ interface AuthState {
 
 interface AuthContextType extends AuthState {
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string, userProfile?: UserProfile) => Promise<string>;
   signOut: () => Promise<void>;
   clearError: () => void;
   resetPassword: (email: string) => Promise<void>;
@@ -61,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: firebaseUser.uid,
           email: firebaseUser.email || '',
           name: firebaseUser.displayName || '',
-          avatar: undefined,
+          avatar: firebaseUser.photoURL || undefined,
         };
         await AsyncStorage.setItem('authToken', JSON.stringify(user));
         setState({ ...state, user, isAuthenticated: true, isLoading: false });
@@ -88,19 +101,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string, name: string) => {
+  const signUp = async (email: string, password: string, name: string, userProfile?: UserProfile) => {
     setState({ ...state, isLoading: true, error: null });
     try {
-      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      // Create user with Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const { user } = userCredential;
+      
       // Update user profile with name
-      await updateProfile(user, { displayName: name });
-      // onAuthStateChanged will handle the rest
+      await updateProfile(user, { 
+        displayName: name,
+        // Add photoURL if available in userProfile
+        ...(userProfile?.profileImageUrl && { photoURL: userProfile.profileImageUrl })
+      });
+
+      // Create user document in Firestore if userProfile is provided
+      if (userProfile) {
+        await setDoc(doc(db, "users", user.uid), {
+          name: name,
+          email: email,
+          phoneNumber: userProfile.phoneNumber || null,
+          city: userProfile.city || null,
+          country: userProfile.country || null,
+          interests: userProfile.interests || [],
+          userType: userProfile.userType || 'attendee',
+          organizationName: userProfile.organizationName || null,
+          profileImageUrl: userProfile.profileImageUrl || null,
+          createdAt: userProfile.createdAt || new Date().toISOString(),
+          uid: user.uid
+        });
+      }
+      
+      // Return user ID
+      return user.uid;
     } catch (error) {
       setState({ 
         ...state, 
         error: handleAuthError(error), 
         isLoading: false 
       });
+      throw error; // Rethrow to handle in the component
     }
   };
 

@@ -24,6 +24,10 @@ import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../../lib/firebaseConfig';
+import { normalizeUri } from '../utils/fileUtils';
 
 const { width, height } = Dimensions.get('window');
 
@@ -47,6 +51,7 @@ export default function Register() {
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [progress] = useState(new Animated.Value(0));
+  const [uploadingImage, setUploadingImage] = useState(false);
   
   // Form data
   const [userData, setUserData] = useState({
@@ -54,7 +59,8 @@ export default function Register() {
     email: '',
     password: '',
     confirmPassword: '',
-    profileImage: null,
+    profileImage: null as string | null,
+    profileImageUrl: null as string | null, // For storing the uploaded image URL
     phoneNumber: '',
     city: '',
     country: '',
@@ -122,9 +128,67 @@ export default function Register() {
     }
   };
   
+  // Upload profile image to Firebase Storage
+  const uploadProfileImage = async (uri: string): Promise<string | null> => {
+    try {
+      setUploadingImage(true);
+      
+      // Normalize the URI for cross-platform compatibility
+      const normalizedUri = normalizeUri(uri);
+      if (!normalizedUri) {
+        console.error('Image URI is invalid or empty');
+        return null;
+      }
+      
+      // Create a unique filename
+      const filename = `profile_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+      const storage = getStorage();
+      const storageRef = ref(storage, `profile_images/${filename}`);
+      
+      // Fetch the image as a blob
+      const response = await fetch(normalizedUri);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      }
+      
+      const blob = await response.blob();
+      if (!blob) {
+        throw new Error('Failed to create blob from image');
+      }
+      
+      // Upload the blob to Firebase Storage
+      const snapshot = await uploadBytes(storageRef, blob);
+      console.log('Image uploaded successfully!');
+      
+      // Get the download URL
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      return downloadURL;
+      
+    } catch (error) {
+      console.error('Error uploading profile image:', error);
+      Alert.alert(
+        'Upload Error', 
+        'There was a problem uploading your profile image. You can continue registration and add a photo later.'
+      );
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+  
   // Pick profile image
   const pickImage = async () => {
     try {
+      // Request permission if needed
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'We need access to your photo library to set a profile picture.'
+        );
+        return;
+      }
+      
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -133,7 +197,8 @@ export default function Register() {
       });
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        handleChange('profileImage', result.assets[0].uri);
+        const selectedImageUri = result.assets[0].uri;
+        handleChange('profileImage', selectedImageUri);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -195,9 +260,17 @@ export default function Register() {
   };
   
   // Navigate to next step
-  const nextStep = () => {
+  const nextStep = async () => {
     if (validateStep()) {
       if (currentStep < 3) {
+        // Upload profile image if available and moving from step 2 to 3
+        if (currentStep === 2 && userData.profileImage && !userData.profileImageUrl) {
+          const imageUrl = await uploadProfileImage(userData.profileImage);
+          if (imageUrl) {
+            setUserData(prev => ({ ...prev, profileImageUrl: imageUrl }));
+          }
+        }
+        
         // Update progress bar animation
         Animated.timing(progress, {
           toValue: currentStep / 3,
@@ -244,21 +317,39 @@ export default function Register() {
   const handleRegister = async () => {
     if (validateStep()) {
       try {
-        // Create a user profile object with all the data
-        const userProfile = {
-          name: userData.name,
-          email: userData.email,
-          phoneNumber: userData.phoneNumber || null,
-          city: userData.city || null,
-          country: userData.country || null,
-          interests: userData.interests,
-          userType: userData.userType,
-          organizationName: userData.organizationName || null,
-          profileImage: userData.profileImage || null
-        };
+        // Upload profile image if it hasn't been uploaded yet
+        let profileImageUrl = userData.profileImageUrl;
+        if (userData.profileImage && !profileImageUrl) {
+          profileImageUrl = await uploadProfileImage(userData.profileImage);
+        }
         
-        await signUp(userData.email, userData.password, userData.name, userProfile);
-        // Navigation will be handled by AuthContext
+        // First, register the user with Firebase Authentication
+        // Note: We're only passing email, password, and name as required by the signUp function
+        await signUp(userData.email, userData.password, userData.name);
+        
+        // The profile document will be created in AuthContext or we can implement it here if needed
+        // For example, we could add code here to update the user profile after registration
+        // if the AuthContext doesn't do this automatically
+        
+        // If we needed to update the profile separately:
+        // const user = auth.currentUser;
+        // if (user) {
+        //   const userDocRef = doc(db, "users", user.uid);
+        //   await setDoc(userDocRef, {
+        //     name: userData.name,
+        //     email: userData.email,
+        //     phoneNumber: userData.phoneNumber || null,
+        //     city: userData.city || null,
+        //     country: userData.country || null,
+        //     interests: userData.interests,
+        //     userType: userData.userType,
+        //     organizationName: userData.organizationName || null,
+        //     profileImageUrl: profileImageUrl,
+        //     createdAt: new Date().toISOString()
+        //   });
+        // }
+        
+        console.log('Registration successful');
       } catch (err) {
         // Fallback error handling if not caught by context
         let errorMessage = 'An unknown error occurred';
@@ -443,8 +534,17 @@ export default function Register() {
       </Text>
       
       <View style={styles.profileImageContainer}>
-        <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-          {userData.profileImage ? (
+        <TouchableOpacity 
+          style={styles.imagePicker} 
+          onPress={pickImage}
+          disabled={isLoading || uploadingImage}
+        >
+          {uploadingImage ? (
+            <View style={styles.uploadingContainer}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.uploadingText}>Uploading...</Text>
+            </View>
+          ) : userData.profileImage ? (
             <Image 
               source={{ uri: userData.profileImage }} 
               style={styles.profileImage} 
@@ -715,9 +815,9 @@ export default function Register() {
           
           <View style={styles.buttonsContainer}>
             <TouchableOpacity
-              style={[styles.button, isLoading && styles.buttonDisabled]}
+              style={[styles.button, (isLoading || uploadingImage) && styles.buttonDisabled]}
               onPress={nextStep}
-              disabled={isLoading}
+              disabled={isLoading || uploadingImage}
             >
               {isLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
@@ -751,8 +851,6 @@ export default function Register() {
     </KeyboardAvoidingView>
   );
 }
-
-// Continuation of styles for app/(auth)/register.tsx
 
 const styles = StyleSheet.create({
   container: {
@@ -913,6 +1011,18 @@ const styles = StyleSheet.create({
   profileImageContainer: {
     alignItems: 'center',
     marginBottom: 24,
+  },
+  uploadingContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadingText: {
+    color: '#6B7280',
+    marginTop: 8,
   },
   imagePicker: {
     width: 120,
