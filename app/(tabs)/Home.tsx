@@ -125,7 +125,7 @@ export default function EnhancedHomeScreen() {
       const eventsData = await eventService.getEvents();
       
       // Sort events by date (newest first)
-      const sortedEvents = eventsData.sort((a, b) => {
+      const sortedEvents = eventsData.events.sort((a, b) => {
         const dateA = a.date instanceof Date ? a.date : a.date.toDate();
         const dateB = b.date instanceof Date ? b.date : b.date.toDate();
         return dateB.getTime() - dateA.getTime();
@@ -157,7 +157,7 @@ export default function EnhancedHomeScreen() {
         
         // Fetch events the user is attending
         const attending = await eventService.getUserAttendingEvents(user.id);
-        setAttendingEvents(attending.map(event => event.id));
+        setAttendingEvents(attending.events.map(event => event.id));
       }
       
       // Set filtered events initially to all events

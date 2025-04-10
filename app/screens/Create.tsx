@@ -45,6 +45,7 @@ const EVENT_CATEGORIES = [
   'Sports',
   'Charity',
   'Festival',
+  'Meetup',
   'Other'
 ];
 
@@ -87,7 +88,7 @@ const PAYMENT_OPTIONS = [
   'Cash at Door',
   'Venmo',
   'Apple Pay',
-  'Google Pay'
+  
 ];
 
 // Ticket types
