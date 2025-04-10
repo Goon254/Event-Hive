@@ -22,8 +22,9 @@ import socialService from '../services/socialService';
 import { SocialPost, ContentType, PrivacyLevel } from '../models/social';
 import * as ImagePicker from 'expo-image-picker';
 import { createShadow } from '../utils/platformUtils';
-import { format, parseISO } from 'date-fns';
-import { formatDistance } from "date-fns";
+import { format } from 'date-fns';
+import { formatDistance } from 'date-fns/formatDistance';
+import migrationService from '../services/migrationService';
 export default function SocialFeedScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -45,12 +46,44 @@ export default function SocialFeedScreen() {
   const [showComments, setShowComments] = useState(false);
   const [currentPost, setCurrentPost] = useState<SocialPost | null>(null);
   const [comments, setComments] = useState<any[]>([]);
+  const [commentsUnsubscribe, setCommentsUnsubscribe] = useState<(() => void) | null>(null);
+  const [postsUnsubscribe, setPostsUnsubscribe] = useState<(() => void) | null>(null);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
 
-  // Initial fetch of posts
+  // Initialize database and fetch posts
   useEffect(() => {
-    fetchPosts();
-  }, []);
+    const initializeAndFetch = async () => {
+      try {
+        // Initialize database (creates user document if needed)
+        await migrationService.initializeDatabase();
+        
+        // For development, seed initial data if needed
+        if (__DEV__) {
+          await migrationService.seedInitialData();
+        }
+        
+        // Fetch posts
+        fetchPosts();
+      } catch (error) {
+        console.error('Error initializing feed:', error);
+        // Fetch posts anyway even if initialization fails
+        fetchPosts();
+      }
+    };
+    
+    initializeAndFetch();
+    
+    // Cleanup function
+    return () => {
+      // Clean up any active listeners
+      if (commentsUnsubscribe) {
+        commentsUnsubscribe();
+      }
+      if (postsUnsubscribe) {
+        postsUnsubscribe();
+      }
+    };
+  }, [commentsUnsubscribe, postsUnsubscribe]);
 
   // Fetch posts from service
   const fetchPosts = async (refresh = false) => {
@@ -63,6 +96,13 @@ export default function SocialFeedScreen() {
         setHasMorePosts(true);
       }
       
+      // Clean up any existing listener
+      if (postsUnsubscribe) {
+        postsUnsubscribe();
+        setPostsUnsubscribe(null);
+      }
+      
+      // Initial fetch to get posts immediately
       const options = {
         lastDoc: refresh ? null : lastDoc,
         pageSize: 10
@@ -76,6 +116,17 @@ export default function SocialFeedScreen() {
       
       setPosts(refresh ? result.posts : [...posts, ...result.posts]);
       setLastDoc(result.lastDoc);
+      
+      // Set up real-time listener for posts
+      const unsubscribe = socialService.setupPostsListener((updatedPosts) => {
+        // Only update if we're not in the middle of pagination
+        if (!isLoading && !isRefreshing) {
+          setPosts(updatedPosts);
+        }
+      }, { limit: 20 });
+      
+      setPostsUnsubscribe(() => unsubscribe);
+      
     } catch (error) {
       console.error('Error fetching posts:', error);
       Alert.alert('Error', 'Failed to load posts. Please try again.');
@@ -142,8 +193,8 @@ export default function SocialFeedScreen() {
       // Upload media if any
       let mediaFiles = [];
       if (postImage) {
-        // In a real app, you'd upload the image first
-        // For our demo, we'll just use the URI
+        // The image will be uploaded to Firebase Storage in the socialService
+        // The URI is passed to the service which handles the upload
         mediaFiles.push(postImage);
       }
       
@@ -202,14 +253,17 @@ export default function SocialFeedScreen() {
     setIsLoadingComments(true);
     
     try {
-      // In a real app, you'd fetch comments for this post
-      // For now, we'll use dummy data
-      const dummyComments = [
-        { id: '1', userName: 'Jane Smith', content: 'Great post!', createdAt: new Date() },
-        { id: '2', userName: 'John Doe', content: 'I agree!', createdAt: new Date(Date.now() - 3600000) }
-      ];
+      // Fetch comments from Firestore
+      const fetchedComments = await socialService.getPostComments(post.id);
+      setComments(fetchedComments);
       
-      setComments(dummyComments);
+      // Set up real-time listener for new comments
+      const unsubscribe = socialService.setupCommentsListener(post.id, (updatedComments) => {
+        setComments(updatedComments);
+      });
+      
+      // Store unsubscribe function
+      setCommentsUnsubscribe(() => unsubscribe);
     } catch (error) {
       console.error('Error fetching comments:', error);
     } finally {
@@ -248,8 +302,8 @@ export default function SocialFeedScreen() {
         comments: currentPost.comments + 1
       });
       
-      // In a real app, you'd call an API to save the comment
-      // await socialService.commentOnPost(currentPost.id, commentText);
+      // Save the comment to Firestore
+      await socialService.commentOnPost(currentPost.id, commentText);
       
     } catch (error) {
       console.error('Error adding comment:', error);
@@ -257,9 +311,17 @@ export default function SocialFeedScreen() {
   };
 
   // Share a post
-  const sharePost = (post: SocialPost) => {
-    // Implement share functionality
-    Alert.alert('Share', 'Sharing functionality coming soon');
+  const sharePost = async (post: SocialPost) => {
+    try {
+      // Call the Firestore service to share the post
+      await socialService.sharePost(post.id);
+      
+      // Show success message
+      Alert.alert('Success', 'Post shared successfully');
+    } catch (error) {
+      console.error('Error sharing post:', error);
+      Alert.alert('Error', 'Failed to share post. Please try again.');
+    }
   };
 
   // Format the timestamp for display
@@ -427,11 +489,25 @@ export default function SocialFeedScreen() {
       visible={showComments}
       animationType="slide"
       transparent={false}
-      onRequestClose={() => setShowComments(false)}
+      onRequestClose={() => {
+        // Clean up comments listener when closing modal
+        if (commentsUnsubscribe) {
+          commentsUnsubscribe();
+          setCommentsUnsubscribe(null);
+        }
+        setShowComments(false);
+      }}
     >
       <View style={styles.commentsContainer}>
         <View style={styles.commentsHeader}>
-          <TouchableOpacity onPress={() => setShowComments(false)}>
+          <TouchableOpacity onPress={() => {
+            // Clean up comments listener when closing modal
+            if (commentsUnsubscribe) {
+              commentsUnsubscribe();
+              setCommentsUnsubscribe(null);
+            }
+            setShowComments(false);
+          }}>
             <MaterialIcons name="arrow-back" size={24} color="#6B7280" />
           </TouchableOpacity>
           <Text style={styles.commentsTitle}>Comments</Text>

@@ -21,6 +21,8 @@ import { FontAwesome, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { useAuth } from '../AuthContext';
 import eventService, { Event, Attendee } from '../services/eventServices';
+import googleMapsService from '../services/googleMapsService';
+import CustomMapView from '../components/maps/MapView';
 import AttendeeManagement from '../container/AttendeeManagement';
 import { Timestamp } from 'firebase/firestore';
 import { createShadow, safeTopPadding } from '../utils/platformUtils';
@@ -48,6 +50,11 @@ export default function EventDetailsScreen() {
   const [spotsLeft, setSpotsLeft] = useState<number | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [showSpeakers, setShowSpeakers] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [mapRegion, setMapRegion] = useState<any>(null);
+  const [nearbyPlaces, setNearbyPlaces] = useState<any[]>([]);
+  const [showDirections, setShowDirections] = useState(false);
+  const [loadingNearbyPlaces, setLoadingNearbyPlaces] = useState(false);
   const stripe = useStripe();
   
   // Animation values
@@ -55,6 +62,12 @@ export default function EventDetailsScreen() {
   const headerHeight = scrollY.interpolate({
     inputRange: [0, HEADER_SCROLL_DISTANCE],
     outputRange: [HEADER_MAX_HEIGHT, HEADER_MIN_HEIGHT],
+    extrapolate: 'clamp',
+  });
+  // Use transform translateY instead of height for native driver compatibility
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE],
+    outputRange: [0, -HEADER_SCROLL_DISTANCE],
     extrapolate: 'clamp',
   });
   const imageOpacity = scrollY.interpolate({
@@ -93,19 +106,48 @@ export default function EventDetailsScreen() {
       if (eventData) {
         setEvent(eventData);
         
+        // Initialize map region if event has location coordinates
+        if (eventData.locationDetails) {
+          // Check if location details have coordinates
+          const locationDetails = eventData.locationDetails as any;
+          if (locationDetails.latitude && locationDetails.longitude) {
+            setMapRegion({
+              latitude: locationDetails.latitude,
+              longitude: locationDetails.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            });
+          } else if (eventData.location) {
+            // Try to geocode the address
+            try {
+              const coordinates = await googleMapsService.geocodeAddress(eventData.location);
+              if (coordinates) {
+                setMapRegion({
+                  latitude: coordinates.latitude,
+                  longitude: coordinates.longitude,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                });
+              }
+            } catch (error) {
+              console.error('Error geocoding address:', error);
+            }
+          }
+        }
         // Fetch attendees
-        const attendeesList = await eventService.getEventAttendees(id.toString());
-        setAttendees(attendeesList);
+        const attendeesResult = await eventService.getEventAttendees(id.toString());
+        setAttendees(attendeesResult.attendees);
+        
         
         // Calculate spots left if capacity is set
         if (eventData.capacity) {
-          const spotsRemaining = Math.max(0, eventData.capacity - attendeesList.length);
+          const spotsRemaining = Math.max(0, eventData.capacity - attendeesResult.attendees.length);
           setSpotsLeft(spotsRemaining);
         }
   
         // Check if current user is attending
         if (user) {
-          const userAttendee = attendeesList.find(a => a.userId === user.id);
+          const userAttendee = attendeesResult.attendees.find((a: Attendee) => a.userId === user.id);
           const userAttending = !!userAttendee;
           setIsAttending(userAttending);
           
@@ -130,6 +172,28 @@ export default function EventDetailsScreen() {
   const checkPaymentStatus = (attendee?: Attendee): boolean => {
     if (!attendee) return false;
     return attendee.paymentStatus === 'completed';
+  };
+
+  // Fetch nearby places around the event location
+  const fetchNearbyPlaces = async (placeType: string = 'restaurant') => {
+    if (!mapRegion) return;
+    
+    try {
+      setLoadingNearbyPlaces(true);
+      
+      const places = await googleMapsService.getNearbyPlaces(
+        { latitude: mapRegion.latitude, longitude: mapRegion.longitude },
+        1000, // 1km radius
+        placeType
+      );
+      
+      setNearbyPlaces(places);
+    } catch (error) {
+      console.error('Error fetching nearby places:', error);
+      Alert.alert('Error', 'Failed to load nearby places');
+    } finally {
+      setLoadingNearbyPlaces(false);
+    }
   };
 
   useEffect(() => {
@@ -394,7 +458,7 @@ export default function EventDetailsScreen() {
       setHasUserPaid(true);
       
       // Update the attendee with completed payment status
-      const paidAttendee = { ...attendee, paymentStatus: 'completed' };
+      const paidAttendee: Attendee = { ...attendee, paymentStatus: 'completed' };
       
       // Update or add this attendee to the list
       const updatedAttendees = attendees.some(a => a.id === attendee.id)
@@ -641,7 +705,12 @@ export default function EventDetailsScreen() {
       <StatusBar barStyle="light-content" />
       
       {/* Animated Header with Parallax Effect */}
-      <Animated.View style={[styles.header, { height: headerHeight }]}>
+      <Animated.View
+        style={[
+          styles.header,
+          { height: HEADER_MAX_HEIGHT, transform: [{ translateY: headerTranslateY }] }
+        ]}
+      >
         <Animated.View style={[styles.headerBackground, { opacity: imageOpacity }]}>
           {event.imageUrl ? (
             <Image 
@@ -858,45 +927,74 @@ export default function EventDetailsScreen() {
         </Text>
       </TouchableOpacity>
     </View>
-    
-    <ScrollView 
-      horizontal={!showSpeakers}
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={[
-        styles.speakersContainer,
-        showSpeakers && styles.speakersGridContainer
-      ]}
-    >
-      {(showSpeakers ? speakers : speakers.slice(0, 3)).map((speaker: { name: string; role: string; bio?: string; imageUri?: string }, index) => (
-        <View 
-          key={`speaker-${index}`} 
-          style={[
-            styles.speakerCard,
-            showSpeakers && styles.speakerCardGrid
-          ]}
-        >
-          {speaker.imageUri ? (
-            <Image 
-              source={{ uri: speaker.imageUri }} 
-              style={styles.speakerImage}
-            />
-          ) : (
-            <View style={styles.speakerImagePlaceholder}>
-              <Text style={styles.speakerInitial}>
-                {speaker.name.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-          )}
-          <View style={styles.speakerInfo}>
-            <Text style={styles.speakerName}>{speaker.name}</Text>
-            <Text style={styles.speakerRole}>{speaker.role}</Text>
-            {showSpeakers && speaker.bio && (
-              <Text style={styles.speakerBio} numberOfLines={3}>{speaker.bio}</Text>
+    {showSpeakers ? (
+      <View
+        style={[
+          styles.speakersContainer,
+          styles.speakersGridContainer
+        ]}
+      >
+        {speakers.map((speaker: { name: string; role: string; bio?: string; imageUri?: string }, index) => (
+          <View
+            key={`speaker-${index}`}
+            style={[
+              styles.speakerCard,
+              styles.speakerCardGrid
+            ]}
+          >
+            {speaker.imageUri ? (
+              <Image
+                source={{ uri: speaker.imageUri }}
+                style={styles.speakerImage}
+              />
+            ) : (
+              <View style={styles.speakerImagePlaceholder}>
+                <Text style={styles.speakerInitial}>
+                  {speaker.name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
             )}
+            <View style={styles.speakerInfo}>
+              <Text style={styles.speakerName}>{speaker.name}</Text>
+              <Text style={styles.speakerRole}>{speaker.role}</Text>
+              {speaker.bio && (
+                <Text style={styles.speakerBio} numberOfLines={3}>{speaker.bio}</Text>
+              )}
+            </View>
           </View>
-        </View>
-      ))}
-    </ScrollView>
+        ))}
+      </View>
+    ) : (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.speakersContainer}
+      >
+        {speakers.slice(0, 3).map((speaker: { name: string; role: string; bio?: string; imageUri?: string }, index) => (
+          <View
+            key={`speaker-${index}`}
+            style={styles.speakerCard}
+          >
+            {speaker.imageUri ? (
+              <Image
+                source={{ uri: speaker.imageUri }}
+                style={styles.speakerImage}
+              />
+            ) : (
+              <View style={styles.speakerImagePlaceholder}>
+                <Text style={styles.speakerInitial}>
+                  {speaker.name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View style={styles.speakerInfo}>
+              <Text style={styles.speakerName}>{speaker.name}</Text>
+              <Text style={styles.speakerRole}>{speaker.role}</Text>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    )}
   </View>
 )}
 
@@ -916,10 +1014,110 @@ export default function EventDetailsScreen() {
           {event.locationDetails.zipCode ? ' ' + event.locationDetails.zipCode : ''}
         </Text>
       )}
-      <TouchableOpacity style={styles.directionsButton} onPress={openDirections}>
-        <FontAwesome name="map-signs" size={16} color="#FFFFFF" />
-        <Text style={styles.directionsButtonText}>Get Directions</Text>
-      </TouchableOpacity>
+      <View style={styles.locationButtonsRow}>
+        <TouchableOpacity style={styles.directionsButton} onPress={openDirections}>
+          <FontAwesome name="map-signs" size={16} color="#FFFFFF" />
+          <Text style={styles.directionsButtonText}>Get Directions</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.mapButton, showMap && styles.mapButtonActive]}
+          onPress={() => {
+            setShowMap(!showMap);
+            if (!showMap && mapRegion && nearbyPlaces.length === 0) {
+              fetchNearbyPlaces();
+            }
+          }}
+        >
+          <FontAwesome name="map" size={16} color={showMap ? "#FFFFFF" : "#3B82F6"} />
+          <Text style={[styles.mapButtonText, showMap && styles.mapButtonTextActive]}>
+            {showMap ? "Hide Map" : "Show Map"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      
+      {/* Map View */}
+      {showMap && mapRegion && (
+        <View style={styles.mapContainer}>
+          <CustomMapView
+            initialRegion={mapRegion}
+            events={[]}
+            showUserLocation={true}
+            showsMyLocationButton={true}
+            style={styles.map}
+          />
+          
+          {/* Nearby Places Controls */}
+          <View style={styles.nearbyPlacesControls}>
+            <Text style={styles.nearbyPlacesTitle}>Nearby Places</Text>
+            <View style={styles.placeTypeButtons}>
+              <TouchableOpacity
+                style={styles.placeTypeButton}
+                onPress={() => fetchNearbyPlaces('restaurant')}
+              >
+                <MaterialIcons name="restaurant" size={16} color="#3B82F6" />
+                <Text style={styles.placeTypeButtonText}>Restaurants</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.placeTypeButton}
+                onPress={() => fetchNearbyPlaces('parking')}
+              >
+                <MaterialIcons name="local-parking" size={16} color="#3B82F6" />
+                <Text style={styles.placeTypeButtonText}>Parking</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.placeTypeButton}
+                onPress={() => fetchNearbyPlaces('hotel')}
+              >
+                <MaterialIcons name="hotel" size={16} color="#3B82F6" />
+                <Text style={styles.placeTypeButtonText}>Hotels</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {/* Nearby Places List */}
+            {loadingNearbyPlaces ? (
+              <ActivityIndicator size="small" color="#3B82F6" style={styles.nearbyPlacesLoading} />
+            ) : nearbyPlaces.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.nearbyPlacesList}
+              >
+                {nearbyPlaces.map((place, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.nearbyPlaceCard}
+                    onPress={() => {
+                      const url = `https://www.google.com/maps/search/?api=1&query=${place.location.latitude},${place.location.longitude}&query_place_id=${place.id}`;
+                      Linking.openURL(url);
+                    }}
+                  >
+                    {place.photos && place.photos.length > 0 ? (
+                      <Image source={{ uri: place.photos[0] }} style={styles.nearbyPlaceImage} />
+                    ) : (
+                      <View style={[styles.nearbyPlaceImagePlaceholder, { backgroundColor: '#' + Math.floor(Math.random()*16777215).toString(16) }]}>
+                        <MaterialIcons name="place" size={24} color="#FFFFFF" />
+                      </View>
+                    )}
+                    <Text style={styles.nearbyPlaceName} numberOfLines={1}>{place.name}</Text>
+                    <Text style={styles.nearbyPlaceVicinity} numberOfLines={1}>{place.vicinity}</Text>
+                    {place.rating && (
+                      <View style={styles.nearbyPlaceRating}>
+                        <MaterialIcons name="star" size={14} color="#F59E0B" />
+                        <Text style={styles.nearbyPlaceRatingText}>{place.rating.toFixed(1)}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.noNearbyPlacesText}>No nearby places found</Text>
+            )}
+          </View>
+        </View>
+      )}
     </View>
   </View>
 )}
@@ -1064,7 +1262,7 @@ export default function EventDetailsScreen() {
       <TouchableOpacity 
         style={[styles.managementButton, styles.editButton]}
         onPress={() => router.push({
-          pathname: "/screens/edit-event",
+          pathname: "/screens/my-events",
           params: { id: id }
         })}
       >
@@ -1551,6 +1749,11 @@ cityStateZip: {
   color: '#6B7280',
   marginBottom: 16,
 },
+locationButtonsRow: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  marginTop: 16,
+},
 directionsButton: {
   backgroundColor: '#3B82F6',
   flexDirection: 'row',
@@ -1559,7 +1762,129 @@ directionsButton: {
   paddingVertical: 12,
   paddingHorizontal: 20,
   borderRadius: 8,
+  flex: 1,
+  marginRight: 8,
   ...buttonShadow,
+},
+mapButton: {
+  backgroundColor: '#F3F4F6',
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 12,
+  paddingHorizontal: 20,
+  borderRadius: 8,
+  flex: 1,
+  ...buttonShadow,
+},
+mapButtonActive: {
+  backgroundColor: '#3B82F6',
+},
+mapButtonText: {
+  fontSize: 14,
+  fontWeight: '500',
+  color: '#3B82F6',
+  marginLeft: 6,
+},
+mapButtonTextActive: {
+  color: '#FFFFFF',
+},
+mapContainer: {
+  marginTop: 16,
+  borderRadius: 12,
+  overflow: 'hidden',
+  height: 300,
+},
+map: {
+  height: 300,
+},
+nearbyPlacesControls: {
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  padding: 12,
+  borderTopLeftRadius: 12,
+  borderTopRightRadius: 12,
+},
+nearbyPlacesTitle: {
+  fontSize: 16,
+  fontWeight: 'bold',
+  color: '#1F2937',
+  marginBottom: 8,
+},
+placeTypeButtons: {
+  flexDirection: 'row',
+  marginBottom: 12,
+},
+placeTypeButton: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: '#F3F4F6',
+  paddingVertical: 6,
+  paddingHorizontal: 12,
+  borderRadius: 16,
+  marginRight: 8,
+},
+placeTypeButtonText: {
+  fontSize: 12,
+  color: '#4B5563',
+  marginLeft: 4,
+},
+nearbyPlacesList: {
+  maxHeight: 120,
+},
+nearbyPlaceCard: {
+  width: 140,
+  backgroundColor: '#FFFFFF',
+  borderRadius: 8,
+  marginRight: 8,
+  padding: 8,
+  ...cardShadow,
+},
+nearbyPlaceImage: {
+  width: '100%',
+  height: 80,
+  borderRadius: 4,
+  marginBottom: 4,
+},
+nearbyPlaceImagePlaceholder: {
+  width: '100%',
+  height: 80,
+  borderRadius: 4,
+  marginBottom: 4,
+  backgroundColor: '#E5E7EB',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+nearbyPlaceName: {
+  fontSize: 12,
+  fontWeight: 'bold',
+  color: '#1F2937',
+},
+nearbyPlaceVicinity: {
+  fontSize: 10,
+  color: '#6B7280',
+},
+nearbyPlaceRating: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  marginTop: 2,
+},
+nearbyPlaceRatingText: {
+  fontSize: 10,
+  color: '#4B5563',
+  marginLeft: 2,
+},
+nearbyPlacesLoading: {
+  marginVertical: 12,
+},
+noNearbyPlacesText: {
+  fontSize: 12,
+  color: '#6B7280',
+  textAlign: 'center',
+  marginVertical: 12,
 },
 directionsButtonText: {
   color: '#FFFFFF',

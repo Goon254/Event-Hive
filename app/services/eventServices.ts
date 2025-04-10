@@ -1,10 +1,10 @@
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  doc, 
-  getDoc, 
-  updateDoc, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
   deleteDoc,
   query,
   where,
@@ -18,9 +18,13 @@ import {
   DocumentSnapshot,
   runTransaction,
   serverTimestamp,
+  FirestoreError,
+  Firestore
 } from 'firebase/firestore';
+import { FirebaseError } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { db } from '../../lib/firebaseConfig';
+import NetInfo from '@react-native-community/netinfo';
 
 // Import auth for current user reference
 const auth = getAuth();
@@ -96,6 +100,8 @@ export interface Event extends Omit<CreateEventData, 'date' | 'time' | 'createdA
 const PAGE_SIZE = 20;
 
 class EventService {
+  // Use the properly typed db from firebaseConfig
+  private db: Firestore = db;
   // Create a new event
   async createEvent(eventData: CreateEventData): Promise<Event> {
     try {
@@ -142,7 +148,7 @@ class EventService {
       }
 
       // Create a new document in the events collection
-      const docRef = await addDoc(collection(db, "events"), firestoreData);
+      const docRef = await addDoc(collection(this.db, "events"), firestoreData);
       console.log("Event created with ID:", docRef.id);
       
       // Get the actual document with server timestamp resolved
@@ -169,7 +175,7 @@ class EventService {
   // Get attendees for a specific event
   async getEventAttendees(eventId: string, pageSize: number = PAGE_SIZE, lastDoc?: DocumentSnapshot): Promise<{attendees: Attendee[], lastDoc: DocumentSnapshot | null}> {
     try {
-      const attendeesRef = collection(db, "events", eventId, "attendees");
+      const attendeesRef = collection(this.db, "events", eventId, "attendees");
       
       // Create query with pagination support
       let attendeesQuery = query(
@@ -230,9 +236,9 @@ class EventService {
       }
       
       // Use a transaction to ensure data consistency
-      return await runTransaction(db, async (transaction) => {
+      return await runTransaction(this.db, async (transaction) => {
         // Get the event document first to check capacity
-        const eventRef = doc(db, "events", eventId);
+        const eventRef = doc(this.db, "events", eventId);
         const eventDoc = await transaction.get(eventRef);
         
         if (!eventDoc.exists()) {
@@ -247,7 +253,7 @@ class EventService {
         }
         
         // Check if user is already registered
-        const attendeesRef = collection(db, "events", eventId, "attendees");
+        const attendeesRef = collection(this.db, "events", eventId, "attendees");
         const existingQuery = query(attendeesRef, where("userId", "==", userId));
         const existingQuerySnapshot = await getDocs(existingQuery);
         
@@ -263,7 +269,7 @@ class EventService {
         };
         
         // Create new attendee document
-        const newAttendeeRef = doc(collection(db, "events", eventId, "attendees"));
+        const newAttendeeRef = doc(collection(this.db, "events", eventId, "attendees"));
         transaction.set(newAttendeeRef, completeAttendeeData);
         
         // Update event's attendee count
@@ -294,9 +300,9 @@ class EventService {
     try {
       console.log(`Removing attendee ${attendeeId} from event ${eventId}`);
       
-      return await runTransaction(db, async (transaction) => {
+      return await runTransaction(this.db, async (transaction) => {
         // Get the event document
-        const eventRef = doc(db, "events", eventId);
+        const eventRef = doc(this.db, "events", eventId);
         const eventDoc = await transaction.get(eventRef);
         
         if (!eventDoc.exists()) {
@@ -304,7 +310,7 @@ class EventService {
         }
         
         // Reference to the attendee document
-        const attendeeRef = doc(db, "events", eventId, "attendees", attendeeId);
+        const attendeeRef = doc(this.db, "events", eventId, "attendees", attendeeId);
         const attendeeDoc = await transaction.get(attendeeRef);
         
         if (!attendeeDoc.exists()) {
@@ -330,7 +336,7 @@ class EventService {
   // Check in an attendee
   async checkInAttendee(eventId: string, attendeeId: string): Promise<void> {
     try {
-      const attendeeRef = doc(db, "events", eventId, "attendees", attendeeId);
+      const attendeeRef = doc(this.db, "events", eventId, "attendees", attendeeId);
       await updateDoc(attendeeRef, { 
         checkInStatus: 'checked-in',
         checkedInAt: serverTimestamp() // Use server timestamp for accuracy
@@ -344,7 +350,7 @@ class EventService {
   // Update attendee status
   async updateAttendeeStatus(eventId: string, attendeeId: string, status: 'pending' | 'checked-in' | 'absent'): Promise<void> {
     try {
-      const attendeeRef = doc(db, "events", eventId, "attendees", attendeeId);
+      const attendeeRef = doc(this.db, "events", eventId, "attendees", attendeeId);
       
       // Get current attendee data
       const attendeeDoc = await getDoc(attendeeRef);
@@ -366,10 +372,60 @@ class EventService {
     }
   }
 
-  // Get events with pagination
-  async getEvents(pageSize: number = PAGE_SIZE, lastDoc?: DocumentSnapshot): Promise<{events: Event[], lastDoc: DocumentSnapshot | null}> {
+  // Check network connectivity before operations
+  private async checkNetworkConnectivity(): Promise<void> {
+    const netInfo = await NetInfo.fetch();
+    if (!netInfo.isConnected) {
+      throw new Error('No internet connection. Please check your network settings and try again.');
+    }
+  }
+
+  // Enhanced error handler
+  private handleError(error: unknown, operation: string): never {
+    console.error(`Error ${operation}:`, error);
+    
+    // Handle Firebase-specific errors
+    if (error instanceof FirebaseError || error instanceof FirestoreError) {
+      const fbError = error as { code: string; message: string };
+      switch (fbError.code) {
+        case 'permission-denied':
+          throw new Error(`Access denied: You don't have permission to ${operation}.`);
+        case 'unavailable':
+          throw new Error('Firebase service is currently unavailable. Please try again later.');
+        case 'unauthenticated':
+          throw new Error('Authentication required. Please sign in to continue.');
+        case 'resource-exhausted':
+          throw new Error('Service quota exceeded. Please try again later.');
+        default:
+          throw new Error(`Firebase error (${fbError.code}): ${fbError.message}`);
+      }
+    }
+    
+    // Handle network errors
+    if (error instanceof TypeError && error.message.includes('network')) {
+      throw new Error('Network error. Please check your connection and try again.');
+    }
+    
+    // Handle other errors
+    throw new Error(`Failed to ${operation}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+
+  // Get events with pagination, network checks, and signal support
+  async getEvents(
+    pageSize: number = PAGE_SIZE,
+    lastDoc?: DocumentSnapshot,
+    signal?: AbortSignal
+  ): Promise<{events: Event[], lastDoc: DocumentSnapshot | null}> {
     try {
-      const eventsRef = collection(db, "events");
+      // Check network connectivity
+      await this.checkNetworkConnectivity();
+      
+      // Check if operation was aborted
+      if (signal?.aborted) {
+        throw new Error('Operation was aborted');
+      }
+      
+      const eventsRef = collection(this.db, "events");
       
       // Create query with pagination
       let eventsQuery = query(
@@ -388,30 +444,53 @@ class EventService {
         );
       }
       
+      // Check if operation was aborted before executing query
+      if (signal?.aborted) {
+        throw new Error('Operation was aborted');
+      }
+      
       const snapshot = await getDocs(eventsQuery);
       
       // Get the last visible document for pagination
       const lastVisible = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
       
-      const events = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
+      const events = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
       } as Event));
       
-      return { 
-        events, 
-        lastDoc: lastVisible 
+      return {
+        events,
+        lastDoc: lastVisible
       };
     } catch (error) {
-      console.error("Error getting events:", error);
-      throw new Error(`Failed to get events: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Don't throw errors for aborted operations
+      if (signal?.aborted) {
+        console.log('Events fetch aborted');
+        return { events: [], lastDoc: null };
+      }
+      
+      return this.handleError(error, 'getting events');
     }
   }
 
-  // Get events created by a specific user
-  async getUserEvents(userId: string, pageSize: number = PAGE_SIZE, lastDoc?: DocumentSnapshot): Promise<{events: Event[], lastDoc: DocumentSnapshot | null}> {
+  // Get events created by a specific user with signal support
+  async getUserEvents(
+    userId: string,
+    pageSize: number = PAGE_SIZE,
+    lastDoc?: DocumentSnapshot,
+    signal?: AbortSignal
+  ): Promise<{events: Event[], lastDoc: DocumentSnapshot | null}> {
     try {
-      const eventsRef = collection(db, "events");
+      // Check network connectivity
+      await this.checkNetworkConnectivity();
+      
+      // Check if operation was aborted
+      if (signal?.aborted) {
+        throw new Error('Operation was aborted');
+      }
+      
+      const eventsRef = collection(this.db, "events");
       
       // Create query with pagination
       let userEventsQuery = query(
@@ -432,32 +511,55 @@ class EventService {
         );
       }
       
+      // Check if operation was aborted before executing query
+      if (signal?.aborted) {
+        throw new Error('Operation was aborted');
+      }
+      
       const snapshot = await getDocs(userEventsQuery);
       
       // Get the last visible document for pagination
       const lastVisible = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
       
-      const events = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
+      const events = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
       } as Event));
       
-      return { 
-        events, 
-        lastDoc: lastVisible 
+      return {
+        events,
+        lastDoc: lastVisible
       };
     } catch (error) {
-      console.error("Error getting user events:", error);
-      throw new Error(`Failed to get user events: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Don't throw errors for aborted operations
+      if (signal?.aborted) {
+        console.log('User events fetch aborted');
+        return { events: [], lastDoc: null };
+      }
+      
+      return this.handleError(error, 'getting user events');
     }
   }
 
-  // Get events a user is attending - improved implementation using collectionGroup
-  async getUserAttendingEvents(userId: string, pageSize: number = PAGE_SIZE, lastDoc?: DocumentSnapshot): Promise<{events: Event[], lastDoc: DocumentSnapshot | null}> {
+  // Get events a user is attending with signal support
+  async getUserAttendingEvents(
+    userId: string,
+    pageSize: number = PAGE_SIZE,
+    lastDoc?: DocumentSnapshot,
+    signal?: AbortSignal
+  ): Promise<{events: Event[], lastDoc: DocumentSnapshot | null}> {
     try {
+      // Check network connectivity
+      await this.checkNetworkConnectivity();
+      
+      // Check if operation was aborted
+      if (signal?.aborted) {
+        throw new Error('Operation was aborted');
+      }
+      
       // Use a collection group query to find all attendees with this userId across events
       let attendeesQuery = query(
-        collectionGroup(db, "attendees"),
+        collectionGroup(this.db, "attendees"),
         where("userId", "==", userId),
         orderBy("createdAt", "desc"),
         limit(pageSize * 2) // Get more since we'll be filtering and deduping
@@ -465,12 +567,17 @@ class EventService {
       
       if (lastDoc) {
         attendeesQuery = query(
-          collectionGroup(db, "attendees"),
+          collectionGroup(this.db, "attendees"),
           where("userId", "==", userId),
           orderBy("createdAt", "desc"),
           startAfter(lastDoc),
           limit(pageSize * 2)
         );
+      }
+      
+      // Check if operation was aborted before executing query
+      if (signal?.aborted) {
+        throw new Error('Operation was aborted');
       }
       
       const attendeesSnapshot = await getDocs(attendeesQuery);
@@ -485,9 +592,14 @@ class EventService {
         }
       });
       
+      // Check if operation was aborted before fetching event details
+      if (signal?.aborted) {
+        throw new Error('Operation was aborted');
+      }
+      
       // Get event details for each event ID
-      const eventPromises = Array.from(eventIds).map(eventId => 
-        getDoc(doc(db, "events", eventId))
+      const eventPromises = Array.from(eventIds).map(eventId =>
+        getDoc(doc(this.db, "events", eventId))
       );
       
       const eventDocs = await Promise.all(eventPromises);
@@ -503,42 +615,60 @@ class EventService {
         .slice(0, pageSize); // Limit to requested page size
       
       // Get the last visible attendee doc for pagination
-      const lastVisible = attendeesSnapshot.docs.length > 0 ? 
+      const lastVisible = attendeesSnapshot.docs.length > 0 ?
         attendeesSnapshot.docs[attendeesSnapshot.docs.length - 1] : null;
       
-      return { 
-        events, 
-        lastDoc: lastVisible 
+      return {
+        events,
+        lastDoc: lastVisible
       };
     } catch (error) {
-      console.error("Error getting attending events:", error);
-      throw new Error(`Failed to get attending events: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Don't throw errors for aborted operations
+      if (signal?.aborted) {
+        console.log('Attending events fetch aborted');
+        return { events: [], lastDoc: null };
+      }
+      
+      return this.handleError(error, 'getting attending events');
     }
   }
 
-  // Get a single event by ID
-  async getEventById(eventId: string): Promise<Event | undefined> {
+  // Get a single event by ID with signal support
+  async getEventById(eventId: string, signal?: AbortSignal): Promise<Event | undefined> {
     try {
-      const eventRef = doc(db, "events", eventId);
+      // Check network connectivity
+      await this.checkNetworkConnectivity();
+      
+      // Check if operation was aborted
+      if (signal?.aborted) {
+        throw new Error('Operation was aborted');
+      }
+      
+      const eventRef = doc(this.db, "events", eventId);
       const snapshot = await getDoc(eventRef);
       
       if (!snapshot.exists()) return undefined;
       
       // Convert the document to an Event object
-      return { 
-        id: snapshot.id, 
-        ...snapshot.data() 
+      return {
+        id: snapshot.id,
+        ...snapshot.data()
       } as Event;
     } catch (error) {
-      console.error("Error getting event:", error);
-      throw new Error(`Failed to get event: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Don't throw errors for aborted operations
+      if (signal?.aborted) {
+        console.log('Event fetch aborted');
+        return undefined;
+      }
+      
+      return this.handleError(error, 'getting event');
     }
   }
 
   // Update an event
   async updateEvent(eventId: string, eventData: Partial<CreateEventData>): Promise<Event | undefined> {
     try {
-      const eventRef = doc(db, "events", eventId);
+      const eventRef = doc(this.db, "events", eventId);
       
       // Create a copy of the data for Firestore updates
       const firestoreData: Record<string, any> = { ...eventData };
@@ -609,10 +739,10 @@ class EventService {
   async deleteEvent(eventId: string): Promise<void> {
     try {
       // Use batch write for atomic operations
-      const batch = writeBatch(db);
+      const batch = writeBatch(this.db);
       
       // Delete attendees subcollection (up to 500 documents - Firestore limit)
-      const attendeesRef = collection(db, "events", eventId, "attendees");
+      const attendeesRef = collection(this.db, "events", eventId, "attendees");
       const attendeesSnapshot = await getDocs(attendeesRef);
       
       attendeesSnapshot.docs.forEach(doc => {
@@ -620,7 +750,7 @@ class EventService {
       });
       
       // Delete the event document itself
-      const eventRef = doc(db, "events", eventId);
+      const eventRef = doc(this.db, "events", eventId);
       batch.delete(eventRef);
       
       // Commit the batch
@@ -642,7 +772,7 @@ class EventService {
       if (!event) return false;
       
       // Check if the user is an attendee
-      const attendeesRef = collection(db, "events", eventId, "attendees");
+      const attendeesRef = collection(this.db, "events", eventId, "attendees");
       const q = query(attendeesRef, where("userId", "==", userId));
       const querySnapshot = await getDocs(q);
       
@@ -664,9 +794,9 @@ class EventService {
   // Process QR code check-in with transaction
   async processQRCheckIn(eventId: string, userId: string): Promise<boolean> {
     try {
-      return await runTransaction(db, async (transaction) => {
+      return await runTransaction(this.db, async (transaction) => {
         // Find the attendee with this userId
-        const attendeesRef = collection(db, "events", eventId, "attendees");
+        const attendeesRef = collection(this.db, "events", eventId, "attendees");
         const q = query(attendeesRef, where("userId", "==", userId));
         const querySnapshot = await getDocs(q);
         
@@ -695,7 +825,7 @@ class EventService {
   // Get upcoming events using server timestamp
   async getUpcomingEvents(pageSize: number = PAGE_SIZE, lastDoc?: DocumentSnapshot): Promise<{events: Event[], lastDoc: DocumentSnapshot | null}> {
     try {
-      const eventsRef = collection(db, "events");
+      const eventsRef = collection(this.db, "events");
       const now = Timestamp.now();
       
       // Create query with pagination
@@ -741,7 +871,7 @@ class EventService {
   async searchEvents(searchTerm: string, pageSize: number = PAGE_SIZE): Promise<Event[]> {
     try {
       // Basic search implementation - in production, would use Firebase Extensions like Algolia
-      const eventsRef = collection(db, "events");
+      const eventsRef = collection(this.db, "events");
       const snapshot = await getDocs(query(eventsRef, limit(500))); // Limit to prevent excessive client-side filtering
       
       const searchTermLower = searchTerm.toLowerCase();
@@ -769,7 +899,7 @@ class EventService {
       // Normalize the city name to ensure consistent search
       const normalizedCity = city.trim().toLowerCase();
       
-      const eventsRef = collection(db, "events");
+      const eventsRef = collection(this.db, "events");
       
       // Create query with pagination
       let cityQuery = query(
@@ -813,7 +943,7 @@ class EventService {
   // Get events by category
   async getEventsByCategory(category: string, pageSize: number = PAGE_SIZE, lastDoc?: DocumentSnapshot): Promise<{events: Event[], lastDoc: DocumentSnapshot | null}> {
     try {
-      const eventsRef = collection(db, "events");
+      const eventsRef = collection(this.db, "events");
       
       // Create query with pagination
       let categoryQuery = query(
