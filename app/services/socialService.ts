@@ -1,11 +1,11 @@
 // app/services/socialService.ts
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  doc, 
-  getDoc, 
-  updateDoc, 
+import {
+  collection,
+  addDoc,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
   deleteDoc,
   query,
   where,
@@ -18,11 +18,11 @@ import {
   serverTimestamp,
   setDoc,
   deleteField,
-  onSnapshot,
-  select
+  onSnapshot
 } from 'firebase/firestore';
 import { db, auth, storage } from '../../lib/firebaseConfig';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { sanitizeForFirestore } from './migrationService';
 import { 
   SocialPost, 
   Connection, 
@@ -123,9 +123,12 @@ class SocialService {
       // Save to Firestore with batch write for atomicity
       const batch = writeBatch(db);
       
+      // Sanitize the post data to remove any undefined values
+      const sanitizedPostData = sanitizeForFirestore(postToSave);
+      
       // Add post document
       const postRef = doc(collection(db, 'socialPosts'));
-      batch.set(postRef, postToSave);
+      batch.set(postRef, sanitizedPostData);
       
       // Update user's post count
       const userRef = doc(db, 'users', currentUser.uid);
@@ -301,8 +304,7 @@ class SocialService {
         const postData = postDoc.data();
         
         if (postData && postData.userId !== currentUser.uid) {
-          const notificationRef = doc(collection(db, 'notifications'));
-          batch.set(notificationRef, {
+          const notificationData = {
             userId: postData.userId,
             type: 'like',
             relatedUserId: currentUser.uid,
@@ -311,7 +313,13 @@ class SocialService {
             relatedPostId: postId,
             read: false,
             createdAt: serverTimestamp()
-          });
+          };
+          
+          // Sanitize notification data
+          const sanitizedNotificationData = sanitizeForFirestore(notificationData);
+          
+          const notificationRef = doc(collection(db, 'notifications'));
+          batch.set(notificationRef, sanitizedNotificationData);
         }
       } else {
         // Unlike
@@ -345,7 +353,7 @@ class SocialService {
         postId,
         userId: currentUser.uid,
         userName: currentUser.displayName || 'Anonymous',
-        userAvatar: currentUser.photoURL || undefined,
+        userAvatar: currentUser.photoURL || null,
         content,
         createdAt: serverTimestamp(),
         likes: 0,
@@ -355,9 +363,12 @@ class SocialService {
       // Use a batch write for atomicity
       const batch = writeBatch(db);
       
+      // Sanitize the comment data to remove any undefined values
+      const sanitizedCommentData = sanitizeForFirestore(commentData);
+      
       // Add the comment
       const commentRef = doc(collection(db, 'socialPosts', postId, 'comments'));
-      batch.set(commentRef, commentData);
+      batch.set(commentRef, sanitizedCommentData);
       
       // Increment comment count on the post
       const postRef = doc(db, 'socialPosts', postId);
@@ -370,8 +381,7 @@ class SocialService {
       const postData = postDoc.data();
       
       if (postData && postData.userId !== currentUser.uid) {
-        const notificationRef = doc(collection(db, 'notifications'));
-        batch.set(notificationRef, {
+        const notificationData = {
           userId: postData.userId,
           type: 'comment',
           relatedUserId: currentUser.uid,
@@ -380,7 +390,13 @@ class SocialService {
           relatedPostId: postId,
           read: false,
           createdAt: serverTimestamp()
-        });
+        };
+        
+        // Sanitize notification data
+        const sanitizedNotificationData = sanitizeForFirestore(notificationData);
+        
+        const notificationRef = doc(collection(db, 'notifications'));
+        batch.set(notificationRef, sanitizedNotificationData);
       }
       
       // If this is a reply to another comment, notify that comment's author
@@ -389,8 +405,7 @@ class SocialService {
         const parentCommentDoc = await getDoc(parentCommentRef);
         
         if (parentCommentDoc.exists() && parentCommentDoc.data().userId !== currentUser.uid) {
-          const replyNotificationRef = doc(collection(db, 'notifications'));
-          batch.set(replyNotificationRef, {
+          const replyNotificationData = {
             userId: parentCommentDoc.data().userId,
             type: 'reply',
             relatedUserId: currentUser.uid,
@@ -400,7 +415,13 @@ class SocialService {
             relatedCommentId: parentCommentId,
             read: false,
             createdAt: serverTimestamp()
-          });
+          };
+          
+          // Sanitize notification data
+          const sanitizedReplyNotificationData = sanitizeForFirestore(replyNotificationData);
+          
+          const replyNotificationRef = doc(collection(db, 'notifications'));
+          batch.set(replyNotificationRef, sanitizedReplyNotificationData);
         }
       }
       
@@ -501,13 +522,12 @@ class SocialService {
       });
       
       // Create a new post as a share
-      const sharePostRef = doc(collection(db, 'socialPosts'));
-      batch.set(sharePostRef, {
+      const sharePostData = {
         userId: currentUser.uid,
         userName: currentUser.displayName || 'Anonymous',
         userAvatar: currentUser.photoURL || null,
         content: '', // Optional comment on the share
-        contentType: ContentType.SHARED,
+        contentType: ContentType.MIXED,
         privacyLevel: PrivacyLevel.PUBLIC,
         originalPost: {
           id: postId,
@@ -522,12 +542,17 @@ class SocialService {
         likes: 0,
         comments: 0,
         shares: 0
-      });
+      };
+      
+      // Sanitize the share post data
+      const sanitizedSharePostData = sanitizeForFirestore(sharePostData);
+      
+      const sharePostRef = doc(collection(db, 'socialPosts'));
+      batch.set(sharePostRef, sanitizedSharePostData);
       
       // Create notification for original post owner
       if (postData.userId !== currentUser.uid) {
-        const notificationRef = doc(collection(db, 'notifications'));
-        batch.set(notificationRef, {
+        const notificationData = {
           userId: postData.userId,
           type: 'share',
           relatedUserId: currentUser.uid,
@@ -536,7 +561,13 @@ class SocialService {
           relatedPostId: postId,
           read: false,
           createdAt: serverTimestamp()
-        });
+        };
+        
+        // Sanitize notification data
+        const sanitizedNotificationData = sanitizeForFirestore(notificationData);
+        
+        const notificationRef = doc(collection(db, 'notifications'));
+        batch.set(notificationRef, sanitizedNotificationData);
       }
       
       // Commit the batch
@@ -645,8 +676,8 @@ class SocialService {
         }
       }
       
-      // Create connection request
-      await setDoc(connectionRef, {
+      // Create connection request data
+      const connectionData = {
         userId: currentUser.uid,
         connectionId: userId,
         status: ConnectionStatus.PENDING,
@@ -654,11 +685,16 @@ class SocialService {
           sentBy: currentUser.uid,
           sentAt: serverTimestamp()
         }
-      });
+      };
       
-      // Create notification for the recipient
-      const notificationRef = doc(collection(db, 'notifications'));
-      await setDoc(notificationRef, {
+      // Sanitize connection data
+      const sanitizedConnectionData = sanitizeForFirestore(connectionData);
+      
+      // Save to Firestore
+      await setDoc(connectionRef, sanitizedConnectionData);
+      
+      // Create notification data for the recipient
+      const notificationData = {
         userId: userId,
         type: 'connection_request',
         relatedUserId: currentUser.uid,
@@ -666,7 +702,14 @@ class SocialService {
         relatedUserAvatar: currentUser.photoURL || null,
         read: false,
         createdAt: serverTimestamp()
-      });
+      };
+      
+      // Sanitize notification data
+      const sanitizedNotificationData = sanitizeForFirestore(notificationData);
+      
+      // Save notification to Firestore
+      const notificationRef = doc(collection(db, 'notifications'));
+      await setDoc(notificationRef, sanitizedNotificationData);
     } catch (error) {
       console.error('Error sending connection request:', error);
       throw error;
@@ -710,9 +753,8 @@ class SocialService {
         lastInteraction: serverTimestamp()
       });
       
-      // Create notification for the sender
-      const notificationRef = doc(collection(db, 'notifications'));
-      await setDoc(notificationRef, {
+      // Create notification data for the sender
+      const notificationData = {
         userId: userId,
         type: 'connection_accepted',
         relatedUserId: currentUser.uid,
@@ -720,7 +762,14 @@ class SocialService {
         relatedUserAvatar: currentUser.photoURL || null,
         read: false,
         createdAt: serverTimestamp()
-      });
+      };
+      
+      // Sanitize notification data
+      const sanitizedNotificationData = sanitizeForFirestore(notificationData);
+      
+      // Save notification to Firestore
+      const notificationRef = doc(collection(db, 'notifications'));
+      await setDoc(notificationRef, sanitizedNotificationData);
       
       // Update follower/following counts for both users
       const batch = writeBatch(db);

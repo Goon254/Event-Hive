@@ -65,6 +65,27 @@ const mockPosts: Partial<SocialPost>[] = [
   }
 ];
 
+// Helper function to remove undefined values from objects before saving to Firestore
+export function sanitizeForFirestore(obj: any): any {
+  // If the value is null or not an object, return it as is
+  if (obj === null || typeof obj !== 'object' || obj instanceof Date || obj instanceof Timestamp) {
+    return obj;
+  }
+
+  // If it's an array, sanitize each element
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeForFirestore(item));
+  }
+
+  // For objects, recursively sanitize each property and remove undefined values
+  return Object.entries(obj)
+    .filter(([_, value]) => value !== undefined)
+    .reduce((result, [key, value]) => {
+      result[key] = sanitizeForFirestore(value);
+      return result;
+    }, {} as Record<string, any>);
+}
+
 class MigrationService {
   // Flag to track if migration has run
   private static migrationRun = false;
@@ -200,7 +221,8 @@ class MigrationService {
       
       // Create user document if it doesn't exist
       if (!userDoc.exists()) {
-        await setDoc(userRef, {
+        // Create user data object
+        const userData = {
           id: currentUser.uid,
           email: currentUser.email || '',
           name: currentUser.displayName || 'Anonymous',
@@ -210,7 +232,13 @@ class MigrationService {
           followers: 0,
           following: 0,
           totalPosts: 0
-        });
+        };
+        
+        // Sanitize the data to remove any undefined values
+        const sanitizedData = sanitizeForFirestore(userData);
+        
+        // Save to Firestore
+        await setDoc(userRef, sanitizedData);
         
         console.log('Created user document');
       }

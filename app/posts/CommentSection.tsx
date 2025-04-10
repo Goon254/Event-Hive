@@ -18,7 +18,7 @@ import { Comment } from '../models/social';
 import { useAuth } from '../AuthContext';
 import socialService from '../services/socialService';
 import { createShadow } from '../utils/platformUtils';
-import { formatDistance } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 
 interface CommentSectionProps {
   visible: boolean;
@@ -92,7 +92,7 @@ export default function CommentSection({
     if (!timestamp) return 'Just now';
     
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return formatDistance(date, { addSuffix: true });
+    return formatDistanceToNow(date, { addSuffix: true });
   };
 
   // Like a comment

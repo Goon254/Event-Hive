@@ -19,6 +19,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, getFirestore } from 'firebase/firestore';
 import { auth, db } from '../lib/firebaseConfig';
+import { sanitizeForFirestore } from './services/migrationService';
 
 // Constants
 const AUTH_STORAGE_KEY = 'auth_user_data';
@@ -212,7 +213,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Create user document in Firestore
       try {
-        await setDoc(doc(db, "users", user.uid), {
+        // Create user data object
+        const userData = {
           name: name,
           email: email,
           phoneNumber: userProfile?.phoneNumber || null,
@@ -224,7 +226,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           profileImageUrl: userProfile?.profileImageUrl || null,
           createdAt: userProfile?.createdAt || new Date().toISOString(),
           uid: user.uid
-        });
+        };
+        
+        // Sanitize the data to remove any undefined values
+        const sanitizedData = sanitizeForFirestore(userData);
+        
+        // Save to Firestore
+        await setDoc(doc(db, "users", user.uid), sanitizedData);
       } catch (firestoreError) {
         console.error('Error creating user document:', firestoreError);
         // Consider if you want to delete the auth user if Firestore fails

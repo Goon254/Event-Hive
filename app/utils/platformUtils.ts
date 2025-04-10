@@ -1,54 +1,73 @@
+// app/utils/platformUtils.ts
 import { Platform } from 'react-native';
 
 /**
  * Creates platform-specific shadow styles
- * @param elevation Shadow intensity (1-24)
- * @returns Platform-specific shadow styles object
+ * @param elevation Shadow elevation (1-24)
+ * @returns Shadow style object
  */
-export const createShadow = (elevation = 2) => {
-  return Platform.OS === 'ios' 
-    ? {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: elevation/2 },
-        shadowOpacity: 0.1,
-        shadowRadius: elevation,
-      } 
-    : {
-        elevation,
-      };
-};
+export function createShadow(elevation: number = 2) {
+  if (Platform.OS === 'ios') {
+    return {
+      shadowColor: '#000',
+      shadowOffset: {
+        width: 0,
+        height: elevation,
+      },
+      shadowOpacity: 0.1 + (elevation * 0.03),
+      shadowRadius: elevation * 0.8,
+    };
+  } else {
+    return {
+      elevation: elevation,
+    };
+  }
+}
 
 /**
- * Creates a style object for setting safe top padding
- * based on the platform and device notch
+ * Determines if the platform is web
+ * @returns Boolean indicating if platform is web
  */
-export const safeTopPadding = (extraPadding = 0) => {
-  // iOS typically needs more padding for the status bar
-  const basePadding = Platform.OS === 'ios' ? 44 : 30;
-  return {
-    paddingTop: basePadding + extraPadding,
-  };
-};
+export function isWeb(): boolean {
+  return Platform.OS === 'web';
+}
 
 /**
- * Creates styles for buttons with platform-specific feedback
+ * Gets platform-specific font weight
+ * @param weight Font weight name
+ * @returns Platform-specific font weight
  */
-export const buttonStyle = (color = '#007AFF') => {
-  return {
-    backgroundColor: color,
-    // Android typically has more pronounced ripple effect
-    ...Platform.select({
-      android: {
-        elevation: 2,
-        borderRadius: 4,
-      },
-      ios: {
-        borderRadius: 8,
-        shadowColor: color,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-      },
-    }),
-  };
-};
+export function getFontWeight(weight: 'regular' | 'medium' | 'semibold' | 'bold') {
+  // iOS uses specific string values, Android uses numeric values
+  if (Platform.OS === 'ios') {
+    switch (weight) {
+      case 'regular': return '400';
+      case 'medium': return '500';
+      case 'semibold': return '600';
+      case 'bold': return '700';
+      default: return '400';
+    }
+  } else {
+    switch (weight) {
+      case 'regular': return 'normal';
+      case 'medium': return '500';
+      case 'semibold': return '600';
+      case 'bold': return 'bold';
+      default: return 'normal';
+    }
+  }
+}
+
+/**
+ * Gets platform-specific font family
+ * @returns Platform-specific font family
+ */
+export function getDefaultFontFamily(): string {
+  if (Platform.OS === 'ios') {
+    return 'System';
+  } else if (Platform.OS === 'android') {
+    return 'Roboto';
+  } else {
+    return 'sans-serif';
+  }
+}
