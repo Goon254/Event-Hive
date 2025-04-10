@@ -111,7 +111,7 @@ export default function HomeScreen() {
   }, [error, retryLoading]);
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
+    <View style={[styles.container, { backgroundColor: '#000000' }]}>
       {/* Offline Banner */}
       {isOffline && (
         <View style={styles.offlineBanner}>
@@ -123,7 +123,7 @@ export default function HomeScreen() {
       )}
       
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: '#000000' }]}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -179,7 +179,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Explore Button */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.exploreButton}
           onPress={handleShowExplore}
           activeOpacity={0.8}
@@ -193,17 +193,27 @@ export default function HomeScreen() {
           <Text style={styles.exploreButtonText}>Explore all events</Text>
           <MaterialIcons name="arrow-forward" size={18} color="#6B7280" />
         </TouchableOpacity>
-
+        
         {/* Categories */}
-        <CategoryButtons 
-          onSelectCategory={handleSelectCategory}
-          fadeAnim={fadeAnim}
-          translateY={translateY}
-        />
+        <View style={styles.categoriesContainer}>
+          <CategoryButtons
+            onSelectCategory={handleSelectCategory}
+            fadeAnim={fadeAnim}
+            translateY={translateY}
+          />
+        </View>
 
+        {/* Loading State */}
+        {loading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text style={styles.loadingText}>Loading events...</Text>
+          </View>
+        )}
+        
         {/* Error State */}
         {error && !loading && (
-          <View style={styles.errorContainer}>
+          <View style={[styles.errorContainer, { backgroundColor: '#1E1E1E' }]}>
             <MaterialIcons name="error-outline" size={48} color="#EF4444" />
             <Text style={styles.errorText}>Unable to load events</Text>
             <Text style={styles.errorSubtext}>{error.message}</Text>
@@ -212,63 +222,80 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Loading State */}
+        {loading && (
+          <View style={[styles.loadingContainer, { backgroundColor: '#1E1E1E' }]}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text style={[styles.loadingText, { color: '#a9a9a9' }]}>Loading events...</Text>
+          </View>
+        )}
+
         
         {/* Featured Event */}
-        {!loading && !error && featuredEvent && (
-          <FeaturedEvent
-            event={featuredEvent}
-            daysUntil={getDaysUntil(featuredEvent.date)}
-            fadeAnim={fadeAnim}
-            translateY={translateY}
-          />
+        {!loading && featuredEvent && (
+          <View style={styles.sectionWrapper}>
+            <FeaturedEvent
+              event={featuredEvent}
+              daysUntil={getDaysUntil(featuredEvent.date)}
+              fadeAnim={fadeAnim}
+              translateY={translateY}
+            />
+          </View>
         )}
 
         {/* Upcoming Events Section */}
-        <EventSection
-          title="Upcoming Events"
-          events={upcomingEvents}
-          loading={loading}
-          attendingEvents={attendingEvents}
-          getEventStatus={getEventStatus}
-          onSeeAll={handleShowExplore}
-          emptyText="No upcoming events found."
-          emptyActionText="Explore Events"
-          onCreateEvent={() => router.push('/screens/Explore')}
-          fadeAnim={fadeAnim}
-          translateY={translateY}
-          getItemAnimationValues={getItemAnimationValues}
-        />
-
-        {/* Nearby Events Section */}
-        <EventSection
-          title="Events Near You"
-          events={nearbyEvents}
-          loading={loading}
-          attendingEvents={attendingEvents}
-          getEventStatus={getEventStatus}
-          onSeeAll={handleShowExplore}
-          emptyText="No nearby events found."
-          fadeAnim={fadeAnim}
-          translateY={translateY}
-          getItemAnimationValues={getItemAnimationValues}
-        />
-
-        {/* My Events Section - only shown if user is logged in */}
-        {user && (
+        <View style={styles.sectionWrapper}>
           <EventSection
-            title="Events You're Hosting"
-            events={myEvents}
+            title="Upcoming Events"
+            events={upcomingEvents}
             loading={loading}
             attendingEvents={attendingEvents}
             getEventStatus={getEventStatus}
-            onSeeAll={() => router.push('/screens/event-history')}
-            emptyText="You haven't created any events yet."
-            emptyActionText="Create Event"
-            onCreateEvent={() => router.push('/screens/Create')}
+            onSeeAll={handleShowExplore}
+            emptyText="No upcoming events found."
+            emptyActionText="Explore Events"
+            onCreateEvent={() => router.push('/screens/Explore')}
             fadeAnim={fadeAnim}
             translateY={translateY}
             getItemAnimationValues={getItemAnimationValues}
           />
+        </View>
+
+        {/* Nearby Events Section */}
+        <View style={styles.sectionWrapper}>
+          <EventSection
+            title="Events Near You"
+            events={nearbyEvents}
+            loading={loading}
+            attendingEvents={attendingEvents}
+            getEventStatus={getEventStatus}
+            onSeeAll={handleShowExplore}
+            emptyText="No nearby events found."
+            fadeAnim={fadeAnim}
+            translateY={translateY}
+            getItemAnimationValues={getItemAnimationValues}
+          />
+        </View>
+
+        {/* My Events Section - only shown if user is logged in */}
+        {user && (
+          <View style={styles.sectionWrapper}>
+            <EventSection
+              title="Events You're Hosting"
+              events={myEvents}
+              loading={loading}
+              attendingEvents={attendingEvents}
+              getEventStatus={getEventStatus}
+              onSeeAll={() => router.push('/screens/event-history')}
+              emptyText="You haven't created any events yet."
+              emptyActionText="Create Event"
+              onCreateEvent={() => router.push('/screens/Create')}
+              fadeAnim={fadeAnim}
+              translateY={translateY}
+              getItemAnimationValues={getItemAnimationValues}
+            />
+          </View>
         )}
       </ScrollView>
 
@@ -318,6 +345,25 @@ const cardShadow = createShadow(2);
 const buttonShadow = createShadow(1);
 
 const styles = StyleSheet.create({
+  categoriesContainer: {
+    paddingVertical: 10,
+  },
+  sectionWrapper: {
+    marginVertical: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  loadingContainer: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#a9a9a9',
+    marginTop: 12,
+  },
   offlineBanner: {
     backgroundColor: '#6B7280',
     padding: 8,
@@ -334,21 +380,20 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FEF2F2',
     margin: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderColor: '#EF4444',
   },
   errorText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#B91C1C',
+    color: '#EF4444',
     marginTop: 12,
   },
   errorSubtext: {
     fontSize: 14,
-    color: '#7F1D1D',
+    color: '#a9a9a9',
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 16,
@@ -377,6 +422,7 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 16,
     backgroundColor: '#007AFF',
+    zIndex: 10, // Ensure header is above other content
   },
   welcomeContainer: {
     flexDirection: 'row',
@@ -421,7 +467,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: 'white',
     marginHorizontal: 20,
-    marginTop: 16,
+    marginTop: -20, // Position it to overlap with the header
+    marginBottom: 10,
     padding: 14,
     borderRadius: 12,
     ...cardShadow,

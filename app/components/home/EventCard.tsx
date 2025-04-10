@@ -51,7 +51,7 @@ const EventCard = ({
       <TouchableOpacity
         style={[
           styles.eventCard,
-          { backgroundColor: Colors[colorScheme ?? 'light'].background }
+          { backgroundColor: '#1E1E1E' }
         ]}
         onPress={() => router.push(`/screens/eventdetails?id=${item.id}`)}
         activeOpacity={0.7}
@@ -97,21 +97,21 @@ const EventCard = ({
 
         <View style={styles.eventContent}>
           <Text 
-            style={[styles.eventTitle, { color: Colors[colorScheme ?? 'light'].text }]} 
+            style={[styles.eventTitle, { color: '#FFFFFF' }]}
             numberOfLines={1}
           >
             {item.title}
           </Text>
           <View style={styles.eventMetaRow}>
-            <FontAwesome name="calendar" size={14} color={Colors[colorScheme ?? 'light'].tint} />
-            <Text style={[styles.eventMetaText, { color: Colors[colorScheme ?? 'light'].text }]}>
+            <FontAwesome name="calendar" size={14} color="#007AFF" />
+            <Text style={[styles.eventMetaText, { color: '#a9a9a9' }]}>
               {formatDate(item.date)}
             </Text>
           </View>
           <View style={styles.eventMetaRow}>
-            <FontAwesome name="map-marker" size={14} color={Colors[colorScheme ?? 'light'].tint} />
-            <Text 
-              style={[styles.eventMetaText, { color: Colors[colorScheme ?? 'light'].text }]} 
+            <FontAwesome name="map-marker" size={14} color="#007AFF" />
+            <Text
+              style={[styles.eventMetaText, { color: '#a9a9a9' }]}
               numberOfLines={1}
             >
               {item.location}
@@ -119,8 +119,8 @@ const EventCard = ({
           </View>
           {item.isPaid && (
             <View style={styles.eventMetaRow}>
-              <FontAwesome name="ticket" size={14} color={Colors[colorScheme ?? 'light'].tint} />
-              <Text style={[styles.eventMetaText, { color: Colors[colorScheme ?? 'light'].text }]}>
+              <FontAwesome name="ticket" size={14} color="#007AFF" />
+              <Text style={[styles.eventMetaText, { color: '#a9a9a9' }]}>
                 ${item.price?.toFixed(2) || '0.00'}
               </Text>
             </View>

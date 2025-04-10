@@ -65,7 +65,7 @@ const EventSection = ({
       ]}
     >
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: Colors[colorScheme ?? 'light'].text }]}>
+        <Text style={[styles.sectionTitle, { color: '#FFFFFF' }]}>
           {title}
         </Text>
         {events.length > 0 && onSeeAll && (
@@ -79,13 +79,13 @@ const EventSection = ({
             accessibilityRole="button"
             accessibilityHint={`View all ${title.toLowerCase()}`}
           >
-            <Text style={[styles.sectionAction, { color: Colors[colorScheme ?? 'light'].tint }]}>
+            <Text style={[styles.sectionAction, { color: '#007AFF' }]}>
               See All
             </Text>
-            <FontAwesome 
-              name="chevron-right" 
-              size={12} 
-              color={Colors[colorScheme ?? 'light'].tint} 
+            <FontAwesome
+              name="chevron-right"
+              size={12}
+              color="#007AFF"
               style={{marginLeft: 4}} 
             />
           </TouchableOpacity>
@@ -94,9 +94,9 @@ const EventSection = ({
       
       {loading ? (
         <ActivityIndicator 
-          size="small" 
-          color={Colors[colorScheme ?? 'light'].tint} 
-          style={styles.loader} 
+          size="small"
+          color="#007AFF"
+          style={styles.loader}
         />
       ) : events.length > 0 ? (
         <FlatList
@@ -130,12 +130,12 @@ const EventSection = ({
           accessibilityHint="Scroll horizontally to view more events"
         />
       ) : (
-        <View style={[styles.emptyContainer, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-          <Text style={[styles.emptyText, { color: Colors[colorScheme ?? 'light'].text }]}>
+        <View style={[styles.emptyContainer, { backgroundColor: '#1E1E1E' }]}>
+          <Text style={[styles.emptyText, { color: '#a9a9a9' }]}>
             {emptyText}
           </Text>
           {onCreateEvent && emptyActionText && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.createButton}
               onPress={onCreateEvent}
               activeOpacity={0.7}

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import eventService, { Event } from '../../../services/eventServices';
+import { auth } from '../../../../lib/firebaseConfig';
 
 // Filter types for events
 export type FilterType = 'all' | 'upcoming' | 'ongoing' | 'completed';
@@ -170,8 +171,28 @@ export const useEventData = (userId?: string) => {
     const now = new Date();
     const upcoming = sortedEvents.filter(event => {
       if (!event.date) return false;
-      const eventDate = event.date instanceof Date ? event.date : event.date.toDate();
-      return eventDate > now;
+      
+      // Safely handle different date formats
+      let eventDate: Date;
+      try {
+        if (event.date instanceof Date) {
+          eventDate = event.date;
+        } else if (event.date.toDate && typeof event.date.toDate === 'function') {
+          // Firebase Timestamp
+          eventDate = event.date.toDate();
+        } else if (typeof event.date === 'object' && 'seconds' in event.date) {
+          // Firebase Timestamp-like object
+          eventDate = new Date((event.date as any).seconds * 1000);
+        } else {
+          // Try to parse as string or number
+          eventDate = new Date(event.date as any);
+        }
+        
+        return eventDate > now;
+      } catch (error) {
+        console.warn('Error processing event date:', error, event);
+        return false;
+      }
     });
     setUpcomingEvents(upcoming);
     
@@ -204,8 +225,38 @@ export const useEventData = (userId?: string) => {
       // Sort events by date (newest first)
       const sortedEvents = eventsData.events.sort((a, b) => {
         if (!a.date || !b.date) return 0;
-        const dateA = a.date instanceof Date ? a.date : a.date.toDate();
-        const dateB = b.date instanceof Date ? b.date : b.date.toDate();
+        
+        // Safely handle different date formats
+        let dateA: Date, dateB: Date;
+        
+        try {
+          // Handle date A
+          if (a.date instanceof Date) {
+            dateA = a.date;
+          } else if (a.date.toDate && typeof a.date.toDate === 'function') {
+            dateA = a.date.toDate();
+          } else if (typeof a.date === 'object' && 'seconds' in a.date) {
+            dateA = new Date((a.date as any).seconds * 1000);
+          } else {
+            dateA = new Date(a.date as any);
+          }
+          
+          // Handle date B
+          if (b.date instanceof Date) {
+            dateB = b.date;
+          } else if (b.date.toDate && typeof b.date.toDate === 'function') {
+            dateB = b.date.toDate();
+          } else if (typeof b.date === 'object' && 'seconds' in b.date) {
+            dateB = new Date((b.date as any).seconds * 1000);
+          } else {
+            dateB = new Date(b.date as any);
+          }
+          
+          return dateB.getTime() - dateA.getTime();
+        } catch (error) {
+          console.warn('Error comparing event dates:', error, a, b);
+          return 0;
+        }
         return dateB.getTime() - dateA.getTime();
       });
       
@@ -220,10 +271,57 @@ export const useEventData = (userId?: string) => {
       // Fetch user-specific data if user is logged in
       if (userId) {
         try {
-          const attending = await eventService.getUserAttendingEvents(userId);
-          if (isMounted.current) {
-            setAttendingEvents(attending.events.map(event => event.id));
-            await saveToCache(CACHE_KEYS.ATTENDING_EVENTS(userId), attending.events.map(event => event.id));
+          // Check if there's an authenticated user before fetching attending events
+          if (!auth.currentUser) {
+            console.log('No authenticated user found, skipping attending events fetch');
+            
+            // Try to load from cache
+            const cachedAttending = await loadFromCache(CACHE_KEYS.ATTENDING_EVENTS(userId));
+            if (cachedAttending && isMounted.current) {
+              setAttendingEvents(cachedAttending);
+            }
+            return;
+          }
+          
+          // Check if the current user ID matches the requested user ID
+          if (auth.currentUser.uid !== userId) {
+            console.log('User ID mismatch - cannot access other users attending events');
+            
+            // Try to load from cache
+            const cachedAttending = await loadFromCache(CACHE_KEYS.ATTENDING_EVENTS(userId));
+            if (cachedAttending && isMounted.current) {
+              setAttendingEvents(cachedAttending);
+            }
+            return;
+          }
+          
+          try {
+            const attending = await eventService.getUserAttendingEvents(userId);
+            
+            // Check if we got any events back
+            if (attending && attending.events && attending.events.length > 0) {
+              if (isMounted.current) {
+                const eventIds = attending.events.map(event => event.id);
+                setAttendingEvents(eventIds);
+                await saveToCache(CACHE_KEYS.ATTENDING_EVENTS(userId), eventIds);
+              }
+            } else {
+              console.log('No attending events found or empty result returned');
+              
+              // Try to load from cache as fallback
+              const cachedAttending = await loadFromCache(CACHE_KEYS.ATTENDING_EVENTS(userId));
+              if (cachedAttending && isMounted.current) {
+                setAttendingEvents(cachedAttending);
+              }
+            }
+          } catch (attendingError) {
+            console.error('Error fetching attending events:', attendingError);
+            // Continue with the app even if attending events can't be fetched
+            // Try to load from cache as fallback
+            const cachedAttending = await loadFromCache(CACHE_KEYS.ATTENDING_EVENTS(userId));
+            if (cachedAttending && isMounted.current) {
+              setAttendingEvents(cachedAttending);
+            }
           }
         } catch (userError) {
           console.error('Error loading user attending events:', userError);

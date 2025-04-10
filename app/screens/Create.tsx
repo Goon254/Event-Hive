@@ -88,7 +88,56 @@ const PAYMENT_OPTIONS = [
   'Cash at Door',
   'Venmo',
   'Apple Pay',
-  
+];
+
+// Country list for international address support
+const COUNTRIES = [
+  'United States',
+  'Canada',
+  'United Kingdom',
+  'Australia',
+  'Germany',
+  'France',
+  'Japan',
+  'China',
+  'India',
+  'Brazil',
+  'Mexico',
+  'South Africa',
+  'Nigeria',
+  'Kenya',
+  'Egypt',
+  'Saudi Arabia',
+  'United Arab Emirates',
+  'Singapore',
+  'Malaysia',
+  'Indonesia',
+  'Thailand',
+  'Vietnam',
+  'Philippines',
+  'South Korea',
+  'Russia',
+  'Italy',
+  'Spain',
+  'Netherlands',
+  'Sweden',
+  'Norway',
+  'Denmark',
+  'Finland',
+  'Switzerland',
+  'Austria',
+  'Belgium',
+  'Portugal',
+  'Greece',
+  'Turkey',
+  'Israel',
+  'New Zealand',
+  'Argentina',
+  'Chile',
+  'Colombia',
+  'Peru',
+  'Venezuela',
+  'Other',
 ];
 
 // Ticket types
@@ -134,6 +183,7 @@ interface EventForm {
   city: string;
   state: string;
   zipCode: string;
+  country: string; // Added country field for international addresses
   virtualLink: string;
   capacity: string;
   registrationDeadline: Date | null;
@@ -142,13 +192,12 @@ interface EventForm {
   price: string;
   paymentOptions: string[];
   imageUri: string | null;
-  galleryImages: string[];
+  galleryImages: string[]; // Keeping this for backward compatibility
   ticketTypes: TicketType[];
   customFields: CustomField[];
   speakers: Speaker[];
   cancellationPolicy: string;
   enableComments: boolean;
-  enableFaceRecognition: boolean;
 }
 
 interface FormErrors {
@@ -156,6 +205,9 @@ interface FormErrors {
   description?: string;
   address?: string;
   city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
   date?: string;
   time?: string;
   capacity?: string;
@@ -186,6 +238,7 @@ export default function CreateEventScreen() {
     city: '',
     state: '',
     zipCode: '',
+    country: 'United States', // Default country
     virtualLink: '',
     capacity: '',
     registrationDeadline: null,
@@ -200,7 +253,6 @@ export default function CreateEventScreen() {
     speakers: [],
     cancellationPolicy: '',
     enableComments: true,
-    enableFaceRecognition: false,
   });
 
   // States for pickers and modals
@@ -655,7 +707,7 @@ export default function CreateEventScreen() {
       if (formData.isVirtual) {
         locationString = 'Virtual Event';
       } else {
-        locationString = `${formData.buildingName ? formData.buildingName + ', ' : ''}${formData.address}, ${formData.city}, ${formData.state} ${formData.zipCode}`.trim();
+        locationString = `${formData.buildingName ? formData.buildingName + ', ' : ''}${formData.address}, ${formData.city}, ${formData.state} ${formData.zipCode}, ${formData.country}`.trim();
       }
   
       // Combine date and time for start and end
@@ -707,7 +759,8 @@ const eventData = {
       address: formData.address.trim(),
       city: formData.city.trim(),
       state: formData.state.trim(),
-      zipCode: formData.zipCode.trim()
+      zipCode: formData.zipCode.trim(),
+      country: formData.country.trim()
     }
   }),
   capacity: Number(formData.capacity) || 0,
@@ -729,7 +782,6 @@ const eventData = {
   // Other fields
   cancellationPolicy: formData.cancellationPolicy || '',
   enableComments: formData.enableComments,
-  enableFaceRecognition: formData.enableFaceRecognition,
 };
 
 // Now create the event with the properly formatted data
@@ -751,37 +803,37 @@ const createdEvent = await eventService.createEvent(eventData);
             onPress: () => {
               // Reset form
               setFormData({
-                title: '',
-                description: '',
-                category: 'Other',
-                tags: [],
-                date: new Date(),
-                endDate: new Date(Date.now() + 3600000),
-                time: new Date(),
-                endTime: new Date(Date.now() + 3600000),
-                timeZone: 'UTC-05:00',
-                isVirtual: false,
-                buildingName: '',
-                address: '',
-                city: '',
-                state: '',
-                zipCode: '',
-                virtualLink: '',
-                capacity: '',
-                registrationDeadline: null,
-                isPrivate: false,
-                isPaid: false,
-                price: '',
-                paymentOptions: ['Credit Card', 'PayPal'],
-                imageUri: null,
-                galleryImages: [],
-                ticketTypes: [],
-                customFields: [],
-                speakers: [],
-                cancellationPolicy: '',
-                enableComments: true,
-                enableFaceRecognition: false,
-              });
+               title: '',
+               description: '',
+               category: 'Other',
+               tags: [],
+               date: new Date(),
+               endDate: new Date(Date.now() + 3600000),
+               time: new Date(),
+               endTime: new Date(Date.now() + 3600000),
+               timeZone: 'UTC-05:00',
+               isVirtual: false,
+               buildingName: '',
+               address: '',
+               city: '',
+               state: '',
+               zipCode: '',
+               country: 'United States',
+               virtualLink: '',
+               capacity: '',
+               registrationDeadline: null,
+               isPrivate: false,
+               isPaid: false,
+               price: '',
+               paymentOptions: ['Credit Card', 'PayPal'],
+               imageUri: null,
+               galleryImages: [],
+               ticketTypes: [],
+               customFields: [],
+               speakers: [],
+               cancellationPolicy: '',
+               enableComments: true,
+             });
               setActiveSection(1);
             }
           }
@@ -1271,6 +1323,36 @@ const createdEvent = await eventService.createEvent(eventData);
       ) : (
         <View style={styles.locationContainer}>
           <View style={styles.formGroup}>
+            <Text style={styles.label}>Country*</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={formData.country}
+                onValueChange={(itemValue) => {
+                  setFormData({
+                    ...formData,
+                    country: itemValue,
+                    // Reset state/province when country changes
+                    state: '',
+                    zipCode: ''
+                  });
+                  if (formErrors.country) {
+                    setFormErrors({ ...formErrors, country: undefined });
+                  }
+                }}
+                enabled={!isSubmitting}
+                style={styles.picker}
+              >
+                {COUNTRIES.map((country) => (
+                  <Picker.Item key={country} label={country} value={country} />
+                ))}
+              </Picker>
+            </View>
+            {formErrors.country && (
+              <Text style={styles.errorText}>{formErrors.country}</Text>
+            )}
+          </View>
+
+          <View style={styles.formGroup}>
             <Text style={styles.label}>Venue/Building Name</Text>
             <TextInput
               style={styles.input}
@@ -1321,26 +1403,52 @@ const createdEvent = await eventService.createEvent(eventData);
             </View>
 
             <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-              <Text style={styles.label}>State</Text>
+              <Text style={styles.label}>State/Province</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, formErrors.state && styles.inputError]}
                 value={formData.state}
-                onChangeText={(text) => setFormData({ ...formData, state: text })}
-                placeholder="State"
+                onChangeText={(text) => {
+                  // For US and Canada, limit to 2 characters and convert to uppercase
+                  if ((formData.country === 'United States' || formData.country === 'Canada') &&
+                      text.length <= 2) {
+                    setFormData({ ...formData, state: text.toUpperCase() });
+                  } else if (formData.country !== 'United States' && formData.country !== 'Canada') {
+                    setFormData({ ...formData, state: text });
+                  }
+                  
+                  if (formErrors.state) {
+                    setFormErrors({ ...formErrors, state: undefined });
+                  }
+                }}
+                placeholder={formData.country === 'United States' || formData.country === 'Canada' ?
+                  "2-letter code" : "State/Province"}
+                maxLength={formData.country === 'United States' || formData.country === 'Canada' ? 2 : 50}
                 editable={!isSubmitting}
               />
+              {formErrors.state && (
+                <Text style={styles.errorText}>{formErrors.state}</Text>
+              )}
             </View>
 
             <View style={[styles.formGroup, { flex: 1 }]}>
-              <Text style={styles.label}>ZIP Code</Text>
+              <Text style={styles.label}>ZIP/Postal Code</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, formErrors.zipCode && styles.inputError]}
                 value={formData.zipCode}
-                onChangeText={(text) => setFormData({ ...formData, zipCode: text })}
-                placeholder="ZIP"
-                keyboardType="numeric"
+                onChangeText={(text) => {
+                  setFormData({ ...formData, zipCode: text });
+                  if (formErrors.zipCode) {
+                    setFormErrors({ ...formErrors, zipCode: undefined });
+                  }
+                }}
+                placeholder={formData.country === 'United States' ? "ZIP" :
+                  formData.country === 'Canada' ? "Postal Code" : "Postal/ZIP"}
+                keyboardType={formData.country === 'United States' ? "numeric" : "default"}
                 editable={!isSubmitting}
               />
+              {formErrors.zipCode && (
+                <Text style={styles.errorText}>{formErrors.zipCode}</Text>
+              )}
             </View>
           </View>
         </View>
@@ -1760,25 +1868,7 @@ const createdEvent = await eventService.createEvent(eventData);
           />
         </View>
       </View>
-      
-      <View style={styles.formGroup}>
-        <Text style={styles.label}>Advanced Check-in</Text>
-        <View style={styles.settingItem}>
-          <View style={styles.settingTextContainer}>
-            <Text style={styles.settingLabel}>Face Recognition Check-in</Text>
-            <Text style={styles.settingDescription}>
-              Enhance security with facial verification during check-in
-            </Text>
-          </View>
-          <Switch
-            value={formData.enableFaceRecognition}
-            onValueChange={(value) => setFormData({ ...formData, enableFaceRecognition: value })}
-            trackColor={{ false: '#D1D5DB', true: '#007AFF' }}
-            thumbColor="#FFFFFF"
-            disabled={isSubmitting}
-          />
-        </View>
-      </View>
+      {/* Face Recognition Check-in feature removed as per requirements */}
       
       <View style={styles.formGroup}>
         <Text style={styles.label}>Cancellation Policy</Text>
@@ -2372,29 +2462,15 @@ const createdEvent = await eventService.createEvent(eventData);
           
           <ScrollView style={styles.modalBody}>
             <View style={styles.speakerImageUpload}>
-              <View style={styles.speakerModalImageContainer}>
-                {currentSpeaker?.imageUri ? (
-                  <Image 
-                    source={{ uri: currentSpeaker.imageUri }} 
-                    style={styles.speakerModalImage} 
-                  />
-                ) : (
-                  <View style={styles.speakerModalImagePlaceholder}>
-                    <MaterialIcons name="person" size={40} color="#9CA3AF" />
-                  </View>
-                )}
-                <TouchableOpacity 
-                  style={styles.changeSpeakerImageButton}
-                  onPress={() => {
-                    // In a real app, integrate with ImagePicker
-                    Alert.alert('Feature Coming Soon', 'Speaker image upload will be available soon.');
-                  }}
-                >
-                  <Text style={styles.changeSpeakerImageText}>
-                    Change Photo
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.label}>Speaker Photo</Text>
+              <ImageUpload
+                onImageSelected={(uri) =>
+                  setCurrentSpeaker(current =>
+                    current ? { ...current, imageUri: uri } : null
+                  )
+                }
+                initialImage={currentSpeaker?.imageUri || undefined}
+              />
             </View>
             
             <View style={styles.formGroup}>
@@ -2552,7 +2628,7 @@ const createdEvent = await eventService.createEvent(eventData);
                         {formData.buildingName || 'Venue Name'}
                       </Text>
                       <Text style={styles.previewDetailTextSecondary}>
-                        {formData.address}, {formData.city}, {formData.state} {formData.zipCode}
+                        {formData.address}, {formData.city}, {formData.state} {formData.zipCode}, {formData.country}
                       </Text>
                     </>
                   )}

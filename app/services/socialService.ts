@@ -153,15 +153,22 @@ class SocialService {
   // Fetch Posts with Advanced Filtering
   async fetchPosts(
     options: {
-      userId?: string, 
-      connectionIds?: string[], 
-      contentTypes?: ContentType[], 
+      userId?: string,
+      connectionIds?: string[],
+      contentTypes?: ContentType[],
       privacyLevel?: PrivacyLevel,
       lastDoc?: any,
       pageSize?: number
     } = {}
   ): Promise<{ posts: SocialPost[], lastDoc: any }> {
     try {
+      // Check if user is authenticated
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        console.log('No authenticated user found during fetchPosts');
+        return { posts: [], lastDoc: null };
+      }
+      
       const postsRef = collection(db, 'socialPosts');
       let postsQuery = query(postsRef, orderBy('createdAt', 'desc'));
       
@@ -234,6 +241,14 @@ class SocialService {
     } = {}
   ) {
     try {
+      // Check if user is authenticated
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        console.log('No authenticated user found during setupPostsListener');
+        callback([]);
+        // Return a no-op function as unsubscribe
+        return () => {};
+      }
       const postsRef = collection(db, 'socialPosts');
       let postsQuery = query(
         postsRef, 

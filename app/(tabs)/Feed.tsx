@@ -25,6 +25,7 @@ import { createShadow } from '../utils/platformUtils';
 import { format } from 'date-fns';
 import { formatDistance } from 'date-fns/formatDistance';
 import migrationService from '../services/migrationService';
+import { auth } from '../../lib/firebaseConfig';
 export default function SocialFeedScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -102,6 +103,15 @@ export default function SocialFeedScreen() {
         setPostsUnsubscribe(null);
       }
       
+      // Check if user is authenticated
+      if (!auth.currentUser) {
+        console.log('No authenticated user found, showing empty feed');
+        setPosts([]);
+        setIsLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+      
       // Initial fetch to get posts immediately
       const options = {
         lastDoc: refresh ? null : lastDoc,
@@ -129,7 +139,18 @@ export default function SocialFeedScreen() {
       
     } catch (error) {
       console.error('Error fetching posts:', error);
-      Alert.alert('Error', 'Failed to load posts. Please try again.');
+      // Show a more specific error message based on the error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('permission')) {
+        Alert.alert(
+          'Authentication Required',
+          'Please sign in to view the feed. The app will continue to work with limited functionality.'
+        );
+      } else {
+        Alert.alert('Error', 'Failed to load posts. Please try again.');
+      }
+      // Set empty posts array to avoid showing stale data
+      setPosts([]);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);

@@ -22,6 +22,7 @@ import { useAuth } from '../AuthContext';
 import eventService, { Event as EventType } from '../services/eventServices';
 import { createShadow, safeTopPadding } from '../utils/platformUtils';
 import { LinearGradient } from 'expo-linear-gradient';
+import { auth } from '../../lib/firebaseConfig';
 
 // Types for filtering
 type FilterType = 'all' | 'upcoming' | 'ongoing' | 'completed' | 'attending';
@@ -47,13 +48,39 @@ export default function EventsScreen() {
       setIsLoading(true);
       const eventsData = await eventService.getEvents();
       
+      // Set events from the events array in the response
+      setEvents(eventsData.events);
+      
       // If user is logged in, fetch events they're attending
       if (user) {
-        const attending = await eventService.getUserAttendingEvents(user.id);
-        setAttendingEvents(attending.map(event => event.id));
+        try {
+          // Check if the current user is authenticated
+          if (!auth.currentUser) {
+            console.log('No authenticated user found, skipping attending events fetch');
+            return;
+          }
+          
+          // Check if the current user ID matches the requested user ID
+          if (auth.currentUser.uid !== user.id) {
+            console.log('User ID mismatch - cannot access other users attending events');
+            return;
+          }
+          
+          const attending = await eventService.getUserAttendingEvents(user.id);
+          
+          // Check if we got any events back
+          if (attending && attending.events && attending.events.length > 0) {
+            // Extract event IDs from the events array
+            setAttendingEvents(attending.events.map(event => event.id));
+          } else {
+            console.log('No attending events found or empty result returned');
+          }
+        } catch (attendingError) {
+          // Just log the error but don't show an alert - this is not critical functionality
+          console.error('Error fetching attending events:', attendingError);
+          // Continue with the main events display
+        }
       }
-      
-      setEvents(eventsData);
     } catch (error) {
       console.error('Error fetching events:', error);
       Alert.alert('Error', 'Failed to fetch events. Please try again.');
@@ -89,28 +116,61 @@ export default function EventsScreen() {
     if (!event || !event.date) return 'unknown';
     
     const now = new Date();
-    const eventDate = event.date instanceof Date ? event.date : event.date.toDate();
-    const eventTime = event.time instanceof Date ? event.time : event.time.toDate();
     
-    // Combine date and time
-    const eventDateTime = new Date(
-      eventDate.getFullYear(),
-      eventDate.getMonth(),
-      eventDate.getDate(),
-      eventTime.getHours(),
-      eventTime.getMinutes()
-    );
+    // Safely handle different date formats
+    let eventDate: Date;
+    let eventTime: Date;
     
-    // Add event duration (assuming 3 hours if not specified)
-    const eventDuration = event.duration || 3 * 60 * 60 * 1000; // 3 hours in ms
-    const eventEndTime = new Date(eventDateTime.getTime() + eventDuration);
-    
-    if (now < eventDateTime) {
-      return 'upcoming';
-    } else if (now >= eventDateTime && now <= eventEndTime) {
-      return 'ongoing';
-    } else {
-      return 'completed';
+    try {
+      // Handle event date
+      if (event.date instanceof Date) {
+        eventDate = event.date;
+      } else if (event.date.toDate && typeof event.date.toDate === 'function') {
+        eventDate = event.date.toDate();
+      } else if (typeof event.date === 'object' && 'seconds' in event.date) {
+        eventDate = new Date((event.date as any).seconds * 1000);
+      } else {
+        eventDate = new Date(event.date as any);
+      }
+      
+      // Handle event time
+      if (event.time instanceof Date) {
+        eventTime = event.time;
+      } else if (event.time && event.time.toDate && typeof event.time.toDate === 'function') {
+        eventTime = event.time.toDate();
+      } else if (event.time && typeof event.time === 'object' && 'seconds' in event.time) {
+        eventTime = new Date((event.time as any).seconds * 1000);
+      } else if (event.time) {
+        eventTime = new Date(event.time as any);
+      } else {
+        // Default to noon if time is not available
+        eventTime = new Date(eventDate);
+        eventTime.setHours(12, 0, 0, 0);
+      }
+      
+      // Combine date and time
+      const eventDateTime = new Date(
+        eventDate.getFullYear(),
+        eventDate.getMonth(),
+        eventDate.getDate(),
+        eventTime.getHours(),
+        eventTime.getMinutes()
+      );
+      
+      // Add event duration (assuming 3 hours if not specified)
+      const eventDuration = event.duration || 3 * 60 * 60 * 1000; // 3 hours in ms
+      const eventEndTime = new Date(eventDateTime.getTime() + eventDuration);
+      
+      if (now < eventDateTime) {
+        return 'upcoming';
+      } else if (now >= eventDateTime && now <= eventEndTime) {
+        return 'ongoing';
+      } else {
+        return 'completed';
+      }
+    } catch (error) {
+      console.warn('Error determining event status:', error, event);
+      return 'unknown';
     }
   };
 
@@ -153,23 +213,57 @@ export default function EventsScreen() {
     fetchEvents();
   }, [user?.id]);
 
-  const formatDate = (date: Date | { toDate: () => Date }) => {
+  const formatDate = (date: Date | any) => {
     if (!date) return 'No date';
-    const eventDate = date instanceof Date ? date : date.toDate();
-    return eventDate.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric'
-    });
+    
+    try {
+      let eventDate: Date;
+      
+      if (date instanceof Date) {
+        eventDate = date;
+      } else if (date.toDate && typeof date.toDate === 'function') {
+        eventDate = date.toDate();
+      } else if (typeof date === 'object' && 'seconds' in date) {
+        eventDate = new Date((date as any).seconds * 1000);
+      } else {
+        eventDate = new Date(date);
+      }
+      
+      return eventDate.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (error) {
+      console.warn('Error formatting date:', error, date);
+      return 'Invalid date';
+    }
   };
 
-  const formatTime = (time: Date | { toDate: () => Date }) => {
+  const formatTime = (time: Date | any) => {
     if (!time) return '';
-    const eventTime = time instanceof Date ? time : time.toDate();
-    return eventTime.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    
+    try {
+      let eventTime: Date;
+      
+      if (time instanceof Date) {
+        eventTime = time;
+      } else if (time.toDate && typeof time.toDate === 'function') {
+        eventTime = time.toDate();
+      } else if (typeof time === 'object' && 'seconds' in time) {
+        eventTime = new Date((time as any).seconds * 1000);
+      } else {
+        eventTime = new Date(time);
+      }
+      
+      return eventTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      console.warn('Error formatting time:', error, time);
+      return '';
+    }
   };
 
   const renderEventCard = ({ item, index }: { item: EventType; index: number }) => {

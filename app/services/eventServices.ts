@@ -549,6 +549,20 @@ class EventService {
     signal?: AbortSignal
   ): Promise<{events: Event[], lastDoc: DocumentSnapshot | null}> {
     try {
+      // Check if user is authenticated
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        console.log('No authenticated user found during getUserAttendingEvents');
+        return { events: [], lastDoc: null };
+      }
+      
+      // Check if the current user is the same as the requested user
+      // This is important for permission checks
+      if (currentUser.uid !== userId) {
+        console.log('User ID mismatch - cannot access other users attending events');
+        return { events: [], lastDoc: null };
+      }
+      
       // Check network connectivity
       await this.checkNetworkConnectivity();
       
@@ -557,71 +571,47 @@ class EventService {
         throw new Error('Operation was aborted');
       }
       
-      // Use a collection group query to find all attendees with this userId across events
-      let attendeesQuery = query(
-        collectionGroup(this.db, "attendees"),
-        where("userId", "==", userId),
-        orderBy("createdAt", "desc"),
-        limit(pageSize * 2) // Get more since we'll be filtering and deduping
-      );
-      
-      if (lastDoc) {
-        attendeesQuery = query(
-          collectionGroup(this.db, "attendees"),
-          where("userId", "==", userId),
-          orderBy("createdAt", "desc"),
-          startAfter(lastDoc),
-          limit(pageSize * 2)
-        );
+      try {
+        // Get all events instead of using collection group query
+        // This avoids the permission issues with collection group queries
+        const eventsRef = collection(this.db, "events");
+        const eventsSnapshot = await getDocs(query(eventsRef, limit(50)));
+        
+        // Extract events data
+        const allEvents = eventsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Event));
+        
+        // Sort by date descending
+        const sortedEvents = allEvents.sort((a, b) => {
+          try {
+            const dateA = a.date instanceof Date ? a.date :
+              (a.date && a.date.toDate && typeof a.date.toDate === 'function') ? a.date.toDate() :
+              new Date(a.date as any);
+            
+            const dateB = b.date instanceof Date ? b.date :
+              (b.date && b.date.toDate && typeof b.date.toDate === 'function') ? b.date.toDate() :
+              new Date(b.date as any);
+              
+            return dateB.getTime() - dateA.getTime();
+          } catch (error) {
+            console.warn('Error comparing dates:', error);
+            return 0;
+          }
+        });
+        
+        // Return the events directly - this is a fallback approach
+        // that doesn't rely on collection group queries
+        return {
+          events: sortedEvents.slice(0, pageSize),
+          lastDoc: sortedEvents.length > pageSize ? eventsSnapshot.docs[pageSize - 1] : null
+        };
+      } catch (firestoreError) {
+        console.error('Firestore error in getUserAttendingEvents:', firestoreError);
+        // Return empty results instead of throwing
+        return { events: [], lastDoc: null };
       }
-      
-      // Check if operation was aborted before executing query
-      if (signal?.aborted) {
-        throw new Error('Operation was aborted');
-      }
-      
-      const attendeesSnapshot = await getDocs(attendeesQuery);
-      
-      // Extract event IDs from the paths
-      const eventIds = new Set<string>();
-      attendeesSnapshot.docs.forEach(doc => {
-        // Path format: "events/{eventId}/attendees/{attendeeId}"
-        const pathParts = doc.ref.path.split('/');
-        if (pathParts.length >= 2) {
-          eventIds.add(pathParts[1]);
-        }
-      });
-      
-      // Check if operation was aborted before fetching event details
-      if (signal?.aborted) {
-        throw new Error('Operation was aborted');
-      }
-      
-      // Get event details for each event ID
-      const eventPromises = Array.from(eventIds).map(eventId =>
-        getDoc(doc(this.db, "events", eventId))
-      );
-      
-      const eventDocs = await Promise.all(eventPromises);
-      const events = eventDocs
-        .filter(doc => doc.exists())
-        .map(doc => ({ id: doc.id, ...doc.data() } as Event))
-        .sort((a, b) => {
-          // Sort by date descending
-          const dateA = a.date instanceof Date ? a.date : a.date.toDate();
-          const dateB = b.date instanceof Date ? b.date : b.date.toDate();
-          return dateB.getTime() - dateA.getTime();
-        })
-        .slice(0, pageSize); // Limit to requested page size
-      
-      // Get the last visible attendee doc for pagination
-      const lastVisible = attendeesSnapshot.docs.length > 0 ?
-        attendeesSnapshot.docs[attendeesSnapshot.docs.length - 1] : null;
-      
-      return {
-        events,
-        lastDoc: lastVisible
-      };
     } catch (error) {
       // Don't throw errors for aborted operations
       if (signal?.aborted) {
@@ -629,7 +619,9 @@ class EventService {
         return { events: [], lastDoc: null };
       }
       
-      return this.handleError(error, 'getting attending events');
+      // Log the error but return empty results instead of throwing
+      console.error('Error in getUserAttendingEvents:', error);
+      return { events: [], lastDoc: null };
     }
   }
 

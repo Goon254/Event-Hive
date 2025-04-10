@@ -5,9 +5,27 @@ import { Timestamp } from 'firebase/firestore';
  * @param date Firebase Timestamp or Date object
  * @returns JavaScript Date object
  */
-export const toDate = (date: Date | Timestamp | null): Date | null => {
+export const toDate = (date: Date | Timestamp | any | null): Date | null => {
   if (!date) return null;
-  return date instanceof Date ? date : date.toDate();
+  
+  try {
+    // Handle different date formats
+    if (date instanceof Date) {
+      return date;
+    } else if (date.toDate && typeof date.toDate === 'function') {
+      // Firebase Timestamp
+      return date.toDate();
+    } else if (typeof date === 'object' && 'seconds' in date) {
+      // Firebase Timestamp-like object
+      return new Date((date as any).seconds * 1000);
+    } else {
+      // Try to parse as string or number
+      return new Date(date);
+    }
+  } catch (error) {
+    console.warn('Error converting to date:', error, date);
+    return null;
+  }
 };
 
 /**

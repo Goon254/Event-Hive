@@ -9,6 +9,8 @@ import {
 } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { getEventColor, createShadow } from './utils/uiHelpers';
+import Colors from '@/constants/Colors';
+import { useColorScheme } from '@/components/useColorScheme';
 
 // Categories for events
 export const EVENT_CATEGORIES = [
@@ -37,6 +39,7 @@ const CategoryButtons = ({
   fadeAnim,
   translateY
 }: CategoryButtonsProps) => {
+  const colorScheme = useColorScheme();
   return (
     <Animated.View 
       style={{
@@ -67,7 +70,7 @@ const CategoryButtons = ({
             <View style={[styles.categoryIcon, { backgroundColor: getEventColor(category.name) }]}>
               <FontAwesome name={category.icon as any} size={18} color="#FFFFFF" />
             </View>
-            <Text style={styles.categoryText}>{category.name}</Text>
+            <Text style={[styles.categoryText, { color: Colors[colorScheme ?? 'dark'].text }]}>{category.name}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -98,7 +101,8 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 12,
-    color: '#4B5563',
+    fontWeight: '500',
+    color: '#FFFFFF',
   }
 });
 

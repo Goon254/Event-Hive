@@ -99,7 +99,6 @@ service cloud.firestore {
       allow delete: if isSignedIn() && 
                       isOwner(resource.data.userId);
     }
-    
     // Events collection - NEW
     match /events/{eventId} {
       // Anyone can read events
@@ -109,7 +108,7 @@ service cloud.firestore {
       allow create: if isSignedIn();
       
       // Only the creator can update or delete events
-      allow update, delete: if isSignedIn() && 
+      allow update, delete: if isSignedIn() &&
                               request.auth.uid == resource.data.createdBy;
       
       // Attendees subcollection - NEW
@@ -120,6 +119,12 @@ service cloud.firestore {
         // Only authenticated users can write to attendees
         allow write: if isSignedIn();
       }
+    }
+    
+    // Allow collection group queries for attendees
+    match /{path=**}/attendees/{attendeeId} {
+      allow read: if isSignedIn();
+    }
     }
   }
 }

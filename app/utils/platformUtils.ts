@@ -71,3 +71,23 @@ export function getDefaultFontFamily(): string {
     return 'sans-serif';
   }
 }
+
+/**
+ * Creates platform-specific safe top padding
+ * @param additionalPadding Additional padding to add (optional)
+ * @returns Platform-specific padding style object
+ */
+export function safeTopPadding(additionalPadding: number = 0) {
+  if (Platform.OS === 'ios') {
+    // For iOS, we need to account for the status bar
+    // This is a simplified version - in a real app you might use SafeAreaView or constants
+    return {
+      paddingTop: 44 + additionalPadding, // Default iOS status bar height is 44
+    };
+  } else {
+    // For Android, we use a simpler approach
+    return {
+      paddingTop: 24 + additionalPadding, // Default Android status bar height
+    };
+  }
+}

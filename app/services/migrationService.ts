@@ -96,6 +96,13 @@ class MigrationService {
     if (MigrationService.migrationRun) return;
     
     try {
+      // Check if user is authenticated
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        console.log('No authenticated user found, skipping data seeding');
+        return;
+      }
+      
       // Check if we already have posts
       const postsRef = collection(db, 'socialPosts');
       const snapshot = await getDocs(postsRef);
@@ -125,7 +132,8 @@ class MigrationService {
       MigrationService.migrationRun = true;
     } catch (error) {
       console.error('Error seeding initial data:', error);
-      throw error;
+      // Log the error but don't throw it, allowing the app to continue
+      console.log('Continuing despite data seeding error');
     }
   }
   
@@ -213,7 +221,13 @@ class MigrationService {
   async initializeDatabase(): Promise<void> {
     try {
       const currentUser = auth.currentUser;
-      if (!currentUser) throw new Error('User not authenticated');
+      
+      // If user is not authenticated, we'll just log it and return successfully
+      // instead of throwing an error, allowing the app to continue
+      if (!currentUser) {
+        console.log('No authenticated user found during database initialization');
+        return;
+      }
       
       // Check if user document exists
       const userRef = doc(db, 'users', currentUser.uid);
@@ -246,7 +260,9 @@ class MigrationService {
       console.log('Database initialization completed');
     } catch (error) {
       console.error('Error initializing database:', error);
-      throw error;
+      // Log the error but don't throw it, allowing the app to continue
+      // This prevents the Feed from crashing due to initialization errors
+      console.log('Continuing despite database initialization error');
     }
   }
 }

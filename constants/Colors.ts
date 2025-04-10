@@ -18,7 +18,8 @@ export default {
     tint: tintColorDark,
     tabIconDefault: '#ccc',
     tabIconSelected: tintColorDark,
-    invertedText: '#000', 
+    invertedText: '#000',
     secondaryText: '#a9a9a9',
+    cardBackground: '#1E1E1E',
   },
 };
