@@ -3,10 +3,10 @@
  * Includes styles for all modals: date picker, ticket, custom field, speaker
  */
 
-import { StyleSheet } from 'react-native';
-import { dimensions } from './index';
+import { StyleSheet, Dimensions } from 'react-native';
 
-const { height } = dimensions;
+// Get screen dimensions directly to avoid circular dependency
+const { height } = Dimensions.get('window');
 
 const modalStyles = StyleSheet.create({
   // Common modal styles

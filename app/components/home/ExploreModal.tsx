@@ -79,18 +79,16 @@ const ExploreModal = ({
             <TouchableOpacity 
               onPress={onClose}
               style={styles.closeButton}
-              // Add accessibility props
               accessible={true}
               accessibilityLabel="Close explore modal"
               accessibilityRole="button"
             >
-              <FontAwesome name="times" size={24} color="#1F2937" />
+              <FontAwesome name="times" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.exploreTitle}>Explore Events</Text>
             <TouchableOpacity 
               onPress={onReset}
               style={styles.resetButton}
-              // Add accessibility props
               accessible={true}
               accessibilityLabel="Reset filters"
               accessibilityRole="button"
@@ -100,212 +98,216 @@ const ExploreModal = ({
             </TouchableOpacity>
           </View>
           
-          {/* Search Bar */}
-          <View style={styles.exploreSearchContainer}>
-            <FontAwesome name="search" size={18} color="#6B7280" style={styles.searchIcon} />
-            <TextInput
-              style={styles.exploreSearchInput}
-              placeholder="Search events by title or location"
-              value={searchQuery}
-              onChangeText={onSearchChange}
-              placeholderTextColor="#9CA3AF"
-              // Add accessibility props
-              accessible={true}
-              accessibilityLabel="Search events"
-              accessibilityHint="Enter text to search events by title or location"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity 
-                onPress={() => onSearchChange('')}
-                // Add accessibility props
+          {/* Search Section */}
+          <View style={styles.searchSection}>
+            {/* Search Bar */}
+            <View style={styles.exploreSearchContainer}>
+              <FontAwesome name="search" size={18} color="#6B7280" style={styles.searchIcon} />
+              <TextInput
+                style={styles.exploreSearchInput}
+                placeholder="Search events by title or location"
+                value={searchQuery}
+                onChangeText={onSearchChange}
+                placeholderTextColor="#9CA3AF"
                 accessible={true}
-                accessibilityLabel="Clear search"
-                accessibilityRole="button"
-              >
-                <FontAwesome name="times-circle" size={18} color="#6B7280" />
-              </TouchableOpacity>
-            )}
-          </View>
-          
-          {/* Filter Tabs */}
-          <View style={styles.exploreFilterContainer}>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              // Add accessibility props
-              accessible={true}
-              accessibilityLabel="Event status filters"
-              accessibilityHint="Scroll horizontally to view all filter options"
-            >
-              {['all', 'upcoming', 'ongoing', 'completed'].map(filter => (
-                <TouchableOpacity
-                  key={filter}
-                  style={[
-                    styles.exploreFilterButton,
-                    selectedFilter === filter && styles.exploreFilterButtonActive,
-                  ]}
-                  onPress={() => onFilterChange(filter as FilterType)}
-                  // Add accessibility props
+                accessibilityLabel="Search events"
+                accessibilityHint="Enter text to search events by title or location"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity 
+                  onPress={() => onSearchChange('')}
                   accessible={true}
-                  accessibilityLabel={`${filter} events filter`}
+                  accessibilityLabel="Clear search"
                   accessibilityRole="button"
-                  accessibilityState={{ selected: selectedFilter === filter }}
                 >
-                  <Text
-                    style={[
-                      styles.exploreFilterButtonText,
-                      selectedFilter === filter && styles.exploreFilterButtonTextActive,
-                    ]}
-                  >
-                    {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                  </Text>
+                  <FontAwesome name="times-circle" size={18} color="#6B7280" />
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-          
-          {/* Category Chips */}
-          <View style={styles.exploreCategoriesContainer}>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              // Add accessibility props
-              accessible={true}
-              accessibilityLabel="Event categories"
-              accessibilityHint="Scroll horizontally to view all categories"
-            >
-              {EVENT_CATEGORIES.map((category) => (
-                <TouchableOpacity
-                  key={category.id}
-                  style={[
-                    styles.exploreCategoryChip,
-                    selectedCategory === category.id && styles.exploreCategoryChipSelected
-                  ]}
-                  onPress={() => onCategoryChange(
-                    selectedCategory === category.id ? null : category.id
-                  )}
-                  // Add accessibility props
-                  accessible={true}
-                  accessibilityLabel={`${category.name} category`}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: selectedCategory === category.id }}
-                >
-                  <FontAwesome 
-                    name={category.icon as any} 
-                    size={16} 
-                    color={selectedCategory === category.id ? "#FFFFFF" : "#6B7280"} 
-                  />
-                  <Text style={[
-                    styles.exploreCategoryChipText,
-                    selectedCategory === category.id && styles.exploreCategoryChipTextSelected
-                  ]}>
-                    {category.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-          
-          {/* Event List */}
-          {loading ? (
-            <View style={styles.exploreLoadingContainer}>
-              <MaterialIcons name="hourglass-empty" size={48} color="#D1D5DB" />
-              <Text style={styles.exploreLoadingText}>Loading events...</Text>
+              )}
             </View>
-          ) : (
-            <FlatList
-              data={events}
-              renderItem={({ item }) => {
-                const status = getEventStatus(item);
-                const statusColors = getStatusColor(status);
-                
-                return (
+          
+            {/* Filter Tabs */}
+            <View style={styles.exploreFilterContainer}>
+              <Text style={styles.filterSectionTitle}>Status</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                accessible={true}
+                accessibilityLabel="Event status filters"
+                accessibilityHint="Scroll horizontally to view all filter options"
+              >
+                {['all', 'upcoming', 'ongoing', 'completed'].map(filter => (
                   <TouchableOpacity
-                    style={styles.exploreEventCard}
-                    onPress={() => {
-                      onClose();
-                      router.push(`/screens/eventdetails?id=${item.id}`);
-                    }}
-                    // Add accessibility props
+                    key={filter}
+                    style={[
+                      styles.exploreFilterButton,
+                      selectedFilter === filter && styles.exploreFilterButtonActive,
+                    ]}
+                    onPress={() => onFilterChange(filter as FilterType)}
                     accessible={true}
-                    accessibilityLabel={`${item.title} event on ${formatDate(item.date)}`}
+                    accessibilityLabel={`${filter} events filter`}
                     accessibilityRole="button"
-                    accessibilityHint="Opens event details"
+                    accessibilityState={{ selected: selectedFilter === filter }}
                   >
-                    <View style={styles.exploreEventImageContainer}>
-                      {item.imageUrl ? (
-                        <Image source={{ uri: item.imageUrl }} style={styles.exploreEventImage} />
-                      ) : (
-                        <View style={[
-                          styles.exploreEventImagePlaceholder,
-                          { backgroundColor: getEventColor(item.title) }
-                        ]}>
-                          <Text style={styles.exploreEventImageText}>
-                            {item.title.charAt(0).toUpperCase()}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    
-                    <View style={styles.exploreEventContent}>
-                      <Text style={styles.exploreEventTitle} numberOfLines={1}>
-                        {item.title}
-                      </Text>
+                    <Text
+                      style={[
+                        styles.exploreFilterButtonText,
+                        selectedFilter === filter && styles.exploreFilterButtonTextActive,
+                      ]}
+                    >
+                      {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            
+            {/* Category Chips */}
+            <View style={styles.exploreCategoriesContainer}>
+              <Text style={styles.filterSectionTitle}>Categories</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                accessible={true}
+                accessibilityLabel="Event categories"
+                accessibilityHint="Scroll horizontally to view all categories"
+              >
+                {EVENT_CATEGORIES.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.exploreCategoryChip,
+                      selectedCategory === category.id && styles.exploreCategoryChipSelected
+                    ]}
+                    onPress={() => onCategoryChange(
+                      selectedCategory === category.id ? null : category.id
+                    )}
+                    accessible={true}
+                    accessibilityLabel={`${category.name} category`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: selectedCategory === category.id }}
+                  >
+                    <FontAwesome 
+                      name={category.icon as any} 
+                      size={16} 
+                      color={selectedCategory === category.id ? "#FFFFFF" : "#6B7280"} 
+                    />
+                    <Text style={[
+                      styles.exploreCategoryChipText,
+                      selectedCategory === category.id && styles.exploreCategoryChipTextSelected
+                    ]}>
+                      {category.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+          
+          {/* Results Section */}
+          <View style={styles.resultsSection}>
+            <Text style={styles.resultsSectionTitle}>
+              Results {!loading && `(${events.length})`}
+            </Text>
+            
+            {/* Event List */}
+            {loading ? (
+              <View style={styles.exploreLoadingContainer}>
+                <MaterialIcons name="hourglass-empty" size={48} color="#D1D5DB" />
+                <Text style={styles.exploreLoadingText}>Loading events...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={events}
+                renderItem={({ item }) => {
+                  const status = getEventStatus(item);
+                  const statusColors = getStatusColor(status);
+                  
+                  return (
+                    <TouchableOpacity
+                      style={styles.exploreEventCard}
+                      onPress={() => {
+                        onClose();
+                        router.push(`/screens/eventdetails?id=${item.id}`);
+                      }}
+                      accessible={true}
+                      accessibilityLabel={`${item.title} event on ${formatDate(item.date)}`}
+                      accessibilityRole="button"
+                      accessibilityHint="Opens event details"
+                    >
+                      <View style={styles.exploreEventImageContainer}>
+                        {item.imageUrl ? (
+                          <Image source={{ uri: item.imageUrl }} style={styles.exploreEventImage} />
+                        ) : (
+                          <View style={[
+                            styles.exploreEventImagePlaceholder,
+                            { backgroundColor: getEventColor(item.title) }
+                          ]}>
+                            <Text style={styles.exploreEventImageText}>
+                              {item.title.charAt(0).toUpperCase()}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                       
-                      <View style={styles.exploreEventInfo}>
-                        <View style={styles.exploreInfoRow}>
-                          <FontAwesome name="calendar" size={14} color="#6B7280" />
-                          <Text style={styles.exploreEventDetails}>
-                            {formatDate(item.date)}
-                          </Text>
+                      <View style={styles.exploreEventContent}>
+                        <Text style={styles.exploreEventTitle} numberOfLines={1}>
+                          {item.title}
+                        </Text>
+                        
+                        <View style={styles.exploreEventInfo}>
+                          <View style={styles.exploreInfoRow}>
+                            <FontAwesome name="calendar" size={14} color="#6B7280" />
+                            <Text style={styles.exploreEventDetails}>
+                              {formatDate(item.date)}
+                            </Text>
+                          </View>
+                          
+                          <View style={styles.exploreInfoRow}>
+                            <FontAwesome name="map-marker" size={14} color="#6B7280" />
+                            <Text style={styles.exploreEventDetails} numberOfLines={1}>
+                              {item.location || "Location TBD"}
+                            </Text>
+                          </View>
                         </View>
                         
-                        <View style={styles.exploreInfoRow}>
-                          <FontAwesome name="map-marker" size={14} color="#6B7280" />
-                          <Text style={styles.exploreEventDetails} numberOfLines={1}>
-                            {item.location || "Location TBD"}
+                        {/* Status Badge */}
+                        <View style={[
+                          styles.exploreStatusBadge,
+                          { backgroundColor: statusColors.bg }
+                        ]}>
+                          <Text style={[
+                            styles.exploreStatusText,
+                            { color: statusColors.text }
+                          ]}>
+                            {status.toUpperCase()}
                           </Text>
                         </View>
                       </View>
-                      
-                      {/* Status Badge */}
-                      <View style={[
-                        styles.exploreStatusBadge,
-                        { backgroundColor: statusColors.bg }
-                      ]}>
-                        <Text style={[
-                          styles.exploreStatusText,
-                          { color: statusColors.text }
-                        ]}>
-                          {status.toUpperCase()}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              }}
-              keyExtractor={item => item.id}
-              contentContainerStyle={styles.exploreEventList}
-              ListEmptyComponent={
-                <View style={styles.exploreEmptyContainer}>
-                  <MaterialIcons name="event-busy" size={64} color="#D1D5DB" />
-                  <Text style={styles.exploreEmptyText}>No events found</Text>
-                  <Text style={styles.exploreEmptySubtext}>
-                    {searchQuery ? 'Try adjusting your search or filters' : 'No events match your current filters'}
-                  </Text>
-                </View>
-              }
-              // Performance optimizations
-              initialNumToRender={10}
-              maxToRenderPerBatch={5}
-              windowSize={5}
-              removeClippedSubviews={true}
-              // Add accessibility props
-              accessible={true}
-              accessibilityLabel="Filtered events list"
-              accessibilityHint="Scroll to view all filtered events"
-            />
-          )}
+                    </TouchableOpacity>
+                  );
+                }}
+                keyExtractor={item => item.id}
+                contentContainerStyle={styles.exploreEventList}
+                ListEmptyComponent={
+                  <View style={styles.exploreEmptyContainer}>
+                    <MaterialIcons name="event-busy" size={64} color="#D1D5DB" />
+                    <Text style={styles.exploreEmptyText}>No events found</Text>
+                    <Text style={styles.exploreEmptySubtext}>
+                      {searchQuery ? 'Try adjusting your search or filters' : 'No events match your current filters'}
+                    </Text>
+                  </View>
+                }
+                // Performance optimizations
+                initialNumToRender={10}
+                maxToRenderPerBatch={5}
+                windowSize={5}
+                removeClippedSubviews={true}
+                accessible={true}
+                accessibilityLabel="Filtered events list"
+                accessibilityHint="Scroll to view all filtered events"
+              />
+            )}
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -318,11 +320,11 @@ const cardShadow = createShadow(2);
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   exploreModalContainer: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#121212',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     ...cardShadow,
@@ -334,7 +336,8 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: Platform.OS === 'ios' ? 40 : 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: '#1E1E1E',
   },
   closeButton: {
     padding: 8,
@@ -342,7 +345,7 @@ const styles = StyleSheet.create({
   exploreTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: '#FFFFFF',
   },
   resetButton: {
     padding: 8,
@@ -352,10 +355,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  
+  // Search section
+  searchSection: {
+    backgroundColor: '#1E1E1E',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
   exploreSearchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#2D2D2D',
     paddingHorizontal: 16,
     paddingVertical: 12,
     margin: 16,
@@ -367,18 +378,27 @@ const styles = StyleSheet.create({
   exploreSearchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#1F2937',
+    color: '#FFFFFF',
+  },
+  
+  // Filter sections
+  filterSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#A0A0A0',
+    marginBottom: 8,
+    paddingHorizontal: 16,
   },
   exploreFilterContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 16,
   },
   exploreFilterButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    marginRight: 8,
+    marginHorizontal: 4,
+    marginLeft: 16,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#2D2D2D',
   },
   exploreFilterButtonActive: {
     backgroundColor: '#007AFF',
@@ -386,25 +406,23 @@ const styles = StyleSheet.create({
   exploreFilterButtonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6B7280',
+    color: '#A0A0A0',
   },
   exploreFilterButtonTextActive: {
     color: '#FFFFFF',
   },
   exploreCategoriesContainer: {
-    paddingHorizontal: 16,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
   },
   exploreCategoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    marginRight: 8,
+    marginHorizontal: 4,
+    marginLeft: 16,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#2D2D2D',
   },
   exploreCategoryChipSelected: {
     backgroundColor: '#007AFF',
@@ -412,11 +430,25 @@ const styles = StyleSheet.create({
   exploreCategoryChipText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6B7280',
+    color: '#A0A0A0',
     marginLeft: 6,
   },
   exploreCategoryChipTextSelected: {
     color: '#FFFFFF',
+  },
+  
+  // Results section
+  resultsSection: {
+    flex: 1,
+    backgroundColor: '#121212',
+  },
+  resultsSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   exploreEventList: {
     padding: 16,
@@ -424,7 +456,7 @@ const styles = StyleSheet.create({
   },
   exploreEventCard: {
     flexDirection: 'row',
-    backgroundColor: 'white',
+    backgroundColor: '#1E1E1E',
     borderRadius: 12,
     marginBottom: 12,
     overflow: 'hidden',
@@ -457,7 +489,7 @@ const styles = StyleSheet.create({
   exploreEventTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: '#FFFFFF',
     marginBottom: 6,
   },
   exploreEventInfo: {
@@ -470,7 +502,7 @@ const styles = StyleSheet.create({
   },
   exploreEventDetails: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#A0A0A0',
     marginLeft: 8,
   },
   exploreStatusBadge: {
@@ -485,6 +517,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  
+  // Loading and empty states
   exploreLoadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -494,7 +528,7 @@ const styles = StyleSheet.create({
   exploreLoadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#6B7280',
+    color: '#A0A0A0',
   },
   exploreEmptyContainer: {
     flex: 1,
@@ -506,12 +540,12 @@ const styles = StyleSheet.create({
   exploreEmptyText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#FFFFFF',
     marginTop: 16,
   },
   exploreEmptySubtext: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#A0A0A0',
     textAlign: 'center',
     marginTop: 8,
   }

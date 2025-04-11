@@ -49,13 +49,9 @@ const EventCard = ({
       }}
     >
       <TouchableOpacity
-        style={[
-          styles.eventCard,
-          { backgroundColor: '#1E1E1E' }
-        ]}
+        style={styles.eventCard}
         onPress={() => router.push(`/screens/eventdetails?id=${item.id}`)}
         activeOpacity={0.7}
-        // Add accessibility props
         accessible={true}
         accessibilityLabel={`${item.title} event on ${formatDate(item.date)}`}
         accessibilityRole="button"
@@ -97,34 +93,39 @@ const EventCard = ({
 
         <View style={styles.eventContent}>
           <Text 
-            style={[styles.eventTitle, { color: '#FFFFFF' }]}
+            style={styles.eventTitle}
             numberOfLines={1}
           >
             {item.title}
           </Text>
-          <View style={styles.eventMetaRow}>
-            <FontAwesome name="calendar" size={14} color="#007AFF" />
-            <Text style={[styles.eventMetaText, { color: '#a9a9a9' }]}>
-              {formatDate(item.date)}
-            </Text>
-          </View>
-          <View style={styles.eventMetaRow}>
-            <FontAwesome name="map-marker" size={14} color="#007AFF" />
-            <Text
-              style={[styles.eventMetaText, { color: '#a9a9a9' }]}
-              numberOfLines={1}
-            >
-              {item.location}
-            </Text>
-          </View>
-          {item.isPaid && (
+          
+          <View style={styles.metaContainer}>
             <View style={styles.eventMetaRow}>
-              <FontAwesome name="ticket" size={14} color="#007AFF" />
-              <Text style={[styles.eventMetaText, { color: '#a9a9a9' }]}>
-                ${item.price?.toFixed(2) || '0.00'}
+              <FontAwesome name="calendar" size={14} color="#007AFF" />
+              <Text style={styles.eventMetaText}>
+                {formatDate(item.date)}
               </Text>
             </View>
-          )}
+            
+            <View style={styles.eventMetaRow}>
+              <FontAwesome name="map-marker" size={14} color="#007AFF" />
+              <Text
+                style={styles.eventMetaText}
+                numberOfLines={1}
+              >
+                {item.location || 'Location TBD'}
+              </Text>
+            </View>
+            
+            {item.isPaid && (
+              <View style={styles.eventMetaRow}>
+                <FontAwesome name="ticket" size={14} color="#007AFF" />
+                <Text style={styles.eventMetaText}>
+                  ${item.price?.toFixed(2) || '0.00'}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -139,8 +140,9 @@ const styles = StyleSheet.create({
     width: Dimensions.get('window').width * 0.75,
     borderRadius: 16,
     overflow: 'hidden',
-    ...cardShadow,
+    backgroundColor: '#252525', // Slightly lighter than the main background for better contrast
     marginRight: 16,
+    ...cardShadow,
   },
   eventImageWrapper: {
     position: 'relative',
@@ -175,7 +177,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -203,21 +205,26 @@ const styles = StyleSheet.create({
     }),
   },
   eventContent: {
-    padding: 12,
+    padding: 14,
   },
   eventTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 6,
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  metaContainer: {
+    marginTop: 4,
   },
   eventMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   eventMetaText: {
     marginLeft: 8,
     fontSize: 14,
+    color: '#a9a9a9',
   }
 });
 

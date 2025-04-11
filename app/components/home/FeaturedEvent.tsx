@@ -47,28 +47,29 @@ const FeaturedEvent = ({
         style={styles.featuredContainer}
         onPress={() => router.push(`/screens/eventdetails?id=${event.id}`)}
         activeOpacity={0.8}
-        // Add accessibility props
         accessible={true}
         accessibilityLabel={`Featured event: ${event.title} on ${formatDate(event.date)}`}
         accessibilityRole="button"
         accessibilityHint="Opens featured event details"
       >
-        {event.imageUrl ? (
-          <Image 
-            source={{ uri: event.imageUrl }} 
-            style={styles.featuredImage}
-            resizeMode="cover"
+        <View style={styles.imageContainer}>
+          {event.imageUrl ? (
+            <Image 
+              source={{ uri: event.imageUrl }} 
+              style={styles.featuredImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.featuredImage, { backgroundColor: getEventColor(event.title) }]}>
+              <Text style={styles.featuredImageText}>{event.title.charAt(0).toUpperCase()}</Text>
+            </View>
+          )}
+          
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.8)']}
+            style={styles.featuredGradient}
           />
-        ) : (
-          <View style={[styles.featuredImage, { backgroundColor: getEventColor(event.title) }]}>
-            <Text style={styles.featuredImageText}>{event.title.charAt(0).toUpperCase()}</Text>
-          </View>
-        )}
-        
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.8)']}
-          style={styles.featuredGradient}
-        />
+        </View>
         
         <View style={styles.featuredContent}>
           <View style={styles.featuredBadge}>
@@ -103,15 +104,18 @@ const cardShadow = createShadow(2);
 
 const styles = StyleSheet.create({
   featuredContainer: {
-    width: Dimensions.get('window').width - 32,
-    height: 200,
-    marginHorizontal: 16,
+    width: '100%', // Changed from fixed width for better responsiveness
+    height: 220, // Slightly increased height
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#1E1E1E', // Updated background color to match theme
     position: 'relative',
-    marginBottom: 16,
     ...cardShadow,
+  },
+  imageContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
   },
   featuredImage: {
     width: '100%',

@@ -40,6 +40,7 @@ const CategoryButtons = ({
   translateY
 }: CategoryButtonsProps) => {
   const colorScheme = useColorScheme();
+  
   return (
     <Animated.View 
       style={{
@@ -47,33 +48,35 @@ const CategoryButtons = ({
         transform: [{ translateY }]
       }}
     >
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoriesContainer}
-        // Add accessibility props
-        accessible={true}
-        accessibilityLabel="Event categories"
-        accessibilityHint="Scroll horizontally to view all categories"
-      >
-        {EVENT_CATEGORIES.map((category) => (
-          <TouchableOpacity
-            key={category.id}
-            style={styles.categoryButton}
-            onPress={() => onSelectCategory(category.id)}
-            // Add accessibility props
-            accessible={true}
-            accessibilityLabel={`${category.name} category`}
-            accessibilityRole="button"
-            accessibilityHint={`Filter events by ${category.name} category`}
-          >
-            <View style={[styles.categoryIcon, { backgroundColor: getEventColor(category.name) }]}>
-              <FontAwesome name={category.icon as any} size={18} color="#FFFFFF" />
-            </View>
-            <Text style={[styles.categoryText, { color: Colors[colorScheme ?? 'dark'].text }]}>{category.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={styles.categorySection}>
+        <Text style={styles.categoryTitle}>Categories</Text>
+        
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoriesContainer}
+          accessible={true}
+          accessibilityLabel="Event categories"
+          accessibilityHint="Scroll horizontally to view all categories"
+        >
+          {EVENT_CATEGORIES.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              style={styles.categoryButton}
+              onPress={() => onSelectCategory(category.id)}
+              accessible={true}
+              accessibilityLabel={`${category.name} category`}
+              accessibilityRole="button"
+              accessibilityHint={`Filter events by ${category.name} category`}
+            >
+              <View style={[styles.categoryIcon, { backgroundColor: getEventColor(category.name) }]}>
+                <FontAwesome name={category.icon as any} size={18} color="#FFFFFF" />
+              </View>
+              <Text style={styles.categoryText}>{category.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
     </Animated.View>
   );
 };
@@ -82,9 +85,19 @@ const CategoryButtons = ({
 const buttonShadow = createShadow(1);
 
 const styles = StyleSheet.create({
+  categorySection: {
+    marginBottom: 8,
+  },
+  categoryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: 20,
+    marginBottom: 12,
+  },
   categoriesContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingBottom: 12,
   },
   categoryButton: {
     alignItems: 'center',

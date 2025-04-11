@@ -9,11 +9,13 @@ import { Alert } from 'react-native';
  * Event type definition
  */
 export interface Event {
+  isPaid: any;
   id: string;
   title: string;
   description?: string;
   date: Date | any; // Support for Firebase Timestamp
   time?: Date | any;
+  imageUrl?: string;
   location?: string;
   locationDetails?: {
     address?: string;

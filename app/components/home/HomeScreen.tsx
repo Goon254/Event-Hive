@@ -111,7 +111,7 @@ export default function HomeScreen() {
   }, [error, retryLoading]);
 
   return (
-    <View style={[styles.container, { backgroundColor: '#000000' }]}>
+    <View style={styles.pageContainer}>
       {/* Offline Banner */}
       {isOffline && (
         <View style={styles.offlineBanner}>
@@ -123,7 +123,7 @@ export default function HomeScreen() {
       )}
       
       <ScrollView
-        style={[styles.container, { backgroundColor: '#000000' }]}
+        style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -139,81 +139,81 @@ export default function HomeScreen() {
         accessibilityLabel="Home screen content"
       >
         {/* Header with welcome message */}
-        <View style={styles.header}>
-          <View>
+        <View style={styles.headerContainer}>
+          <View style={styles.headerContent}>
             <View style={styles.welcomeContainer}>
               <Text style={[styles.welcomeText, { color: Colors[colorScheme ?? 'light'].invertedText }]}>
                 Welcome{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
               </Text>
+              <Text style={[styles.subtitleText, { color: Colors[colorScheme ?? 'light'].invertedText }]}>
+                Discover exciting events near you
+              </Text>
             </View>
-            <Text style={[styles.subtitleText, { color: Colors[colorScheme ?? 'light'].invertedText }]}>
-              Discover exciting events near you
-            </Text>
-          </View>
-          <View style={styles.headerButtons}>
-            <TouchableOpacity
-              style={styles.mapButton}
-              onPress={() => router.push('/screens/NearbyEventsScreen')}
-              activeOpacity={0.7}
-              // Add accessibility props
-              accessible={true}
-              accessibilityLabel="Find nearby events"
-              accessibilityRole="button"
-              accessibilityHint="Opens map with nearby events"
-            >
-              <MaterialIcons name="map" size={20} color="#FFF" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.scanButton}
-              onPress={() => router.push('/screens/scan')}
-              activeOpacity={0.7}
-              // Add accessibility props
-              accessible={true}
-              accessibilityLabel="Scan QR code"
-              accessibilityRole="button"
-              accessibilityHint="Opens QR code scanner"
-            >
-              <FontAwesome name="qrcode" size={20} color="#FFF" />
-            </TouchableOpacity>
+            <View style={styles.headerButtons}>
+              <TouchableOpacity
+                style={styles.mapButton}
+                onPress={() => router.push('/screens/NearbyEventsScreen')}
+                activeOpacity={0.7}
+                accessible={true}
+                accessibilityLabel="Find nearby events"
+                accessibilityRole="button"
+                accessibilityHint="Opens map with nearby events"
+              >
+                <MaterialIcons name="map" size={20} color="#FFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.scanButton}
+                onPress={() => router.push('/screens/scan')}
+                activeOpacity={0.7}
+                accessible={true}
+                accessibilityLabel="Scan QR code"
+                accessibilityRole="button"
+                accessibilityHint="Opens QR code scanner"
+              >
+                <FontAwesome name="qrcode" size={20} color="#FFF" />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
-        {/* Explore Button */}
-        <TouchableOpacity
-          style={styles.exploreButton}
-          onPress={handleShowExplore}
-          activeOpacity={0.8}
-          // Add accessibility props
-          accessible={true}
-          accessibilityLabel="Explore all events"
-          accessibilityRole="button"
-          accessibilityHint="Opens event explorer"
-        >
-          <FontAwesome name="search" size={16} color="#6B7280" />
-          <Text style={styles.exploreButtonText}>Explore all events</Text>
-          <MaterialIcons name="arrow-forward" size={18} color="#6B7280" />
-        </TouchableOpacity>
-        
-        {/* Categories */}
-        <View style={styles.categoriesContainer}>
-          <CategoryButtons
-            onSelectCategory={handleSelectCategory}
-            fadeAnim={fadeAnim}
-            translateY={translateY}
-          />
+        {/* Discovery Section - Contains explore button and categories */}
+        <View style={styles.discoverySection}>
+          {/* Explore Button */}
+          <TouchableOpacity
+            style={styles.exploreButton}
+            onPress={handleShowExplore}
+            activeOpacity={0.8}
+            accessible={true}
+            accessibilityLabel="Explore all events"
+            accessibilityRole="button"
+            accessibilityHint="Opens event explorer"
+          >
+            <FontAwesome name="search" size={16} color="#6B7280" />
+            <Text style={styles.exploreButtonText}>Explore all events</Text>
+            <MaterialIcons name="arrow-forward" size={18} color="#6B7280" />
+          </TouchableOpacity>
+          
+          {/* Categories */}
+          <View style={styles.categoriesContainer}>
+            <CategoryButtons
+              onSelectCategory={handleSelectCategory}
+              fadeAnim={fadeAnim}
+              translateY={translateY}
+            />
+          </View>
         </View>
 
         {/* Loading State */}
         {loading && (
-          <View style={styles.loadingContainer}>
+          <View style={styles.statusContainer}>
             <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.loadingText}>Loading events...</Text>
+            <Text style={styles.statusText}>Loading events...</Text>
           </View>
         )}
         
         {/* Error State */}
         {error && !loading && (
-          <View style={[styles.errorContainer, { backgroundColor: '#1E1E1E' }]}>
+          <View style={styles.statusContainer}>
             <MaterialIcons name="error-outline" size={48} color="#EF4444" />
             <Text style={styles.errorText}>Unable to load events</Text>
             <Text style={styles.errorSubtext}>{error.message}</Text>
@@ -222,81 +222,78 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         )}
-
-        {/* Loading State */}
-        {loading && (
-          <View style={[styles.loadingContainer, { backgroundColor: '#1E1E1E' }]}>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={[styles.loadingText, { color: '#a9a9a9' }]}>Loading events...</Text>
-          </View>
-        )}
-
         
-        {/* Featured Event */}
+        {/* Featured Event Section */}
         {!loading && featuredEvent && (
-          <View style={styles.sectionWrapper}>
-            <FeaturedEvent
-              event={featuredEvent}
-              daysUntil={getDaysUntil(featuredEvent.date)}
-              fadeAnim={fadeAnim}
-              translateY={translateY}
-            />
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>Featured Event</Text>
+            <View style={styles.sectionContent}>
+              <FeaturedEvent
+                event={featuredEvent}
+                daysUntil={getDaysUntil(featuredEvent.date)}
+                fadeAnim={fadeAnim}
+                translateY={translateY}
+              />
+            </View>
           </View>
         )}
 
-        {/* Upcoming Events Section */}
-        <View style={styles.sectionWrapper}>
-          <EventSection
-            title="Upcoming Events"
-            events={upcomingEvents}
-            loading={loading}
-            attendingEvents={attendingEvents}
-            getEventStatus={getEventStatus}
-            onSeeAll={handleShowExplore}
-            emptyText="No upcoming events found."
-            emptyActionText="Explore Events"
-            onCreateEvent={() => router.push('/screens/Explore')}
-            fadeAnim={fadeAnim}
-            translateY={translateY}
-            getItemAnimationValues={getItemAnimationValues}
-          />
-        </View>
-
-        {/* Nearby Events Section */}
-        <View style={styles.sectionWrapper}>
-          <EventSection
-            title="Events Near You"
-            events={nearbyEvents}
-            loading={loading}
-            attendingEvents={attendingEvents}
-            getEventStatus={getEventStatus}
-            onSeeAll={handleShowExplore}
-            emptyText="No nearby events found."
-            fadeAnim={fadeAnim}
-            translateY={translateY}
-            getItemAnimationValues={getItemAnimationValues}
-          />
-        </View>
-
-        {/* My Events Section - only shown if user is logged in */}
-        {user && (
-          <View style={styles.sectionWrapper}>
+        {/* Events Sections */}
+        <View style={styles.eventsSectionsContainer}>
+          {/* Upcoming Events Section */}
+          <View style={styles.sectionContainer}>
             <EventSection
-              title="Events You're Hosting"
-              events={myEvents}
+              title="Upcoming Events"
+              events={upcomingEvents}
               loading={loading}
               attendingEvents={attendingEvents}
               getEventStatus={getEventStatus}
-              onSeeAll={() => router.push('/screens/event-history')}
-              emptyText="You haven't created any events yet."
-              emptyActionText="Create Event"
-              onCreateEvent={() => router.push('/screens/Create')}
+              onSeeAll={handleShowExplore}
+              emptyText="No upcoming events found."
+              emptyActionText="Explore Events"
+              onCreateEvent={() => router.push('/screens/Explore')}
               fadeAnim={fadeAnim}
               translateY={translateY}
               getItemAnimationValues={getItemAnimationValues}
             />
           </View>
-        )}
+
+          {/* Nearby Events Section */}
+          <View style={styles.sectionContainer}>
+            <EventSection
+              title="Events Near You"
+              events={nearbyEvents}
+              loading={loading}
+              attendingEvents={attendingEvents}
+              getEventStatus={getEventStatus}
+              onSeeAll={handleShowExplore}
+              emptyText="No nearby events found."
+              fadeAnim={fadeAnim}
+              translateY={translateY}
+              getItemAnimationValues={getItemAnimationValues}
+            />
+          </View>
+
+          {/* My Events Section - only shown if user is logged in */}
+          {user && (
+            <View style={styles.sectionContainer}>
+              <EventSection
+                title="Events You're Hosting"
+                events={myEvents}
+                loading={loading}
+                attendingEvents={attendingEvents}
+                getEventStatus={getEventStatus}
+                onSeeAll={() => router.push('/screens/event-history')}
+                emptyText="You haven't created any events yet."
+                emptyActionText="Create Event"
+                onCreateEvent={() => router.push('/screens/Create')}
+                fadeAnim={fadeAnim}
+                translateY={translateY}
+                getItemAnimationValues={getItemAnimationValues}
+              />
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       {/* Explore Events Modal */}
@@ -321,7 +318,6 @@ export default function HomeScreen() {
         style={styles.createEventFAB}
         onPress={() => router.push('/screens/Create')}
         activeOpacity={0.8}
-        // Add accessibility props
         accessible={true}
         accessibilityLabel="Create new event"
         accessibilityRole="button"
@@ -345,95 +341,43 @@ const cardShadow = createShadow(2);
 const buttonShadow = createShadow(1);
 
 const styles = StyleSheet.create({
-  categoriesContainer: {
-    paddingVertical: 10,
-  },
-  sectionWrapper: {
-    marginVertical: 8,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  loadingContainer: {
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 16,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#a9a9a9',
-    marginTop: 12,
-  },
-  offlineBanner: {
-    backgroundColor: '#6B7280',
-    padding: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  offlineBannerText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    marginLeft: 8,
-  },
-  errorContainer: {
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#EF4444',
-  },
-  errorText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#EF4444',
-    marginTop: 12,
-  },
-  errorSubtext: {
-    fontSize: 14,
-    color: '#a9a9a9',
-    textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  container: {
+  // Main containers
+  pageContainer: {
     flex: 1,
+    backgroundColor: '#000000',
+  },
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#000000',
   },
   contentContainer: {
     paddingBottom: 32,
   },
-  header: {
+  
+  // Header section
+  headerContainer: {
+    backgroundColor: '#007AFF',
+    paddingBottom: 24,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    overflow: 'hidden',
+    ...cardShadow,
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#007AFF',
-    zIndex: 10, // Ensure header is above other content
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
   },
   welcomeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flex: 1,
   },
   welcomeText: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#FFFFFF',
     letterSpacing: -0.5,
-    marginRight: 8,
   },
   subtitleText: {
     fontSize: 16,
@@ -461,25 +405,115 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  
+  // Discovery section (search & categories)
+  discoverySection: {
+    marginTop: 16,
+    marginHorizontal: 16,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 16,
+    padding: 16,
+    ...cardShadow,
+  },
   exploreButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'white',
-    marginHorizontal: 20,
-    marginTop: -20, // Position it to overlap with the header
-    marginBottom: 10,
+    backgroundColor: '#2D2D2D',
     padding: 14,
     borderRadius: 12,
-    ...cardShadow,
+    marginBottom: 16,
   },
   exploreButtonText: {
     fontSize: 16,
-    color: '#1F2937',
+    color: '#FFFFFF',
     fontWeight: '500',
     flex: 1,
     marginLeft: 10,
   },
+  categoriesContainer: {
+    // No additional styling needed as CategoryButtons has its own internal padding
+  },
+  
+  // Status containers (loading/error)
+  statusContainer: {
+    margin: 16,
+    padding: 24,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...cardShadow,
+  },
+  statusText: {
+    fontSize: 16,
+    color: '#a9a9a9',
+    marginTop: 12,
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#EF4444',
+    marginTop: 12,
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: '#a9a9a9',
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  
+  // Section containers
+  sectionContainer: {
+    marginTop: 24,
+    marginHorizontal: 16,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 16,
+    overflow: 'hidden',
+    ...cardShadow,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    padding: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  sectionContent: {
+    padding: 16,
+  },
+  eventsSectionsContainer: {
+    marginBottom: 16,
+  },
+  
+  // Offline banner
+  offlineBanner: {
+    backgroundColor: '#6B7280',
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offlineBannerText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  
+  // FAB
   createEventFAB: {
     position: 'absolute',
     bottom: 24,
