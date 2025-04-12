@@ -1,13 +1,14 @@
-import { 
-  createContext, 
-  useContext, 
-  useState, 
+import {
+  createContext,
+  useContext,
+  useState,
   useEffect,
   useCallback
 } from 'react';
+import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { 
+import {
   getAuth,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -15,11 +16,15 @@ import {
   onAuthStateChanged,
   User as FirebaseUser,
   updateProfile,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  linkWithCredential,
+  fetchSignInMethodsForEmail
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, getFirestore } from 'firebase/firestore';
 import { auth, db } from '../lib/firebaseConfig';
 import { sanitizeForFirestore } from './services/migrationService';
+import { useGoogleAuth, getExistingAccountEmail } from './utils/googleAuth';
 
 // Constants
 const AUTH_STORAGE_KEY = 'auth_user_data';
@@ -44,6 +49,8 @@ interface User {
   name: string;
   avatar?: string;
   lastAuthenticated?: number; // Add timestamp for validation
+  authProvider?: string; // 'password', 'google', etc.
+  linkedProviders?: string[]; // List of linked authentication providers
 }
 
 interface AuthState {
@@ -59,6 +66,9 @@ interface AuthContextType extends AuthState {
   signOut: () => Promise<void>;
   clearError: () => void;
   resetPassword: (email: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  linkAccountWithGoogle: () => Promise<void>;
+  checkExistingAccount: (email: string) => Promise<string[]>;
 }
 
 const INITIAL_STATE: AuthState = {
@@ -68,10 +78,14 @@ const INITIAL_STATE: AuthState = {
   error: null,
 };
 
+// Initialize WebBrowser for OAuth redirects
+WebBrowser.maybeCompleteAuthSession();
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>(INITIAL_STATE);
+  const { signInWithGoogle: googleSignIn, linkWithGoogle } = useGoogleAuth();
 
   // Load stored authentication data on startup
   useEffect(() => {
@@ -132,7 +146,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: firebaseUser.email || '',
             name: firebaseUser.displayName || '',
             avatar: firebaseUser.photoURL || undefined,
-            lastAuthenticated: Date.now()
+            lastAuthenticated: Date.now(),
+            authProvider: firebaseUser.providerData[0]?.providerId || 'password'
           };
           
           // Store auth data with timestamp
@@ -156,6 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               email: firebaseUser.email || '',
               name: firebaseUser.displayName || '',
               avatar: firebaseUser.photoURL || undefined,
+              authProvider: firebaseUser.providerData[0]?.providerId || 'password'
             },
             isAuthenticated: true,
             isLoading: false
@@ -289,6 +305,78 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Sign in with Google
+  const signInWithGoogle = async () => {
+    setState(prevState => ({ ...prevState, isLoading: true, error: null }));
+    try {
+      await googleSignIn();
+      // The onAuthStateChanged listener will handle updating the state
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      
+      // Check if the error is due to an existing account with different credentials
+      const existingEmail = getExistingAccountEmail(error);
+      if (existingEmail) {
+        setState(prevState => ({
+          ...prevState,
+          error: `An account already exists with the email ${existingEmail}. Please sign in using your original method.`,
+          isLoading: false
+        }));
+      } else {
+        setState(prevState => ({
+          ...prevState,
+          error: handleAuthError(error),
+          isLoading: false
+        }));
+      }
+    }
+  };
+
+  // Link current account with Google
+  const linkAccountWithGoogle = async () => {
+    setState(prevState => ({ ...prevState, isLoading: true, error: null }));
+    try {
+      if (!auth.currentUser) {
+        throw new Error('You must be signed in to link accounts');
+      }
+      
+      await linkWithGoogle(auth.currentUser);
+      
+      // Update the user state to reflect the linked account
+      setState(prevState => {
+        if (prevState.user) {
+          const linkedProviders = prevState.user.linkedProviders || [];
+          return {
+            ...prevState,
+            user: {
+              ...prevState.user,
+              linkedProviders: [...linkedProviders, 'google']
+            },
+            isLoading: false
+          };
+        }
+        return { ...prevState, isLoading: false };
+      });
+    } catch (error) {
+      console.error('Error linking with Google:', error);
+      setState(prevState => ({
+        ...prevState,
+        error: handleAuthError(error),
+        isLoading: false
+      }));
+    }
+  };
+
+  // Check if an email is already registered and get sign-in methods
+  const checkExistingAccount = async (email: string): Promise<string[]> => {
+    try {
+      return await fetchSignInMethodsForEmail(auth, email);
+    } catch (error) {
+      console.error('Error checking existing account:', error);
+      return [];
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -297,7 +385,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signOut,
         clearError,
-        resetPassword
+        resetPassword,
+        signInWithGoogle,
+        linkAccountWithGoogle,
+        checkExistingAccount
       }}
     >
       {children}
@@ -310,7 +401,8 @@ function handleAuthError(error: unknown): string {
   console.error('Auth error:', error);
   
   if (typeof error === 'object' && error !== null && 'code' in error) {
-    switch ((error as { code: string }).code) {
+    const errorCode = (error as { code: string }).code;
+    switch (errorCode) {
       case 'auth/invalid-email':
         return 'Invalid email address';
       case 'auth/user-disabled':
@@ -326,15 +418,23 @@ function handleAuthError(error: unknown): string {
       case 'auth/network-request-failed':
         return 'Network error. Please check your internet connection';
       case 'auth/too-many-requests':
-        return 'Too many unsuccessful login attempts. Please try again later';
+        return 'Too many unsuccessful login attempts. Please try again later or reset your password';
       case 'auth/invalid-credential':
         return 'Invalid login credentials';
-      case 'auth/account-exists-with-different-credential':
+      case 'auth/credential-already-in-use':
         return 'An account already exists with the same email address but different sign-in credentials';
       case 'auth/operation-not-allowed':
         return 'This operation is not allowed';
       case 'auth/requires-recent-login':
         return 'This operation requires recent authentication. Please log in again';
+      case 'auth/account-exists-with-different-credential':
+        return 'An account already exists with the same email address but different sign-in credentials';
+      case 'auth/popup-closed-by-user':
+        return 'Sign-in popup was closed before completing the sign in';
+      case 'auth/cancelled-popup-request':
+        return 'The sign-in popup was cancelled';
+      case 'auth/popup-blocked':
+        return 'Sign-in popup was blocked by the browser. Please allow popups for this site';
       case 'auth/missing-android-pkg-name':
       case 'auth/missing-continue-uri':
       case 'auth/missing-ios-bundle-id':
@@ -342,7 +442,7 @@ function handleAuthError(error: unknown): string {
       case 'auth/unauthorized-continue-uri':
         return 'The authentication request configuration is invalid';
       default:
-        return `Authentication failed: ${(error as { code: string }).code}`;
+        return `Authentication failed: ${errorCode}`;
     }
   }
   

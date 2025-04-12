@@ -19,6 +19,7 @@ import validationUtils from '../utils/validation';
 import { Link } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useGoogleAuth } from '../utils/googleAuth';
 
 // Enhanced form input component
 const EnhancedInput = ({ 
@@ -51,7 +52,8 @@ const EnhancedInput = ({
 );
 
 export default function Login() {
-  const { signIn, isLoading, error } = useAuth();
+  const { signIn, isLoading, error, signInWithGoogle } = useAuth();
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState('');
@@ -80,6 +82,17 @@ export default function Login() {
         }
         Alert.alert('Login Failed', errorMessage);
       }
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setGoogleLoading(true);
+      await signInWithGoogle();
+      // Navigation will be handled by AuthContext
+    } catch (err) {
+      // Error handling is done in AuthContext
+      setGoogleLoading(false);
     }
   };
 
@@ -153,13 +166,27 @@ export default function Login() {
           </Link>
 
           
-          
-
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>OR</Text>
             <View style={styles.dividerLine} />
           </View>
+
+          <TouchableOpacity
+            style={[styles.googleButton, (isLoading || googleLoading) && styles.buttonDisabled]}
+            onPress={handleGoogleSignIn}
+            disabled={isLoading || googleLoading}
+            activeOpacity={0.8}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <FontAwesome name="google" size={20} color="#FFFFFF" style={styles.googleIcon} />
+                <Text style={styles.googleButtonText}>Sign in with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
 
           <View style={styles.registerContainer}>
             <Text style={styles.registerText}>Don't have an account? </Text>
@@ -239,6 +266,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#A0A0A0',
   },
   buttonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    backgroundColor: '#DB4437',
+    borderRadius: 10,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  googleIcon: {
+    marginRight: 10,
+  },
+  googleButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',

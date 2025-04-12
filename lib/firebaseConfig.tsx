@@ -9,13 +9,13 @@ import { getStorage, FirebaseStorage } from 'firebase/storage';
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyCzZkNsIRJtryo5elbn7GCmx0EOLepFHX0",
-  authDomain: "event-hive-887eb.firebaseapp.com",
-  projectId: "event-hive-887eb",
-  storageBucket: "event-hive-887eb.appspot.com", // Fixed storage bucket URL format
-  messagingSenderId: "559026210442",
-  appId: "1:559026210442:web:436fbe7653fc1207150f73",
-  measurementId: "G-36842L8XXG"
+  apiKey: "AIzaSyBMUu0L9RiM5Q-y0Ks5ync7GLnRws_Un1s",
+  authDomain: "event-hive-992c0.firebaseapp.com",
+  projectId: "event-hive-992c0",
+  storageBucket: "event-hive-992c0.firebasestorage.app",
+  messagingSenderId: "549671182290",
+  appId: "1:549671182290:web:7eb4f50a24cccbdaaa320b",
+  measurementId: "G-ERG2RHGGZH"
 };
 
 // Initialize Firebase with proper error handling

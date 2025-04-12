@@ -86,12 +86,79 @@ interface ValidationResult {
     };
   };
   
+  /**
+   * Validates a phone number
+   * @param phoneNumber The phone number to validate
+   * @returns Validation result with isValid flag and error messages
+   */
+  const validatePhoneNumber = (phoneNumber: string): ValidationResult => {
+    const errors: string[] = [];
+    
+    // Skip validation if phone number is empty (assuming it's optional)
+    if (!phoneNumber) {
+      return {
+        isValid: true,
+        errors: [],
+      };
+    }
+    
+    // Basic format validation
+    // Accepts formats like: +1234567890, 1234567890, (123) 456-7890, 123-456-7890
+    const phoneRegex = /^(\+?\d{1,3})?[-. (]?\d{3}[-. )]?\d{3}[-. ]?\d{4}$/;
+    
+    if (!phoneRegex.test(phoneNumber)) {
+      errors.push('Please enter a valid phone number');
+    }
+    
+    // Check minimum length (excluding formatting characters)
+    const digitsOnly = phoneNumber.replace(/\D/g, '');
+    if (digitsOnly.length < 10) {
+      errors.push('Phone number must have at least 10 digits');
+    }
+    
+    // Check maximum length to prevent unreasonably long numbers
+    if (digitsOnly.length > 15) {
+      errors.push('Phone number has too many digits');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors,
+    };
+  };
+  
+  /**
+   * Formats a phone number for consistent storage
+   * @param phoneNumber The phone number to format
+   * @returns Formatted phone number (E.164 format if possible)
+   */
+  export const formatPhoneNumber = (phoneNumber: string): string => {
+    if (!phoneNumber) return '';
+    
+    // Remove all non-digit characters
+    const digitsOnly = phoneNumber.replace(/\D/g, '');
+    
+    // If it starts with a country code (assuming length > 10 and starts with 1 for US)
+    if (digitsOnly.length > 10 && digitsOnly.startsWith('1')) {
+      return `+${digitsOnly}`;
+    }
+    
+    // For US numbers without country code, add +1
+    if (digitsOnly.length === 10) {
+      return `+1${digitsOnly}`;
+    }
+    
+    // For other cases, just add + if not present
+    return digitsOnly.startsWith('+') ? digitsOnly : `+${digitsOnly}`;
+  };
+  
   // Wrap all validation functions in an object and export it as the default function
   const validationUtils = {
     validatePassword,
     validateEmail,
     validateName,
     validateConfirmPassword,
+    validatePhoneNumber,
   };
   
   export default validationUtils;

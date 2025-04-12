@@ -5,9 +5,18 @@ import { Platform } from 'react-native';
  * This ensures the same text always gets the same color
  */
 export const getEventColor = (text: string) => {
+  // Updated color palette to better match dark theme
   const colors = [
-    '#4F46E5', '#7C3AED', '#EC4899', '#F59E0B', '#10B981', 
-    '#3B82F6', '#8B5CF6', '#EF4444', '#F97316', '#06B6D4'
+    '#4F46E5', // Indigo
+    '#7C3AED', // Violet
+    '#EC4899', // Pink
+    '#F59E0B', // Amber
+    '#10B981', // Emerald
+    '#3B82F6', // Blue
+    '#8B5CF6', // Purple
+    '#EF4444', // Red
+    '#F97316', // Orange
+    '#06B6D4'  // Cyan
   ];
   
   // Simple hash function for string
@@ -23,22 +32,24 @@ export const getEventColor = (text: string) => {
 
 /**
  * Get color for event status
+ * Updated for dark theme compatibility
  */
 export const getStatusColor = (status: string) => {
-  switch (status) {
+  switch (status.toLowerCase()) {
     case 'upcoming':
-      return { bg: '#EFF6FF', text: '#1D4ED8' };
+      return { bg: 'rgba(59, 130, 246, 0.2)', text: '#60A5FA' };
     case 'ongoing':
-      return { bg: '#ECFDF5', text: '#047857' };
+      return { bg: 'rgba(16, 185, 129, 0.2)', text: '#34D399' };
     case 'completed':
-      return { bg: '#FEF2F2', text: '#B91C1C' };
+      return { bg: 'rgba(239, 68, 68, 0.2)', text: '#F87171' };
     default:
-      return { bg: '#F3F4F6', text: '#6B7280' };
+      return { bg: 'rgba(107, 114, 128, 0.2)', text: '#9CA3AF' };
   }
 };
 
 /**
  * Create platform-specific shadow styles
+ * Enhanced for better visibility on dark backgrounds
  */
 export const createShadow = (elevation: number) => {
   return Platform.select({
@@ -48,11 +59,11 @@ export const createShadow = (elevation: number) => {
         width: 0,
         height: elevation,
       },
-      shadowOpacity: 0.1 + (elevation * 0.03),
-      shadowRadius: elevation * 0.8,
+      shadowOpacity: 0.2 + (elevation * 0.05), // Increased opacity for dark theme
+      shadowRadius: elevation * 1.2, // Increased radius for softer shadow
     },
     android: {
-      elevation: elevation,
+      elevation: elevation + 1, // Slightly increased elevation for better visibility
     },
     default: {},
   });
@@ -85,4 +96,41 @@ export const getRelativeTime = (date: Date) => {
 export const truncateText = (text: string, maxLength: number) => {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength) + '...';
+};
+
+/**
+ * Get appropriate text color based on background color for better readability
+ * New helper for dark theme implementation
+ */
+export const getContrastTextColor = (bgColor: string) => {
+  // For dark theme, most text will be light
+  return '#FFFFFF';
+};
+
+/**
+ * Create consistent section container styling
+ * New helper to maintain visual consistency
+ */
+export const getSectionContainerStyle = () => {
+  return {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 16,
+    ...createShadow(2),
+    marginHorizontal: 16,
+    marginVertical: 12,
+    overflow: 'hidden',
+  };
+};
+
+/**
+ * Create consistent section header styling
+ * New helper to maintain visual consistency
+ */
+export const getSectionHeaderStyle = () => {
+  return {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  };
 };

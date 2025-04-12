@@ -1,15 +1,45 @@
 /**
- * Event Services
- * Handles API calls related to events
+ * Event Services Architecture
+ * 
+ * This implementation follows the repository pattern to separate:
+ * - Domain models (Event)
+ * - Data access (EventRepository)
+ * - Business logic (EventService)
  */
 
 import { Alert } from 'react-native';
+import { db } from '../../lib/firebaseConfig';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  Timestamp,
+  serverTimestamp,
+  arrayUnion,
+  arrayRemove,
+  limit,
+  startAfter,
+  writeBatch,
+  DocumentData,
+  QueryDocumentSnapshot,
+  FirestoreError
+} from 'firebase/firestore';
+
+// Cache configuration
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_SIZE = 100; // Maximum number of cached items
 
 /**
- * Event type definition
+ * Event domain model
  */
 export interface Event {
-  isPaid: any;
   id: string;
   title: string;
   description?: string;
@@ -31,264 +61,947 @@ export interface Event {
   attendees?: string[];
   maxAttendees?: number;
   price?: number;
-  image?: string;
+  isPaid?: boolean;
   category?: string;
   tags?: string[];
   duration?: number; // in milliseconds
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 /**
- * Service for handling event-related API calls
+ * Event data validation schema
  */
-const eventService = {
+interface EventValidationResult {
+  isValid: boolean;
+  errors: string[];
+}
+
+/**
+ * Pagination options for queries
+ */
+export interface PaginationOptions {
+  limit?: number;
+  startAfter?: any;
+}
+
+/**
+ * Event search/filter options
+ */
+export interface EventFilterOptions extends PaginationOptions {
+  category?: string;
+  createdBy?: string;
+  attendee?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  location?: string;
+  searchTerm?: string;
+  isPaid?: boolean;
+  tags?: string[];
+}
+
+/**
+ * Response for paginated queries
+ */
+export interface PaginatedResponse<T> {
+  items: T[];
+  lastVisible: any | null;
+  hasMore: boolean;
+  totalFetched: number;
+}
+
+/**
+ * Event repository interface
+ * Defines contract for data access
+ */
+interface EventRepository {
+  create(eventData: Omit<Event, 'id'>): Promise<Event>;
+  getById(id: string): Promise<Event | null>;
+  update(id: string, eventData: Partial<Event>): Promise<Event>;
+  delete(id: string): Promise<boolean>;
+  getBatch(options: EventFilterOptions): Promise<PaginatedResponse<Event>>;
+  getUserEvents(userId: string, options?: PaginationOptions): Promise<PaginatedResponse<Event>>;
+  getUserAttendingEvents(userId: string, options?: PaginationOptions): Promise<PaginatedResponse<Event>>;
+  getEventsByCategory(category: string, options?: PaginationOptions): Promise<PaginatedResponse<Event>>;
+  addAttendee(eventId: string, userId: string): Promise<boolean>;
+  removeAttendee(eventId: string, userId: string): Promise<boolean>;
+  deleteMultiple(ids: string[]): Promise<{success: string[], failed: string[]}>;
+}
+
+/**
+ * Firestore implementation of EventRepository
+ */
+class FirestoreEventRepository implements EventRepository {
+  private eventCache: Map<string, {event: Event, timestamp: number}> = new Map();
+  private collectionName = 'events';
+  
+  /**
+   * Helper to convert Firestore document to Event object
+   */
+  private convertDocToEvent(doc: QueryDocumentSnapshot<DocumentData>): Event {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      ...data,
+      // Ensure date is properly handled (could be Timestamp or Date)
+      date: data.date && typeof data.date.toDate === 'function' ? data.date.toDate() : data.date,
+      time: data.time && typeof data.time.toDate === 'function' ? data.time.toDate() : data.time,
+      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
+      updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt
+    } as Event;
+  }
+  
+  /**
+   * Cache management - store event in cache
+   */
+  private cacheEvent(id: string, event: Event): void {
+    // Remove oldest entry if cache is full
+    if (this.eventCache.size >= MAX_CACHE_SIZE) {
+      const oldestKey = this.eventCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.eventCache.delete(oldestKey);
+      }
+    }
+    
+    this.eventCache.set(id, {
+      event,
+      timestamp: Date.now()
+    });
+  }
+  
+  /**
+   * Cache management - get event from cache if available and not expired
+   */
+  private getCachedEvent(id: string): Event | null {
+    const cached = this.eventCache.get(id);
+    if (!cached) return null;
+    
+    // Check if cache entry is still valid
+    if (Date.now() - cached.timestamp > CACHE_TTL) {
+      this.eventCache.delete(id);
+      return null;
+    }
+    
+    return cached.event;
+  }
+  
+  /**
+   * Cache management - invalidate cache for an event
+   */
+  private invalidateCache(id: string): void {
+    this.eventCache.delete(id);
+  }
+  
   /**
    * Create a new event
-   * @param eventData The event data to create
-   * @returns Promise resolving to the created event
    */
-  createEvent: async (eventData: any): Promise<any> => {
+  async create(eventData: Omit<Event, 'id'>): Promise<Event> {
     try {
-      // In a real implementation, this would make an API call
-      console.log('Creating event with data:', eventData);
-      
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Return mock response with generated ID
-      return {
+      // Add timestamps
+      const eventWithTimestamps = {
         ...eventData,
-        id: `event_${Date.now()}`,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       };
+      
+      // Add document to Firestore
+      const eventsCollection = collection(db, this.collectionName);
+      const docRef = await addDoc(eventsCollection, eventWithTimestamps);
+      
+      // Get the newly created document
+      const docSnap = await getDoc(docRef);
+      
+      if (!docSnap.exists()) {
+        throw new Error('Failed to create event');
+      }
+      
+      // Create event object with current date for timestamps
+      const newEvent: Event = {
+        id: docRef.id,
+        ...eventWithTimestamps,
+        // Use current date for timestamps that haven't resolved yet
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      
+      // Cache the new event
+      this.cacheEvent(docRef.id, newEvent);
+      
+      return newEvent;
     } catch (error) {
-      console.error('Error in createEvent:', error);
-      throw error;
+      console.error('Error in create event repository:', error);
+      throw this.handleFirestoreError(error);
     }
-  },
+  }
   
   /**
    * Get an event by ID
-   * @param id The event ID
-   * @returns Promise resolving to the event
    */
-  getEventById: async (id: string): Promise<any> => {
+  async getById(id: string): Promise<Event | null> {
     try {
-      // In a real implementation, this would make an API call
-      console.log('Getting event with ID:', id);
+      // Check cache first
+      const cachedEvent = this.getCachedEvent(id);
+      if (cachedEvent) {
+        console.log('Cache hit for event:', id);
+        return cachedEvent;
+      }
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Cache miss, fetch from Firestore
+      console.log('Cache miss for event:', id);
+      const eventDoc = doc(db, this.collectionName, id);
+      const docSnap = await getDoc(eventDoc);
       
-      // Return mock response
-      return {
-        id,
-        title: 'Mock Event',
-        description: 'This is a mock event returned by the service',
-        // Other event properties would be here
-      };
+      if (!docSnap.exists()) {
+        console.log(`Event with ID ${id} not found`);
+        return null;
+      }
+      
+      // Convert document to Event object
+      const event = this.convertDocToEvent(docSnap);
+      
+      // Cache the event
+      this.cacheEvent(id, event);
+      
+      return event;
     } catch (error) {
-      console.error('Error in getEventById:', error);
-      throw error;
+      console.error('Error in getById event repository:', error);
+      throw this.handleFirestoreError(error);
     }
-  },
+  }
   
   /**
    * Update an existing event
-   * @param id The event ID
-   * @param eventData The updated event data
-   * @returns Promise resolving to the updated event
    */
-  updateEvent: async (id: string, eventData: any): Promise<any> => {
+  async update(id: string, eventData: Partial<Event>): Promise<Event> {
     try {
-      // In a real implementation, this would make an API call
-      console.log('Updating event with ID:', id, 'and data:', eventData);
-      
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Return mock response
-      return {
+      // Add updated timestamp
+      const eventWithTimestamp = {
         ...eventData,
-        id,
-        updatedAt: new Date(),
+        updatedAt: serverTimestamp()
       };
+      
+      // Update document in Firestore
+      const eventDoc = doc(db, this.collectionName, id);
+      await updateDoc(eventDoc, eventWithTimestamp);
+      
+      // Get the updated document
+      const docSnap = await getDoc(eventDoc);
+      
+      if (!docSnap.exists()) {
+        throw new Error(`Event with ID ${id} not found after update`);
+      }
+      
+      // Convert to Event object
+      const updatedEvent = this.convertDocToEvent(docSnap);
+      
+      // Update cache
+      this.cacheEvent(id, updatedEvent);
+      
+      return updatedEvent;
     } catch (error) {
-      console.error('Error in updateEvent:', error);
-      throw error;
+      console.error('Error in update event repository:', error);
+      throw this.handleFirestoreError(error);
     }
-  },
+  }
   
   /**
    * Delete an event
-   * @param id The event ID
-   * @returns Promise resolving to success
    */
-  deleteEvent: async (id: string): Promise<boolean> => {
+  async delete(id: string): Promise<boolean> {
     try {
-      // In a real implementation, this would make an API call
-      console.log('Deleting event with ID:', id);
+      // Delete document from Firestore
+      const eventDoc = doc(db, this.collectionName, id);
+      await deleteDoc(eventDoc);
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 600));
+      // Invalidate cache
+      this.invalidateCache(id);
       
-      // Return success
       return true;
     } catch (error) {
-      console.error('Error in deleteEvent:', error);
-      throw error;
+      console.error('Error in delete event repository:', error);
+      throw this.handleFirestoreError(error);
     }
-  },
+  }
   
   /**
-   * Get events for the current user
-   * @param userId The user ID
-   * @returns Promise resolving to an array of events
+   * Get batch of events with filtering and pagination
    */
-  getUserEvents: async (userId: string): Promise<any[]> => {
+  async getBatch(options: EventFilterOptions): Promise<PaginatedResponse<Event>> {
     try {
-      // In a real implementation, this would make an API call
-      console.log('Getting events for user:', userId);
+      const {
+        limit: limitCount = 10,
+        startAfter: startAfterDoc,
+        category,
+        createdBy,
+        attendee,
+        dateFrom,
+        dateTo,
+        isPaid,
+        searchTerm,
+        tags
+      } = options;
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 700));
+      // Build base query
+      let eventQuery = query(
+        collection(db, this.collectionName),
+        orderBy('date', 'asc'),
+        limit(limitCount + 1) // Fetch one extra to determine if there are more
+      );
       
-      // Return mock response
-      return [
-        {
-          id: 'event_1',
-          title: 'Mock User Event 1',
-          description: 'This is a mock event for the user',
-          // Other event properties would be here
-        },
-        {
-          id: 'event_2',
-          title: 'Mock User Event 2',
-          description: 'This is another mock event for the user',
-          // Other event properties would be here
-        },
-      ];
-    } catch (error) {
-      console.error('Error in getUserEvents:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Get all events
-   * @returns Promise resolving to an array of events
-   */
-  getEvents: async (): Promise<{events: Event[]}> => {
-    try {
-      // In a real implementation, this would make an API call
-      console.log('Getting all events');
+      // Add filters if provided
+      if (category) {
+        eventQuery = query(eventQuery, where('category', '==', category));
+      }
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      if (createdBy) {
+        eventQuery = query(eventQuery, where('createdBy', '==', createdBy));
+      }
       
-      // Return mock response with array of events
-      return {
-        events: [
-          {
-            id: 'event_1',
-            title: 'Community Cleanup',
-            description: 'Join us for a community cleanup event at the local park',
-            date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-            time: new Date(new Date().setHours(10, 0, 0, 0)), // 10:00 AM
-            location: 'Central Park',
-            locationDetails: {
-              city: 'New York',
-              state: 'NY'
-            },
-            createdBy: 'user123',
-            maxAttendees: 50,
-            image: 'https://example.com/event1.jpg',
-            category: 'Community',
-            tags: ['cleanup', 'environment', 'volunteer']
-          },
-          {
-            id: 'event_2',
-            title: 'Tech Conference',
-            description: 'Annual technology conference featuring the latest innovations',
-            date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days from now
-            time: new Date(new Date().setHours(9, 0, 0, 0)), // 9:00 AM
-            location: 'Convention Center',
-            locationDetails: {
-              city: 'San Francisco',
-              state: 'CA'
-            },
-            createdBy: 'user456',
-            price: 299,
-            maxAttendees: 1000,
-            image: 'https://example.com/event2.jpg',
-            category: 'Technology',
-            tags: ['tech', 'innovation', 'networking']
-          },
-          {
-            id: 'event_3',
-            title: 'Charity Run',
-            description: '5K run to raise funds for local charities',
-            date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days from now
-            time: new Date(new Date().setHours(8, 0, 0, 0)), // 8:00 AM
-            location: 'Riverside Park',
-            locationDetails: {
-              city: 'Chicago',
-              state: 'IL'
-            },
-            createdBy: 'user789',
-            price: 25,
-            maxAttendees: 500,
-            image: 'https://example.com/event3.jpg',
-            category: 'Charity',
-            tags: ['run', 'fundraiser', 'community']
+      if (attendee) {
+        eventQuery = query(eventQuery, where('attendees', 'array-contains', attendee));
+      }
+      
+      if (isPaid !== undefined) {
+        eventQuery = query(eventQuery, where('isPaid', '==', isPaid));
+      }
+      
+      // Add startAfter if provided
+      if (startAfterDoc) {
+        eventQuery = query(eventQuery, startAfter(startAfterDoc));
+      }
+      
+      // Execute query
+      const querySnapshot = await getDocs(eventQuery);
+      
+      // Process results
+      const events: Event[] = [];
+      let lastVisible = null;
+      let index = 0;
+      
+      querySnapshot.forEach((doc) => {
+        // Only add up to the requested limit
+        if (index < limitCount) {
+          const event = this.convertDocToEvent(doc);
+          
+          // Apply client-side filtering for date range if specified
+          if (dateFrom && event.date < dateFrom) return;
+          if (dateTo && event.date > dateTo) return;
+          
+          // Apply client-side text search if specified
+          if (searchTerm && searchTerm.length > 0) {
+            const term = searchTerm.toLowerCase();
+            const matchesSearch = 
+              event.title.toLowerCase().includes(term) ||
+              (event.description && event.description.toLowerCase().includes(term)) ||
+              (event.location && event.location.toLowerCase().includes(term));
+            
+            if (!matchesSearch) return;
           }
-        ]
+          
+          // Apply client-side tag filtering if specified
+          if (tags && tags.length > 0) {
+            const eventTags = event.tags || [];
+            const hasMatchingTag = tags.some(tag => eventTags.includes(tag));
+            if (!hasMatchingTag) return;
+          }
+          
+          events.push(event);
+          index++;
+        }
+        
+        // Update the last visible document for pagination
+        if (index === limitCount - 1) {
+          lastVisible = doc;
+        }
+      });
+      
+      return {
+        items: events,
+        lastVisible: lastVisible,
+        hasMore: querySnapshot.size > limitCount,
+        totalFetched: events.length
       };
     } catch (error) {
-      console.error('Error in getEvents:', error);
-      throw error;
+      console.error('Error in getBatch event repository:', error);
+      throw this.handleFirestoreError(error);
     }
-  },
+  }
+  
+  /**
+   * Get events created by a specific user
+   */
+  async getUserEvents(userId: string, options: PaginationOptions = {}): Promise<PaginatedResponse<Event>> {
+    return this.getBatch({
+      ...options,
+      createdBy: userId
+    });
+  }
   
   /**
    * Get events that a user is attending
-   * @param userId The user ID
-   * @returns Promise resolving to an array of events
    */
-  getUserAttendingEvents: async (userId: string): Promise<{events: Event[]}> => {
+  async getUserAttendingEvents(userId: string, options: PaginationOptions = {}): Promise<PaginatedResponse<Event>> {
+    return this.getBatch({
+      ...options,
+      attendee: userId
+    });
+  }
+  
+  /**
+   * Get events by category
+   */
+  async getEventsByCategory(category: string, options: PaginationOptions = {}): Promise<PaginatedResponse<Event>> {
+    return this.getBatch({
+      ...options,
+      category
+    });
+  }
+  
+  /**
+   * Add a user to an event's attendees
+   */
+  async addAttendee(eventId: string, userId: string): Promise<boolean> {
     try {
-      // In a real implementation, this would make an API call
-      console.log('Getting attending events for user:', userId);
+      // Update the event document to add the user to the attendees array
+      const eventDoc = doc(db, this.collectionName, eventId);
+      await updateDoc(eventDoc, {
+        attendees: arrayUnion(userId),
+        updatedAt: serverTimestamp()
+      });
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 700));
+      // Invalidate cache
+      this.invalidateCache(eventId);
       
-      // Return mock response
-      return {
-        events: [
-          {
-            id: 'event_2',
-            title: 'Tech Conference',
-            description: 'Annual technology conference featuring the latest innovations',
-            date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-            time: new Date(new Date().setHours(9, 0, 0, 0)),
-            location: 'Convention Center',
-            locationDetails: {
-              city: 'San Francisco',
-              state: 'CA'
-            },
-            createdBy: 'user456',
-            price: 299,
-            maxAttendees: 1000,
-            image: 'https://example.com/event2.jpg',
-            category: 'Technology',
-            tags: ['tech', 'innovation', 'networking']
-          }
-        ]
+      return true;
+    } catch (error) {
+      console.error('Error in addAttendee event repository:', error);
+      throw this.handleFirestoreError(error);
+    }
+  }
+  
+  /**
+   * Remove a user from an event's attendees
+   */
+  async removeAttendee(eventId: string, userId: string): Promise<boolean> {
+    try {
+      // Update the event document to remove the user from the attendees array
+      const eventDoc = doc(db, this.collectionName, eventId);
+      await updateDoc(eventDoc, {
+        attendees: arrayRemove(userId),
+        updatedAt: serverTimestamp()
+      });
+      
+      // Invalidate cache
+      this.invalidateCache(eventId);
+      
+      return true;
+    } catch (error) {
+      console.error('Error in removeAttendee event repository:', error);
+      throw this.handleFirestoreError(error);
+    }
+  }
+  
+  /**
+   * Delete multiple events in a batch operation
+   */
+  async deleteMultiple(ids: string[]): Promise<{success: string[], failed: string[]}> {
+    const success: string[] = [];
+    const failed: string[] = [];
+    
+    if (ids.length === 0) {
+      return { success, failed };
+    }
+    
+    try {
+      const batch = writeBatch(db);
+      
+      // Add each document to the batch
+      for (const id of ids) {
+        try {
+          const eventDoc = doc(db, this.collectionName, id);
+          batch.delete(eventDoc);
+        } catch (error) {
+          console.error(`Failed to queue deletion for event ${id}:`, error);
+          failed.push(id);
+        }
+      }
+      
+      // Commit the batch
+      await batch.commit();
+      
+      // Determine successful operations
+      const successIds = ids.filter(id => !failed.includes(id));
+      
+      // Update cache
+      successIds.forEach(id => this.invalidateCache(id));
+      
+      return { 
+        success: successIds, 
+        failed 
       };
     } catch (error) {
-      console.error('Error in getUserAttendingEvents:', error);
+      console.error('Error in deleteMultiple event repository:', error);
+      // If batch fails, consider all operations failed
+      return { success: [], failed: ids };
+    }
+  }
+  
+  /**
+   * Handle and transform Firestore errors to more user-friendly errors
+   */
+  private handleFirestoreError(error: any): Error {
+    console.log('Handling Firestore error:', error);
+    
+    if (error instanceof FirestoreError) {
+      switch (error.code) {
+        case 'permission-denied':
+          return new Error('You do not have permission to perform this operation');
+        case 'not-found':
+          return new Error('The requested resource was not found');
+        case 'already-exists':
+          return new Error('This event already exists');
+        case 'resource-exhausted':
+          return new Error('You have exceeded your quota. Please try again later');
+        case 'cancelled':
+          return new Error('The operation was cancelled');
+        case 'invalid-argument':
+          return new Error('Invalid data provided');
+        default:
+          return new Error(`Database error: ${error.message}`);
+      }
+    }
+    
+    return error instanceof Error ? error : new Error('An unknown error occurred');
+  }
+  
+  /**
+   * Clear the event cache
+   * @returns Promise resolving to success
+   */
+  async clearCache(): Promise<boolean> {
+    try {
+      console.log('Clearing event cache');
+      
+      // Clear in-memory cache
+      this.eventCache.clear();
+      
+      return true;
+    } catch (error) {
+      console.error('Error in clearCache:', error);
+      throw this.handleFirestoreError(error);
+    }
+  }
+}
+
+/**
+ * Event Validator
+ * Handles validation of event data
+ */
+class EventValidator {
+  /**
+   * Validate event data for creation
+   */
+  validateForCreate(eventData: Omit<Event, 'id'>): EventValidationResult {
+    const errors: string[] = [];
+    
+    // Required fields
+    if (!eventData.title || eventData.title.trim().length === 0) {
+      errors.push('Event title is required');
+    } else if (eventData.title.length > 100) {
+      errors.push('Event title must be less than 100 characters');
+    }
+    
+    if (!eventData.date) {
+      errors.push('Event date is required');
+    }
+    
+    // Validate price if isPaid is true
+    if (eventData.isPaid && (typeof eventData.price !== 'number' || eventData.price < 0)) {
+      errors.push('A valid price is required for paid events');
+    }
+    
+    // Validate max attendees if provided
+    if (eventData.maxAttendees !== undefined && 
+        (typeof eventData.maxAttendees !== 'number' || eventData.maxAttendees <= 0)) {
+      errors.push('Maximum attendees must be a positive number');
+    }
+    
+    // Validate location coordinates if provided
+    if (eventData.locationDetails?.coordinates) {
+      const { latitude, longitude } = eventData.locationDetails.coordinates;
+      
+      if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+        errors.push('Location coordinates must be valid numbers');
+      }
+      
+      if (latitude < -90 || latitude > 90) {
+        errors.push('Latitude must be between -90 and 90');
+      }
+      
+      if (longitude < -180 || longitude > 180) {
+        errors.push('Longitude must be between -180 and 180');
+      }
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+  
+  /**
+   * Validate event data for update
+   */
+  validateForUpdate(eventData: Partial<Event>): EventValidationResult {
+    const errors: string[] = [];
+    
+    // Title validation if provided
+    if (eventData.title !== undefined) {
+      if (eventData.title.trim().length === 0) {
+        errors.push('Event title cannot be empty');
+      } else if (eventData.title.length > 100) {
+        errors.push('Event title must be less than 100 characters');
+      }
+    }
+    
+    // Validate price if isPaid is being updated to true
+    if (eventData.isPaid === true && 
+        (eventData.price === undefined || typeof eventData.price !== 'number' || eventData.price < 0)) {
+      errors.push('A valid price is required for paid events');
+    }
+    
+    // Validate max attendees if provided
+    if (eventData.maxAttendees !== undefined && 
+        (typeof eventData.maxAttendees !== 'number' || eventData.maxAttendees <= 0)) {
+      errors.push('Maximum attendees must be a positive number');
+    }
+    
+    // Validate location coordinates if provided
+    if (eventData.locationDetails?.coordinates) {
+      const { latitude, longitude } = eventData.locationDetails.coordinates;
+      
+      if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+        errors.push('Location coordinates must be valid numbers');
+      }
+      
+      if (latitude < -90 || latitude > 90) {
+        errors.push('Latitude must be between -90 and 90');
+      }
+      
+      if (longitude < -180 || longitude > 180) {
+        errors.push('Longitude must be between -180 and 180');
+      }
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+}
+
+/**
+ * Main EventService class
+ * Handles business logic and uses the repository for data access
+ */
+class EventService {
+  private repository: EventRepository;
+  private validator: EventValidator;
+  
+  constructor() {
+    this.repository = new FirestoreEventRepository();
+    this.validator = new EventValidator();
+  }
+  
+  /**
+   * Create a new event
+   */
+  async createEvent(eventData: Omit<Event, 'id'>): Promise<Event> {
+    try {
+      console.log('Creating event with data:', eventData);
+      
+      // Validate event data
+      const validationResult = this.validator.validateForCreate(eventData);
+      if (!validationResult.isValid) {
+        throw new Error(`Invalid event data: ${validationResult.errors.join(', ')}`);
+      }
+      
+      // Create event through repository
+      return await this.repository.create(eventData);
+    } catch (error) {
+      console.error('Error in createEvent service:', error);
       throw error;
     }
   }
-};
+  
+  /**
+   * Get an event by ID
+   */
+  async getEventById(id: string): Promise<Event | null> {
+    try {
+      console.log('Getting event with ID:', id);
+      
+      if (!id || typeof id !== 'string') {
+        throw new Error('Invalid event ID');
+      }
+      
+      return await this.repository.getById(id);
+    } catch (error) {
+      console.error('Error in getEventById service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Update an existing event
+   */
+  async updateEvent(id: string, eventData: Partial<Event>): Promise<Event> {
+    try {
+      console.log('Updating event with ID:', id, 'and data:', eventData);
+      
+      if (!id || typeof id !== 'string') {
+        throw new Error('Invalid event ID');
+      }
+      
+      // Validate event data
+      const validationResult = this.validator.validateForUpdate(eventData);
+      if (!validationResult.isValid) {
+        throw new Error(`Invalid event data: ${validationResult.errors.join(', ')}`);
+      }
+      
+      // Update event through repository
+      return await this.repository.update(id, eventData);
+    } catch (error) {
+      console.error('Error in updateEvent service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Delete an event
+   */
+  async deleteEvent(id: string): Promise<boolean> {
+    try {
+      console.log('Deleting event with ID:', id);
+      
+      if (!id || typeof id !== 'string') {
+        throw new Error('Invalid event ID');
+      }
+      
+      return await this.repository.delete(id);
+    } catch (error) {
+      console.error('Error in deleteEvent service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get events with pagination and filtering
+   */
+  async getEvents(options: EventFilterOptions = {}): Promise<PaginatedResponse<Event>> {
+    try {
+      console.log('Getting events with options:', options);
+      return await this.repository.getBatch(options);
+    } catch (error) {
+      console.error('Error in getEvents service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get events created by a specific user
+   */
+  async getUserEvents(userId: string, options: PaginationOptions = {}): Promise<PaginatedResponse<Event>> {
+    try {
+      console.log('Getting events for user:', userId);
+      
+      if (!userId || typeof userId !== 'string') {
+        throw new Error('Invalid user ID');
+      }
+      
+      return await this.repository.getUserEvents(userId, options);
+    } catch (error) {
+      console.error('Error in getUserEvents service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get events that a user is attending
+   */
+  async getUserAttendingEvents(userId: string, options: PaginationOptions = {}): Promise<PaginatedResponse<Event>> {
+    try {
+      console.log('Getting attending events for user:', userId);
+      
+      if (!userId || typeof userId !== 'string') {
+        throw new Error('Invalid user ID');
+      }
+      
+      return await this.repository.getUserAttendingEvents(userId, options);
+    } catch (error) {
+      console.error('Error in getUserAttendingEvents service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Get events by category
+   */
+  async getEventsByCategory(category: string, options: PaginationOptions = {}): Promise<PaginatedResponse<Event>> {
+    try {
+      console.log('Getting events by category:', category);
+      
+      if (!category || typeof category !== 'string') {
+        throw new Error('Invalid category');
+      }
+      
+      return await this.repository.getEventsByCategory(category, options);
+    } catch (error) {
+      console.error('Error in getEventsByCategory service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Add a user to an event's attendees
+   */
+  async addAttendee(eventId: string, userId: string): Promise<boolean> {
+    try {
+      console.log('Adding attendee to event:', eventId, 'user:', userId);
+      
+      if (!eventId || typeof eventId !== 'string') {
+        throw new Error('Invalid event ID');
+      }
+      
+      if (!userId || typeof userId !== 'string') {
+        throw new Error('Invalid user ID');
+      }
+      
+      // Check if the event exists and has space
+      const event = await this.repository.getById(eventId);
+      if (!event) {
+        throw new Error('Event not found');
+      }
+      
+      // Check if the event has a maximum number of attendees
+      if (event.maxAttendees !== undefined && event.attendees) {
+        if (event.attendees.length >= event.maxAttendees) {
+          throw new Error('Event has reached maximum capacity');
+        }
+      }
+      
+      // Check if the user is already an attendee
+      if (event.attendees && event.attendees.includes(userId)) {
+        return true; // User is already an attendee, consider this a success
+      }
+      
+      return await this.repository.addAttendee(eventId, userId);
+    } catch (error) {
+      console.error('Error in addAttendee service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Remove a user from an event's attendees
+   */
+  async removeAttendee(eventId: string, userId: string): Promise<boolean> {
+    try {
+      console.log('Removing attendee from event:', eventId, 'user:', userId);
+      
+      if (!eventId || typeof eventId !== 'string') {
+        throw new Error('Invalid event ID');
+      }
+      
+      if (!userId || typeof userId !== 'string') {
+        throw new Error('Invalid user ID');
+      }
+      
+      return await this.repository.removeAttendee(eventId, userId);
+    } catch (error) {
+      console.error('Error in removeAttendee service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Delete multiple events
+   */
+  async deleteMultipleEvents(ids: string[]): Promise<{success: string[], failed: string[]}> {
+    try {
+      console.log('Deleting multiple events:', ids);
+      
+      if (!Array.isArray(ids)) {
+        throw new Error('Invalid event IDs');
+      }
+      
+      if (ids.length === 0) {
+        return { success: [], failed: [] };
+      }
+      
+      return await this.repository.deleteMultiple(ids);
+    } catch (error) {
+      console.error('Error in deleteMultipleEvents service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Search events by text
+   */
+  async searchEvents(query: string, options: PaginationOptions = {}): Promise<PaginatedResponse<Event>> {
+    try {
+      console.log('Searching events with query:', query);
+      
+      if (!query || typeof query !== 'string') {
+        return await this.repository.getBatch(options);
+      }
+      
+      return await this.repository.getBatch({
+        ...options,
+        searchTerm: query
+      });
+    } catch (error) {
+      console.error('Error in searchEvents service:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Check if a user can join an event
+   */
+  async canUserJoinEvent(eventId: string, userId: string): Promise<{ canJoin: boolean, reason?: string }> {
+    try {
+      const event = await this.repository.getById(eventId);
+      if (!event) {
+        return { canJoin: false, reason: 'Event not found' };
+      }
+      
+      // Check if the user is already attending
+      if (event.attendees && event.attendees.includes(userId)) {
+        return { canJoin: false, reason: 'You are already attending this event' };
+      }
+      
+      // Check if the event is at capacity
+      if (event.maxAttendees !== undefined && event.attendees) {
+        if (event.attendees.length >= event.maxAttendees) {
+          return { canJoin: false, reason: 'Event has reached maximum capacity' };
+        }
+      }
+      
+      // Check if the event date has passed
+      if (event.date && new Date(event.date) < new Date()) {
+        return { canJoin: false, reason: 'Event has already occurred' };
+      }
+      
+      return { canJoin: true };
+    } catch (error) {
+      console.error('Error in canUserJoinEvent service:', error);
+      throw error;
+    }
+  }
+}
 
+// Export the singleton service instance
+const eventService = new EventService();
 export default eventService;

@@ -18,7 +18,8 @@ import {
   Keyboard
 } from 'react-native';
 import { useAuth } from '../AuthContext';
-import validationUtils from '../utils/validation';
+import validationUtils, { formatPhoneNumber } from '../utils/validation';
+import { useGoogleAuth } from '../utils/googleAuth';
 import { Link, useRouter } from 'expo-router';
 import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -27,6 +28,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebaseConfig';
+import PrivacyTermsModal from '../components/PrivacyTermsModal';
+import { getLocationForProfile } from '../utils/geolocationUtils';
 import { normalizeUri } from '../utils/fileUtils';
 
 const { width, height } = Dimensions.get('window');
@@ -46,8 +49,9 @@ const USER_TYPES = [
 ];
 
 export default function Register() {
-  const { signUp, isLoading, error } = useAuth();
+  const { signUp, isLoading, error, signInWithGoogle } = useAuth();
   const router = useRouter();
+  const [googleLoading, setGoogleLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [progress] = useState(new Animated.Value(0));
@@ -67,7 +71,8 @@ export default function Register() {
     interests: [] as string[],
     userType: 'both',
     organizationName: '',
-    acceptTerms: false
+    acceptTerms: false,
+    locationLoading: false // Flag for location detection loading state
   });
   
   // Form validation errors
@@ -82,6 +87,8 @@ export default function Register() {
   
   // UI states
   const [showInterestsModal, setShowInterestsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   
@@ -96,6 +103,67 @@ export default function Register() {
     if (/[^A-Za-z0-9]/.test(password)) score++;
     
     return score;
+  };
+
+  // Handle location detection
+  const detectLocation = async () => {
+    try {
+      // Show privacy notice before requesting location
+      Alert.alert(
+        'Location Detection',
+        'We\'ll use your current location to set your city and country. This helps you find nearby events. Your precise location will not be stored.',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Allow',
+            onPress: async () => {
+              try {
+                // Show loading indicator
+                setUserData(prev => ({ ...prev, locationLoading: true }));
+                
+                // Get location data
+                const locationData = await getLocationForProfile();
+                
+                // Update form with location data
+                setUserData(prev => ({
+                  ...prev,
+                  city: locationData.city || prev.city,
+                  country: locationData.country || prev.country,
+                  locationLoading: false
+                }));
+                
+                // Show success message if location was found
+                if (locationData.city || locationData.country) {
+                  Alert.alert(
+                    'Location Detected',
+                    `We've set your location to ${[
+                      locationData.city,
+                      locationData.country
+                    ].filter(Boolean).join(', ')}.`
+                  );
+                } else {
+                  Alert.alert(
+                    'Location Not Found',
+                    'We couldn\'t determine your location. Please enter it manually.'
+                  );
+                }
+              } catch (error) {
+                setUserData(prev => ({ ...prev, locationLoading: false }));
+                Alert.alert(
+                  'Location Error',
+                  'There was a problem detecting your location. Please enter it manually.'
+                );
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error in location detection:', error);
+    }
   };
   
   // Handle field changes
@@ -240,10 +308,11 @@ export default function Register() {
         isValid = false;
       }
     } else if (currentStep === 2) {
-      // Phone validation is optional
+      // Phone validation using the dedicated validation function
       if (userData.phoneNumber) {
-        if (!/^\+?[0-9]{10,15}$/.test(userData.phoneNumber)) {
-          newErrors.phoneNumber = 'Please enter a valid phone number';
+        const phoneValidation = validationUtils.validatePhoneNumber(userData.phoneNumber);
+        if (!phoneValidation.isValid) {
+          newErrors.phoneNumber = phoneValidation.errors.join(', ');
           isValid = false;
         }
       }
@@ -323,9 +392,24 @@ export default function Register() {
           profileImageUrl = await uploadProfileImage(userData.profileImage);
         }
         
+        // Format phone number for consistent storage if provided
+        const formattedPhoneNumber = userData.phoneNumber ?
+          formatPhoneNumber(userData.phoneNumber) : null;
+        
         // First, register the user with Firebase Authentication
         // Note: We're only passing email, password, and name as required by the signUp function
-        await signUp(userData.email, userData.password, userData.name);
+        await signUp(userData.email, userData.password, userData.name, {
+          name: userData.name,
+          email: userData.email,
+          phoneNumber: formattedPhoneNumber,
+          city: userData.city || null,
+          country: userData.country || null,
+          interests: userData.interests,
+          userType: userData.userType,
+          organizationName: userData.organizationName || null,
+          profileImageUrl: profileImageUrl,
+          createdAt: new Date().toISOString()
+        });
         
         // The profile document will be created in AuthContext or we can implement it here if needed
         // For example, we could add code here to update the user profile after registration
@@ -358,6 +442,18 @@ export default function Register() {
         }
         Alert.alert('Registration Failed', errorMessage);
       }
+    }
+  };
+  
+  // Handle Google Sign-Up
+  const handleGoogleSignUp = async () => {
+    try {
+      setGoogleLoading(true);
+      await signInWithGoogle();
+      // Navigation will be handled by AuthContext
+    } catch (err) {
+      // Error handling is done in AuthContext
+      setGoogleLoading(false);
     }
   };
   
@@ -573,27 +669,45 @@ export default function Register() {
         ) : null}
       </View>
       
-      <View style={styles.rowContainer}>
-        <View style={[styles.inputContainer, { flex: 1, marginRight: 8 }]}>
-          <Text style={styles.inputLabel}>City (Optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Your city"
-            value={userData.city}
-            onChangeText={(text) => handleChange('city', text)}
-            editable={!isLoading}
-          />
+      <View style={styles.locationContainer}>
+        <View style={styles.locationHeader}>
+          <Text style={styles.inputLabel}>Location (Optional)</Text>
+          <TouchableOpacity
+            style={styles.detectLocationButton}
+            onPress={detectLocation}
+            disabled={isLoading || userData.locationLoading}
+          >
+            {userData.locationLoading ? (
+              <ActivityIndicator size="small" color="#007AFF" />
+            ) : (
+              <>
+                <MaterialIcons name="my-location" size={16} color="#007AFF" />
+                <Text style={styles.detectLocationText}>Detect</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
         
-        <View style={[styles.inputContainer, { flex: 1, marginLeft: 8 }]}>
-          <Text style={styles.inputLabel}>Country (Optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Your country"
-            value={userData.country}
-            onChangeText={(text) => handleChange('country', text)}
-            editable={!isLoading}
-          />
+        <View style={styles.rowContainer}>
+          <View style={[styles.inputContainer, { flex: 1, marginRight: 8, marginBottom: 0 }]}>
+            <TextInput
+              style={styles.input}
+              placeholder="City"
+              value={userData.city}
+              onChangeText={(text) => handleChange('city', text)}
+              editable={!isLoading && !userData.locationLoading}
+            />
+          </View>
+          
+          <View style={[styles.inputContainer, { flex: 1, marginLeft: 8, marginBottom: 0 }]}>
+            <TextInput
+              style={styles.input}
+              placeholder="Country"
+              value={userData.country}
+              onChangeText={(text) => handleChange('country', text)}
+              editable={!isLoading && !userData.locationLoading}
+            />
+          </View>
         </View>
       </View>
       
@@ -832,16 +946,39 @@ export default function Register() {
                 </>
               )}
             </TouchableOpacity>
-            
             {currentStep === 1 && (
-              <View style={styles.loginContainer}>
-                <Text style={styles.loginText}>Already have an account? </Text>
-                <Link href="/(auth)/login" asChild>
-                  <TouchableOpacity>
-                    <Text style={styles.loginLink}>Sign In</Text>
-                  </TouchableOpacity>
-                </Link>
-              </View>
+              <>
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+                
+                <TouchableOpacity
+                  style={[styles.googleButton, (isLoading || googleLoading || uploadingImage) && styles.buttonDisabled]}
+                  onPress={handleGoogleSignUp}
+                  disabled={isLoading || googleLoading || uploadingImage}
+                  activeOpacity={0.8}
+                >
+                  {googleLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <FontAwesome name="google" size={20} color="#FFFFFF" style={styles.googleIcon} />
+                      <Text style={styles.googleButtonText}>Sign up with Google</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                
+                <View style={styles.loginContainer}>
+                  <Text style={styles.loginText}>Already have an account? </Text>
+                  <Link href="/(auth)/login" asChild>
+                    <TouchableOpacity>
+                      <Text style={styles.loginLink}>Sign In</Text>
+                    </TouchableOpacity>
+                  </Link>
+                </View>
+              </>
             )}
           </View>
         </View>
@@ -1137,6 +1274,28 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontWeight: '600',
   },
+  locationContainer: {
+    marginBottom: 20,
+  },
+  locationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  detectLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+  },
+  detectLocationText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 4,
+  },
   termsContainer: {
     marginBottom: 24,
   },
@@ -1189,6 +1348,38 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginRight: 8,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E5E7EB',
+  },
+  dividerText: {
+    paddingHorizontal: 16,
+    color: '#9CA3AF',
+    fontSize: 14,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    backgroundColor: '#DB4437',
+    borderRadius: 10,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  googleIcon: {
+    marginRight: 10,
+  },
+  googleButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
   loginContainer: {
     flexDirection: 'row',
