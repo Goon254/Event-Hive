@@ -19,7 +19,10 @@ import { Alert } from 'react-native';
  */
 export function useEventForm() {
   // Form state
-  const [formData, setFormData] = useState<EventForm>(DEFAULT_FORM_VALUES);
+  const [formData, setFormData] = useState<EventForm>({
+    ...DEFAULT_FORM_VALUES,
+    id: `event_${Date.now()}` // Generate a unique ID for the event
+  });
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [activeSection, setActiveSection] = useState(1);
   const [sectionComplete, setSectionComplete] = useState<SectionCompletion>(DEFAULT_SECTION_COMPLETION);

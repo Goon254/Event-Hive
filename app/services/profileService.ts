@@ -11,11 +11,10 @@ import {
   getDocs,
   Timestamp
 } from 'firebase/firestore';
-import { db, storage } from '../../lib/firebaseConfig';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db } from '../../lib/firebaseConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sanitizeForFirestore } from './migrationService';
-import { imageUploadService } from './imageUploadService';
+import { enhancedImageService, ImageType, ImageQuality, ImageSize } from './enhancedImageService';
 
 // Constants
 const API_BASE_URL = 'https://api.scangoapp.com';
@@ -176,11 +175,27 @@ export class ProfileService {
         throw new Error('Image URI is required for profile image upload');
       }
       
-      // Upload the image and get the download URL
-      const downloadURL = await imageUploadService.uploadProfileImage(userId, imageUri, (progress: number) => {
-        // Optional: Handle progress updates if needed
-        console.log(`Profile image upload progress: ${progress * 100}%`);
-      });
+      // Configure upload options
+      const uploadOptions = {
+        quality: ImageQuality.HIGH,
+        maxWidth: ImageSize.MEDIUM,
+        maxHeight: ImageSize.MEDIUM,
+        compress: true,
+        generateThumbnail: true,
+        thumbnailSize: 150,
+        metadata: {
+          userId,
+          updatedAt: new Date().toISOString(),
+          source: 'profile-service'
+        },
+        onProgress: (progress: number) => {
+          // Optional: Handle progress updates if needed
+          console.log(`Profile image upload progress: ${progress * 100}%`);
+        }
+      };
+      
+      // Upload the image using the enhanced image service
+      const downloadURL = await enhancedImageService.uploadProfileImage(imageUri, uploadOptions);
       
       // Update the user profile with the new image URL
       try {

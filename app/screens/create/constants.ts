@@ -113,6 +113,7 @@ export const SECTION_NAMES = {
 
 // Default form values
 export const DEFAULT_FORM_VALUES = {
+  id: '',
   title: '',
   description: '',
   category: 'Other',

@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { EventForm, FormErrors, NavigationDirection, TicketType } from '../../types';
 import { FormField } from '../shared/FormField';
 import { SectionNavigation } from '../shared/SectionNavigation';
+import { DatePickerModal } from '../modals/DatePickerModal';
 import styles from '../../styles';
 
 interface TicketsSectionProps {
@@ -213,11 +214,27 @@ export function TicketsSection({
           disabled={isSubmitting}
         >
           <Text style={styles.dateButtonText}>
-            {formData.registrationDeadline 
+            {formData.registrationDeadline
               ? format(formData.registrationDeadline, 'EEEE, MMMM d, yyyy')
               : 'No deadline (registration until event starts)'}
           </Text>
         </TouchableOpacity>
+        
+        {/* Date Picker Modal for Registration Deadline */}
+        <DatePickerModal
+          visible={showDeadlinePicker}
+          onClose={() => setShowDeadlinePicker(false)}
+          initialDate={formData.registrationDeadline || formData.date}
+          onSave={(date) => {
+            updateFormData({ registrationDeadline: date });
+            setShowDeadlinePicker(false);
+          }}
+          title="Select Registration Deadline"
+          showTime={false}
+          isSubmitting={isSubmitting}
+          minDate={new Date()} // Can't select dates in the past
+          maxDate={formData.date} // Can't be after event start date
+        />
       </View>
       
       {/* Paid/Free Toggle */}

@@ -42,6 +42,7 @@ export interface Speaker {
 
 // Main form data structure
 export interface EventForm {
+  id?: string; // Optional ID for the event (will be set when saved)
   title: string;
   description: string;
   category: string;

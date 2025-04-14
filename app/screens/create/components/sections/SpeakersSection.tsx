@@ -10,6 +10,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { EventForm, FormErrors, NavigationDirection, Speaker } from '../../types';
 import { FormField } from '../shared/FormField';
 import { SectionNavigation } from '../shared/SectionNavigation';
+import EnhancedImageUpload from '../../../../container/events/EnhancedImageUpload';
+import { ImageType } from '../../../../services/enhancedImageService';
 import styles from '../../styles';
 
 interface SpeakersSectionProps {
@@ -141,14 +143,8 @@ export function SpeakersSection({
   };
   
   /**
-   * Handle speaker image selection
+   * Handle speaker image selection - now handled directly by EnhancedImageUpload
    */
-  const handleSpeakerImageSelected = (uri: string) => {
-    setNewSpeaker({
-      ...newSpeaker,
-      imageUri: uri
-    });
-  };
   
   /**
    * Render a speaker item
@@ -265,51 +261,16 @@ export function SpeakersSection({
           <View style={styles.formGroup}>
             <Text style={styles.label}>Speaker Image (Optional)</Text>
             <View style={styles.speakerImageUpload}>
-              {newSpeaker.imageUri ? (
-                <View style={{ position: 'relative' }}>
-                  <Image 
-                    source={{ uri: newSpeaker.imageUri }} 
-                    style={{ width: 100, height: 100, borderRadius: 50 }} 
-                  />
-                  <TouchableOpacity
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      right: 0,
-                      backgroundColor: 'rgba(0,0,0,0.6)',
-                      borderRadius: 15,
-                      width: 30,
-                      height: 30,
-                      justifyContent: 'center',
-                      alignItems: 'center'
-                    }}
-                    onPress={() => handleSpeakerImageSelected('')}
-                  >
-                    <MaterialIcons name="close" size={20} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={{
-                    width: 100,
-                    height: 100,
-                    borderRadius: 50,
-                    backgroundColor: '#F3F4F6',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    borderWidth: 1,
-                    borderColor: '#E5E7EB',
-                    borderStyle: 'dashed'
-                  }}
-                  onPress={() => {
-                    // TODO: Implement image picker for speaker
-                    Alert.alert('Feature Coming Soon', 'Speaker image upload will be available in the next update.');
-                  }}
-                  disabled={isSubmitting}
-                >
-                  <MaterialIcons name="add-a-photo" size={30} color="#9CA3AF" />
-                </TouchableOpacity>
-              )}
+              <EnhancedImageUpload
+                onImageSelected={(uri) => setNewSpeaker({...newSpeaker, imageUri: uri})}
+                initialImage={newSpeaker.imageUri}
+                width={100}
+                height={100}
+                imageType={ImageType.EVENT_SPEAKER}
+                id={formData.id}
+                isSubmitting={isSubmitting}
+                placeholderText="Add Photo"
+              />
             </View>
           </View>
           

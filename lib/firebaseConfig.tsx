@@ -12,7 +12,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBMUu0L9RiM5Q-y0Ks5ync7GLnRws_Un1s",
   authDomain: "event-hive-992c0.firebaseapp.com",
   projectId: "event-hive-992c0",
-  storageBucket: "event-hive-992c0.appspot.com",
+  storageBucket: "event-hive-992c0.firebasestorage.app",
   messagingSenderId: "549671182290",
   appId: "1:549671182290:web:7eb4f50a24cccbdaaa320b",
   measurementId: "G-ERG2RHGGZH"

@@ -1,5 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
-import { format, parse, isValid, formatDistance, differenceInDays } from 'date-fns';
+import { format, parse, isValid, differenceInDays } from 'date-fns';
 
 /**
  * Comprehensive date utilities for standardized date handling
@@ -139,7 +139,31 @@ export const getRelativeTime = (date: any): string => {
     const dateObj = toDateObject(date);
     if (!dateObj) return 'Invalid date';
     
-    return formatDistance(dateObj, new Date(), { addSuffix: true });
+    const now = new Date();
+    const diffMs = dateObj.getTime() - now.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) {
+      const absDiffDays = Math.abs(diffDays);
+      if (absDiffDays === 0) return 'Today';
+      if (absDiffDays === 1) return 'Yesterday';
+      if (absDiffDays < 7) return `${absDiffDays} days ago`;
+      if (absDiffDays < 30) return `${Math.floor(absDiffDays / 7)} weeks ago`;
+      if (absDiffDays < 365) return `${Math.floor(absDiffDays / 30)} months ago`;
+      return `${Math.floor(absDiffDays / 365)} years ago`;
+    } else if (diffDays === 0) {
+      return 'Today';
+    } else if (diffDays === 1) {
+      return 'Tomorrow';
+    } else if (diffDays < 7) {
+      return `in ${diffDays} days`;
+    } else if (diffDays < 30) {
+      return `in ${Math.floor(diffDays / 7)} weeks`;
+    } else if (diffDays < 365) {
+      return `in ${Math.floor(diffDays / 30)} months`;
+    } else {
+      return `in ${Math.floor(diffDays / 365)} years`;
+    }
   } catch (error) {
     console.error('Error getting relative time:', error, date);
     return 'Invalid date';
@@ -193,4 +217,32 @@ export const isValidDate = (date: any): boolean => {
 export const toISOString = (date: any): string | null => {
   const dateObj = toDateObject(date);
   return dateObj ? dateObj.toISOString() : null;
+};
+
+/**
+ * Get relative days until an event
+ * @param date Any date representation
+ * @returns Formatted string (e.g., "1 day" or "5 days")
+ */
+export const getRelativeDays = (date: any): string => {
+  try {
+    const dateObj = toDateObject(date);
+    if (!dateObj) return 'Unknown date';
+    
+    const now = new Date();
+    const diffDays = differenceInDays(dateObj, now);
+    
+    if (diffDays < 0) {
+      return Math.abs(diffDays) === 1 ? 'Yesterday' : `${Math.abs(diffDays)} days ago`;
+    } else if (diffDays === 0) {
+      return 'Today';
+    } else if (diffDays === 1) {
+      return 'Tomorrow';
+    } else {
+      return `${diffDays} days`;
+    }
+  } catch (error) {
+    console.error('Error calculating relative days:', error, date);
+    return 'Unknown date';
+  }
 };

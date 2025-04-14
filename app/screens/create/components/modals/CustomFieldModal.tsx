@@ -1,7 +1,7 @@
 /**
  * CustomFieldModal Component
  * 
- * Modal for creating and editing custom registration fields.
+ * Modal for creating and editing custom registration form fields.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -14,12 +14,10 @@ import {
   ScrollView,
   TextInput,
   Switch,
-  FlatList,
   Alert
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { CustomField } from '../../types';
-import { FormField } from '../shared/FormField';
 import styles from '../../styles';
 
 interface CustomFieldModalProps {
@@ -39,15 +37,8 @@ interface CustomFieldModalProps {
   isSubmitting?: boolean;
 }
 
-// Field type options
-const FIELD_TYPES = [
-  { id: 'text', label: 'Text', icon: 'text-fields' },
-  { id: 'checkbox', label: 'Checkbox', icon: 'check-box' },
-  { id: 'select', label: 'Dropdown', icon: 'arrow-drop-down-circle' }
-];
-
 /**
- * Modal for creating and editing custom registration fields
+ * Modal for creating and editing custom registration form fields
  */
 export function CustomFieldModal({
   visible,
@@ -77,7 +68,10 @@ export function CustomFieldModal({
   // Initialize field data when editing
   useEffect(() => {
     if (field) {
-      setFieldData(field);
+      setFieldData({
+        ...field,
+        options: field.options || []
+      });
     } else {
       // Reset form when creating a new field
       setFieldData({
@@ -102,7 +96,7 @@ export function CustomFieldModal({
   };
   
   /**
-   * Add an option to the select field
+   * Add an option to select field
    */
   const addOption = () => {
     if (!newOption.trim()) {
@@ -110,7 +104,7 @@ export function CustomFieldModal({
     }
     
     // Check if option already exists
-    if (fieldData.options?.includes(newOption.trim())) {
+    if (fieldData.options && fieldData.options.includes(newOption.trim())) {
       Alert.alert('Duplicate Option', 'This option already exists.');
       return;
     }
@@ -122,10 +116,12 @@ export function CustomFieldModal({
   };
   
   /**
-   * Remove an option from the select field
+   * Remove an option from select field
    */
   const removeOption = (option: string) => {
-    const updatedOptions = fieldData.options?.filter(o => o !== option) || [];
+    if (!fieldData.options) return;
+    
+    const updatedOptions = fieldData.options.filter(o => o !== option);
     updateFieldData({ options: updatedOptions });
   };
   
@@ -144,8 +140,8 @@ export function CustomFieldModal({
     }
     
     // Validate options for select fields
-    if (fieldData.type === 'select' && (!fieldData.options || fieldData.options.length < 2)) {
-      newErrors.options = 'Select fields require at least 2 options';
+    if (fieldData.type === 'select' && (!fieldData.options || fieldData.options.length === 0)) {
+      newErrors.options = 'Select fields must have at least one option';
     }
     
     setErrors(newErrors);
@@ -164,21 +160,6 @@ export function CustomFieldModal({
     }
   };
   
-  /**
-   * Render an option item
-   */
-  const renderOptionItem = ({ item }: { item: string }) => (
-    <View style={localStyles.optionItem}>
-      <Text style={localStyles.optionText}>{item}</Text>
-      <TouchableOpacity
-        onPress={() => removeOption(item)}
-        disabled={isSubmitting}
-      >
-        <MaterialIcons name="close" size={18} color="#6B7280" />
-      </TouchableOpacity>
-    </View>
-  );
-  
   return (
     <Modal
       visible={visible}
@@ -187,11 +168,11 @@ export function CustomFieldModal({
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <View style={[styles.modalContent, { maxHeight: '90%' }]}>
           {/* Modal Header */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>
-              {field ? 'Edit Field' : 'Add Custom Field'}
+              {field ? 'Edit Field' : 'Add Registration Field'}
             </Text>
             <TouchableOpacity
               onPress={onClose}
@@ -204,85 +185,141 @@ export function CustomFieldModal({
           {/* Modal Body */}
           <ScrollView style={styles.modalBody}>
             {/* Field Label */}
-            <FormField
-              label="Field Label"
-              value={fieldData.label}
-              onChangeText={(text) => updateFieldData({ label: text })}
-              placeholder="e.g., Dietary Restrictions, T-Shirt Size"
-              error={errors.label}
-              required={true}
-              disabled={isSubmitting}
-            />
+            <View style={localStyles.formGroup}>
+              <Text style={localStyles.label}>
+                Field Label<Text style={localStyles.requiredStar}>*</Text>
+              </Text>
+              <TextInput
+                style={[
+                  localStyles.input,
+                  errors.label && localStyles.inputError
+                ]}
+                value={fieldData.label}
+                onChangeText={(text) => updateFieldData({ label: text })}
+                placeholder="e.g., Dietary Restrictions, T-Shirt Size"
+                editable={!isSubmitting}
+              />
+              {errors.label && (
+                <Text style={localStyles.errorText}>{errors.label}</Text>
+              )}
+            </View>
             
             {/* Field Type */}
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Field Type</Text>
+            <View style={localStyles.formGroup}>
+              <Text style={localStyles.label}>Field Type</Text>
               <View style={localStyles.fieldTypeContainer}>
-                {FIELD_TYPES.map((type) => (
-                  <TouchableOpacity
-                    key={type.id}
+                <TouchableOpacity
+                  style={[
+                    localStyles.fieldTypeButton,
+                    fieldData.type === 'text' && localStyles.fieldTypeButtonActive
+                  ]}
+                  onPress={() => updateFieldData({ type: 'text' })}
+                  disabled={isSubmitting}
+                >
+                  <MaterialIcons
+                    name="text-fields"
+                    size={20}
+                    color={fieldData.type === 'text' ? '#3B82F6' : '#6B7280'}
+                  />
+                  <Text
                     style={[
-                      localStyles.fieldTypeButton,
-                      fieldData.type === type.id && localStyles.fieldTypeButtonSelected
+                      localStyles.fieldTypeText,
+                      fieldData.type === 'text' && localStyles.fieldTypeTextActive
                     ]}
-                    onPress={() => updateFieldData({ type: type.id as 'text' | 'checkbox' | 'select' })}
-                    disabled={isSubmitting}
                   >
-                    <MaterialIcons 
-                      name={type.icon as any} 
-                      size={24} 
-                      color={fieldData.type === type.id ? '#3B82F6' : '#6B7280'} 
-                    />
-                    <Text 
-                      style={[
-                        localStyles.fieldTypeText,
-                        fieldData.type === type.id && localStyles.fieldTypeTextSelected
-                      ]}
-                    >
-                      {type.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                    Text
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    localStyles.fieldTypeButton,
+                    fieldData.type === 'checkbox' && localStyles.fieldTypeButtonActive
+                  ]}
+                  onPress={() => updateFieldData({ type: 'checkbox' })}
+                  disabled={isSubmitting}
+                >
+                  <MaterialIcons
+                    name="check-box"
+                    size={20}
+                    color={fieldData.type === 'checkbox' ? '#3B82F6' : '#6B7280'}
+                  />
+                  <Text
+                    style={[
+                      localStyles.fieldTypeText,
+                      fieldData.type === 'checkbox' && localStyles.fieldTypeTextActive
+                    ]}
+                  >
+                    Checkbox
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    localStyles.fieldTypeButton,
+                    fieldData.type === 'select' && localStyles.fieldTypeButtonActive
+                  ]}
+                  onPress={() => updateFieldData({ type: 'select' })}
+                  disabled={isSubmitting}
+                >
+                  <MaterialIcons
+                    name="list"
+                    size={20}
+                    color={fieldData.type === 'select' ? '#3B82F6' : '#6B7280'}
+                  />
+                  <Text
+                    style={[
+                      localStyles.fieldTypeText,
+                      fieldData.type === 'select' && localStyles.fieldTypeTextActive
+                    ]}
+                  >
+                    Select
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
             
-            {/* Required Field Toggle */}
-            <View style={styles.formGroup}>
-              <View style={styles.toggleContainer}>
-                <Text style={styles.toggleLabel}>Required Field</Text>
+            {/* Required Field */}
+            <View style={localStyles.formGroup}>
+              <View style={localStyles.switchContainer}>
+                <Text style={localStyles.label}>Required Field</Text>
                 <Switch
                   value={fieldData.required}
                   onValueChange={(value) => updateFieldData({ required: value })}
                   disabled={isSubmitting}
                 />
               </View>
-              <Text style={styles.helperText}>
-                Toggle on if attendees must complete this field
+              <Text style={localStyles.helperText}>
+                {fieldData.required
+                  ? 'Attendees must complete this field to register'
+                  : 'This field is optional for attendees'}
               </Text>
             </View>
             
-            {/* Options for Select Fields */}
+            {/* Options for Select Field */}
             {fieldData.type === 'select' && (
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>
-                  Options<Text style={styles.requiredStar}>*</Text>
+              <View style={localStyles.formGroup}>
+                <Text style={localStyles.label}>
+                  Options<Text style={localStyles.requiredStar}>*</Text>
                 </Text>
-                <Text style={styles.helperText}>
-                  Add at least 2 options for your dropdown field
+                <Text style={localStyles.helperText}>
+                  Add options for attendees to choose from
                 </Text>
                 
                 {/* Options List */}
-                {fieldData.options && fieldData.options.length > 0 && (
-                  <View style={localStyles.optionsContainer}>
-                    <FlatList
-                      data={fieldData.options}
-                      renderItem={renderOptionItem}
-                      keyExtractor={(item) => item}
-                      scrollEnabled={false}
-                      numColumns={2}
-                    />
-                  </View>
-                )}
+                <View style={localStyles.optionsContainer}>
+                  {fieldData.options && fieldData.options.map((option, index) => (
+                    <View key={index} style={localStyles.optionItem}>
+                      <Text style={localStyles.optionText}>{option}</Text>
+                      <TouchableOpacity
+                        onPress={() => removeOption(option)}
+                        disabled={isSubmitting}
+                      >
+                        <MaterialIcons name="close" size={16} color="#6B7280" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
                 
                 {/* Add Option Input */}
                 <View style={localStyles.addOptionContainer}>
@@ -292,6 +329,7 @@ export function CustomFieldModal({
                     onChangeText={setNewOption}
                     placeholder="Add an option..."
                     editable={!isSubmitting}
+                    onSubmitEditing={addOption}
                   />
                   <TouchableOpacity
                     style={localStyles.addOptionButton}
@@ -303,53 +341,10 @@ export function CustomFieldModal({
                 </View>
                 
                 {errors.options && (
-                  <Text style={styles.errorText}>{errors.options}</Text>
+                  <Text style={localStyles.errorText}>{errors.options}</Text>
                 )}
               </View>
             )}
-            
-            {/* Field Preview */}
-            <View style={localStyles.previewContainer}>
-              <Text style={localStyles.previewTitle}>Preview</Text>
-              <View style={localStyles.previewContent}>
-                {fieldData.type === 'text' && (
-                  <View>
-                    <Text style={localStyles.previewLabel}>
-                      {fieldData.label || 'Field Label'}
-                      {fieldData.required && <Text style={styles.requiredStar}>*</Text>}
-                    </Text>
-                    <View style={localStyles.previewTextInput} />
-                  </View>
-                )}
-                
-                {fieldData.type === 'checkbox' && (
-                  <View style={localStyles.previewCheckboxContainer}>
-                    <View style={localStyles.previewCheckbox} />
-                    <Text style={localStyles.previewLabel}>
-                      {fieldData.label || 'Field Label'}
-                      {fieldData.required && <Text style={styles.requiredStar}>*</Text>}
-                    </Text>
-                  </View>
-                )}
-                
-                {fieldData.type === 'select' && (
-                  <View>
-                    <Text style={localStyles.previewLabel}>
-                      {fieldData.label || 'Field Label'}
-                      {fieldData.required && <Text style={styles.requiredStar}>*</Text>}
-                    </Text>
-                    <View style={localStyles.previewSelect}>
-                      <Text style={localStyles.previewSelectText}>
-                        {fieldData.options && fieldData.options.length > 0 
-                          ? 'Select an option...' 
-                          : 'No options added'}
-                      </Text>
-                      <MaterialIcons name="arrow-drop-down" size={24} color="#6B7280" />
-                    </View>
-                  </View>
-                )}
-              </View>
-            </View>
           </ScrollView>
           
           {/* Modal Footer */}
@@ -380,59 +375,97 @@ export function CustomFieldModal({
 
 // Local styles for components not in the shared styles
 const localStyles = StyleSheet.create({
-  fieldTypeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
+  formGroup: {
+    marginBottom: 20,
   },
-  fieldTypeButton: {
-    flex: 1,
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  requiredStar: {
+    color: '#EF4444',
+    fontWeight: 'bold',
+  },
+  input: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
     padding: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 8,
-    marginHorizontal: 4,
+    fontSize: 16,
   },
-  fieldTypeButtonSelected: {
-    borderColor: '#3B82F6',
-    backgroundColor: '#EFF6FF',
+  inputError: {
+    borderColor: '#EF4444',
+    borderWidth: 1.5,
   },
-  fieldTypeText: {
-    marginTop: 8,
+  errorText: {
+    color: '#EF4444',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  helperText: {
     fontSize: 14,
     color: '#6B7280',
+    marginTop: 4,
   },
-  fieldTypeTextSelected: {
+  fieldTypeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  fieldTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginHorizontal: 4,
+  },
+  fieldTypeButtonActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#3B82F6',
+  },
+  fieldTypeText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 4,
+  },
+  fieldTypeTextActive: {
     color: '#3B82F6',
     fontWeight: '500',
   },
+  switchContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   optionsContainer: {
-    marginBottom: 16,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
   },
   optionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: '#F3F4F6',
+    borderRadius: 16,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 6,
     marginRight: 8,
     marginBottom: 8,
-    width: '48%',
   },
   optionText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#1F2937',
+    color: '#4B5563',
+    marginRight: 4,
   },
   addOptionContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
   },
   addOptionInput: {
     flex: 1,
@@ -450,63 +483,6 @@ const localStyles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  previewContainer: {
-    marginTop: 16,
-    marginBottom: 16,
-  },
-  previewTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  previewContent: {
-    backgroundColor: '#F9FAFB',
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  previewLabel: {
-    fontSize: 14,
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  previewTextInput: {
-    height: 40,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-  },
-  previewCheckboxContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  previewCheckbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 4,
-    marginRight: 8,
-    backgroundColor: '#FFFFFF',
-  },
-  previewSelect: {
-    height: 40,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-  },
-  previewSelectText: {
-    fontSize: 14,
-    color: '#6B7280',
   },
   modalFooter: {
     flexDirection: 'row',

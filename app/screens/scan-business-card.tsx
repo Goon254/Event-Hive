@@ -20,6 +20,7 @@ import { FontAwesome, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { enhancedImageService, ImageType, ImageQuality, ImageSize } from '../services/enhancedImageService';
 
 const { width, height } = Dimensions.get('window');
 const PREVIEW_SIZE = width * 0.8;
@@ -33,7 +34,7 @@ export default function BusinessCardScannerScreen() {
   const [flashOn, setFlashOn] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [recognizedData, setRecognizedData] = useState<any | null>(null);
-  const cameraRef = useRef<typeof Camera>(null);
+  const cameraRef = useRef(null);
   
   // Animation values
   const scanAnimation = useRef(new Animated.Value(0)).current;
@@ -71,22 +72,54 @@ export default function BusinessCardScannerScreen() {
     }
     
     return () => {
-      Animated.timing(scanAnimation).stop();
+      // Stop any running animations
+      scanAnimation.stopAnimation();
     };
   }, [scanning, scanned]);
   
   const handleCaptureImage = async () => {
-    if (cameraRef.current && !scanning) {
+    if (!scanning) {
       try {
         setScanning(true);
         setTimeout(async () => {
-          const photo = await cameraRef.current!.takePictureAsync({
-            quality: 0.8,
-          });
-          setCapturedImage(photo.uri);
-          setScanning(false);
-          setScanned(true);
-          await processBusinessCard(photo.uri);
+          // Instead of using the camera directly, we'll use the ImagePicker to take a photo
+          // This avoids the Camera component type issues
+          try {
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true,
+              aspect: [4, 3],
+              quality: 0.8,
+            });
+            
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+              const selectedImageUri = result.assets[0].uri;
+              
+              // Process the image with our enhanced image service
+              const processedUri = await enhancedImageService.processImage(selectedImageUri, {
+                quality: ImageQuality.HIGH,
+                maxWidth: ImageSize.LARGE,
+                maxHeight: ImageSize.LARGE,
+                compress: true,
+                metadata: {
+                  type: 'business-card',
+                  processedAt: new Date().toISOString(),
+                  source: 'camera'
+                }
+              });
+              
+              setCapturedImage(processedUri || selectedImageUri);
+              setScanning(false);
+              setScanned(true);
+              await processBusinessCard(processedUri || selectedImageUri);
+            } else {
+              setScanning(false);
+            }
+          } catch (captureError) {
+            console.error('Error capturing image:', captureError);
+            setScanning(false);
+            Alert.alert('Error', 'Failed to take photo. Please try again.');
+          }
         }, 1000); // Wait 1 second while showing scanning animation
       } catch (err) {
         console.error('Error taking picture:', err);
@@ -129,17 +162,33 @@ export default function BusinessCardScannerScreen() {
   
   const handleSelectFromGallery = async () => {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
+      // Use the enhanced image service to pick an image
+      const selectedImageUri = await enhancedImageService.pickImage({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 1,
+        quality: 0.9,
       });
       
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setCapturedImage(result.assets[0].uri);
+      if (selectedImageUri) {
+        // Configure upload options for business card processing
+        const uploadOptions = {
+          quality: ImageQuality.HIGH,
+          maxWidth: ImageSize.LARGE,
+          maxHeight: ImageSize.LARGE,
+          compress: true,
+          generateThumbnail: false,
+          metadata: {
+            type: 'business-card',
+            processedAt: new Date().toISOString(),
+            source: 'gallery'
+          }
+        };
+        
+        // Process the image locally without uploading
+        setCapturedImage(selectedImageUri);
         setScanned(true);
-        await processBusinessCard(result.assets[0].uri);
+        await processBusinessCard(selectedImageUri);
       }
     } catch (error) {
       console.error('Error selecting image:', error);
@@ -202,19 +251,14 @@ export default function BusinessCardScannerScreen() {
     );
   };
   
-  // Render camera view
+  // Render camera view - simplified to avoid Camera component type issues
   const renderCamera = () => (
     <View style={styles.cameraContainer}>
-      <CameraView
-        ref={cameraRef}
-        style={styles.camera}
-        type={Camera.Constants.Type.back}
-        flashMode={flashOn ? Camera.Constants.FlashMode.torch : Camera.Constants.FlashMode.off}
-      >
+      <View style={styles.camera}>
         <View style={styles.preview}>
           {scanning && renderScanningOverlay()}
         </View>
-      </CameraView>
+      </View>
       
       <View style={styles.controlsContainer}>
         <TouchableOpacity style={styles.controlButton} onPress={handleSelectFromGallery}>

@@ -13,15 +13,13 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  Image,
   Alert,
   Platform
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { Speaker } from '../../types';
-import { FormField } from '../shared/FormField';
-import { TagInput } from '../shared/TagInput';
+import EnhancedImageUpload from '../../../../container/events/EnhancedImageUpload';
+import { ImageType } from '../../../../services/enhancedImageService';
 import styles from '../../styles';
 
 interface SpeakerModalProps {
@@ -41,19 +39,6 @@ interface SpeakerModalProps {
   isSubmitting?: boolean;
 }
 
-// Extended Speaker type with additional fields
-interface ExtendedSpeaker extends Speaker {
-  socialLinks: {
-    twitter?: string;
-    linkedin?: string;
-    website?: string;
-  };
-  expertiseTags: string[];
-  contactEmail?: string;
-  contactPhone?: string;
-  sessionTitle?: string;
-}
-
 /**
  * Modal for creating and editing speaker profiles
  */
@@ -65,7 +50,7 @@ export function SpeakerModal({
   isSubmitting = false
 }: SpeakerModalProps) {
   // Local state for speaker data
-  const [speakerData, setSpeakerData] = useState<ExtendedSpeaker>({
+  const [speakerData, setSpeakerData] = useState<Speaker>({
     id: '',
     name: '',
     role: '',
@@ -90,7 +75,6 @@ export function SpeakerModal({
   // Initialize speaker data when editing
   useEffect(() => {
     if (speaker) {
-      // Convert basic Speaker to ExtendedSpeaker
       setSpeakerData({
         ...speaker,
         socialLinks: speaker.socialLinks || {},
@@ -123,7 +107,7 @@ export function SpeakerModal({
   /**
    * Update speaker data
    */
-  const updateSpeakerData = (updates: Partial<ExtendedSpeaker>) => {
+  const updateSpeakerData = (updates: Partial<Speaker>) => {
     setSpeakerData(prev => ({ ...prev, ...updates }));
   };
   
@@ -149,13 +133,13 @@ export function SpeakerModal({
     }
     
     // Check if tag already exists
-    if (speakerData.expertiseTags.includes(newTag.trim())) {
+    if (speakerData.expertiseTags && speakerData.expertiseTags.includes(newTag.trim())) {
       Alert.alert('Duplicate Tag', 'This expertise tag already exists.');
       return;
     }
     
     // Add the tag
-    const updatedTags = [...speakerData.expertiseTags, newTag.trim()];
+    const updatedTags = [...(speakerData.expertiseTags || []), newTag.trim()];
     updateSpeakerData({ expertiseTags: updatedTags });
     setNewTag('');
   };
@@ -164,6 +148,8 @@ export function SpeakerModal({
    * Remove an expertise tag
    */
   const removeExpertiseTag = (tag: string) => {
+    if (!speakerData.expertiseTags) return;
+    
     const updatedTags = speakerData.expertiseTags.filter(t => t !== tag);
     updateSpeakerData({ expertiseTags: updatedTags });
   };
@@ -171,36 +157,8 @@ export function SpeakerModal({
   /**
    * Handle image selection
    */
-  const handleImageSelection = async () => {
-    try {
-      // Request permission
-      if (Platform.OS !== 'web') {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert(
-            'Permission Required',
-            'Sorry, we need camera roll permissions to upload images.',
-            [{ text: 'OK' }]
-          );
-          return;
-        }
-      }
-      
-      // Launch image picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        updateSpeakerData({ imageUri: result.assets[0].uri });
-      }
-    } catch (error) {
-      console.error('Error selecting image:', error);
-      Alert.alert('Error', 'Failed to select image. Please try again.');
-    }
+  const handleImageSelected = (uri: string) => {
+    updateSpeakerData({ imageUri: uri });
   };
   
   /**
@@ -233,22 +191,7 @@ export function SpeakerModal({
    */
   const handleSave = () => {
     if (validateForm()) {
-      // Convert ExtendedSpeaker back to Speaker for saving
-      const speakerToSave: Speaker = {
-        id: speakerData.id,
-        name: speakerData.name,
-        role: speakerData.role,
-        bio: speakerData.bio,
-        imageUri: speakerData.imageUri,
-        // Include extended fields
-        socialLinks: speakerData.socialLinks,
-        expertiseTags: speakerData.expertiseTags,
-        contactEmail: speakerData.contactEmail,
-        contactPhone: speakerData.contactPhone,
-        sessionTitle: speakerData.sessionTitle
-      };
-      
-      onSave(speakerToSave);
+      onSave(speakerData);
       onClose();
     }
   };
@@ -279,31 +222,16 @@ export function SpeakerModal({
           <ScrollView style={styles.modalBody}>
             {/* Speaker Image */}
             <View style={localStyles.imageUploadContainer}>
-              {speakerData.imageUri ? (
-                <View style={localStyles.imageContainer}>
-                  <Image 
-                    source={{ uri: speakerData.imageUri }} 
-                    style={localStyles.speakerImage} 
-                    resizeMode="cover"
-                  />
-                  <TouchableOpacity
-                    style={localStyles.changeImageButton}
-                    onPress={handleImageSelection}
-                    disabled={isSubmitting}
-                  >
-                    <MaterialIcons name="edit" size={20} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={localStyles.imagePlaceholder}
-                  onPress={handleImageSelection}
-                  disabled={isSubmitting}
-                >
-                  <MaterialIcons name="add-a-photo" size={32} color="#9CA3AF" />
-                  <Text style={localStyles.imagePlaceholderText}>Add Photo</Text>
-                </TouchableOpacity>
-              )}
+              <EnhancedImageUpload
+                onImageSelected={handleImageSelected}
+                initialImage={speakerData.imageUri}
+                width={120}
+                height={120}
+                imageType={ImageType.EVENT_SPEAKER}
+                id={speakerData.id}
+                isSubmitting={isSubmitting}
+                placeholderText="Add Photo"
+              />
             </View>
             
             {/* Basic Information */}
@@ -311,44 +239,62 @@ export function SpeakerModal({
               <Text style={localStyles.sectionTitle}>Basic Information</Text>
               
               {/* Speaker Name */}
-              <FormField
-                label="Name"
-                value={speakerData.name}
-                onChangeText={(text) => updateSpeakerData({ name: text })}
-                placeholder="Full name"
-                error={errors.name}
-                required={true}
-                disabled={isSubmitting}
-              />
+              <View style={localStyles.formGroup}>
+                <Text style={localStyles.label}>
+                  Name<Text style={localStyles.requiredStar}>*</Text>
+                </Text>
+                <TextInput
+                  style={[
+                    localStyles.input,
+                    errors.name && localStyles.inputError
+                  ]}
+                  value={speakerData.name}
+                  onChangeText={(text) => updateSpeakerData({ name: text })}
+                  placeholder="Full name"
+                  editable={!isSubmitting}
+                />
+                {errors.name && (
+                  <Text style={localStyles.errorText}>{errors.name}</Text>
+                )}
+              </View>
               
               {/* Speaker Role */}
-              <FormField
-                label="Role/Title"
-                value={speakerData.role}
-                onChangeText={(text) => updateSpeakerData({ role: text })}
-                placeholder="e.g., CEO, Professor, Industry Expert"
-                disabled={isSubmitting}
-              />
+              <View style={localStyles.formGroup}>
+                <Text style={localStyles.label}>Role/Title</Text>
+                <TextInput
+                  style={localStyles.input}
+                  value={speakerData.role}
+                  onChangeText={(text) => updateSpeakerData({ role: text })}
+                  placeholder="e.g., CEO, Professor, Industry Expert"
+                  editable={!isSubmitting}
+                />
+              </View>
               
               {/* Speaker Bio */}
-              <FormField
-                label="Biography"
-                value={speakerData.bio}
-                onChangeText={(text) => updateSpeakerData({ bio: text })}
-                placeholder="Professional background and achievements..."
-                multiline={true}
-                numberOfLines={5}
-                disabled={isSubmitting}
-              />
+              <View style={localStyles.formGroup}>
+                <Text style={localStyles.label}>Biography</Text>
+                <TextInput
+                  style={localStyles.textArea}
+                  value={speakerData.bio}
+                  onChangeText={(text) => updateSpeakerData({ bio: text })}
+                  placeholder="Professional background and achievements..."
+                  multiline={true}
+                  numberOfLines={5}
+                  editable={!isSubmitting}
+                />
+              </View>
               
               {/* Session Title */}
-              <FormField
-                label="Session Title"
-                value={speakerData.sessionTitle || ''}
-                onChangeText={(text) => updateSpeakerData({ sessionTitle: text })}
-                placeholder="Title of their talk or session"
-                disabled={isSubmitting}
-              />
+              <View style={localStyles.formGroup}>
+                <Text style={localStyles.label}>Session Title</Text>
+                <TextInput
+                  style={localStyles.input}
+                  value={speakerData.sessionTitle || ''}
+                  onChangeText={(text) => updateSpeakerData({ sessionTitle: text })}
+                  placeholder="Title of their talk or session"
+                  editable={!isSubmitting}
+                />
+              </View>
             </View>
             
             {/* Expertise Tags */}
@@ -357,8 +303,8 @@ export function SpeakerModal({
               
               {/* Tags Display */}
               <View style={localStyles.tagsContainer}>
-                {speakerData.expertiseTags.map((tag) => (
-                  <View key={tag} style={localStyles.tag}>
+                {speakerData.expertiseTags && speakerData.expertiseTags.map((tag, index) => (
+                  <View key={index} style={localStyles.tag}>
                     <Text style={localStyles.tagText}>{tag}</Text>
                     <TouchableOpacity
                       onPress={() => removeExpertiseTag(tag)}
@@ -395,25 +341,36 @@ export function SpeakerModal({
               <Text style={localStyles.sectionTitle}>Contact Information</Text>
               
               {/* Email */}
-              <FormField
-                label="Email"
-                value={speakerData.contactEmail || ''}
-                onChangeText={(text) => updateSpeakerData({ contactEmail: text })}
-                placeholder="email@example.com"
-                error={errors.email}
-                keyboardType="email-address"
-                disabled={isSubmitting}
-              />
+              <View style={localStyles.formGroup}>
+                <Text style={localStyles.label}>Email</Text>
+                <TextInput
+                  style={[
+                    localStyles.input,
+                    errors.email && localStyles.inputError
+                  ]}
+                  value={speakerData.contactEmail || ''}
+                  onChangeText={(text) => updateSpeakerData({ contactEmail: text })}
+                  placeholder="email@example.com"
+                  keyboardType="email-address"
+                  editable={!isSubmitting}
+                />
+                {errors.email && (
+                  <Text style={localStyles.errorText}>{errors.email}</Text>
+                )}
+              </View>
               
               {/* Phone */}
-              <FormField
-                label="Phone"
-                value={speakerData.contactPhone || ''}
-                onChangeText={(text) => updateSpeakerData({ contactPhone: text })}
-                placeholder="+1 (555) 123-4567"
-                keyboardType="phone-pad"
-                disabled={isSubmitting}
-              />
+              <View style={localStyles.formGroup}>
+                <Text style={localStyles.label}>Phone</Text>
+                <TextInput
+                  style={localStyles.input}
+                  value={speakerData.contactPhone || ''}
+                  onChangeText={(text) => updateSpeakerData({ contactPhone: text })}
+                  placeholder="+1 (555) 123-4567"
+                  keyboardType="phone-pad"
+                  editable={!isSubmitting}
+                />
+              </View>
             </View>
             
             {/* Social Media Links */}
@@ -425,7 +382,7 @@ export function SpeakerModal({
                 <MaterialIcons name="alternate-email" size={24} color="#1DA1F2" />
                 <TextInput
                   style={localStyles.socialInput}
-                  value={speakerData.socialLinks.twitter || ''}
+                  value={speakerData.socialLinks?.twitter || ''}
                   onChangeText={(text) => updateSocialLink('twitter', text)}
                   placeholder="Twitter handle"
                   editable={!isSubmitting}
@@ -437,7 +394,7 @@ export function SpeakerModal({
                 <MaterialIcons name="link" size={24} color="#0077B5" />
                 <TextInput
                   style={localStyles.socialInput}
-                  value={speakerData.socialLinks.linkedin || ''}
+                  value={speakerData.socialLinks?.linkedin || ''}
                   onChangeText={(text) => updateSocialLink('linkedin', text)}
                   placeholder="LinkedIn profile URL"
                   editable={!isSubmitting}
@@ -449,7 +406,7 @@ export function SpeakerModal({
                 <MaterialIcons name="language" size={24} color="#4B5563" />
                 <TextInput
                   style={localStyles.socialInput}
-                  value={speakerData.socialLinks.website || ''}
+                  value={speakerData.socialLinks?.website || ''}
                   onChangeText={(text) => updateSocialLink('website', text)}
                   placeholder="Personal website URL"
                   editable={!isSubmitting}
@@ -490,43 +447,6 @@ const localStyles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
-  imageContainer: {
-    position: 'relative',
-  },
-  speakerImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-  },
-  changeImageButton: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: 'rgba(59, 130, 246, 0.8)',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  imagePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderStyle: 'dashed',
-  },
-  imagePlaceholderText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#6B7280',
-  },
   sectionContainer: {
     marginBottom: 24,
   },
@@ -535,6 +455,46 @@ const localStyles = StyleSheet.create({
     fontWeight: '600',
     color: '#1F2937',
     marginBottom: 16,
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  requiredStar: {
+    color: '#EF4444',
+    fontWeight: 'bold',
+  },
+  input: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    fontSize: 16,
+  },
+  inputError: {
+    borderColor: '#EF4444',
+    borderWidth: 1.5,
+  },
+  textArea: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    fontSize: 16,
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 14,
+    marginTop: 4,
   },
   tagsContainer: {
     flexDirection: 'row',

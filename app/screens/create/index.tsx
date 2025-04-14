@@ -118,6 +118,11 @@ export default function CreateEventScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
     >
+      {/* Status Bar Spacer to fix layout extending to top of screen */}
+      <View style={{
+        height: Platform.OS === 'ios' ? 50 : 30,
+        backgroundColor: '#FFFFFF'
+      }} />
       {/* Header */}
       <EventFormHeader 
         router={router} 
@@ -255,12 +260,55 @@ export default function CreateEventScreen() {
         isSubmitting={isSubmitting}
       />
       
-      {/*
-        TODO: Implement and add other modals:
-        - DatePickerModal
-        - CustomFieldModal
-        - SpeakerModal
-      */}
+      {/* Custom Field Modal */}
+      <CustomFieldModal
+        visible={showCustomFieldModal}
+        onClose={() => {
+          setShowCustomFieldModal(false);
+          setCurrentField(undefined);
+        }}
+        field={currentField}
+        onSave={(field) => {
+          if (currentField) {
+            // Update existing field
+            const updatedFields = formData.customFields.map(f =>
+              f.id === field.id ? field : f
+            );
+            updateFormData({ customFields: updatedFields });
+          } else {
+            // Add new field
+            updateFormData({
+              customFields: [...formData.customFields, field]
+            });
+          }
+        }}
+        isSubmitting={isSubmitting}
+      />
+      
+      {/* Speaker Modal */}
+      <SpeakerModal
+        visible={showSpeakerModal}
+        onClose={() => {
+          setShowSpeakerModal(false);
+          setCurrentSpeaker(undefined);
+        }}
+        speaker={currentSpeaker}
+        onSave={(speaker) => {
+          if (currentSpeaker) {
+            // Update existing speaker
+            const updatedSpeakers = formData.speakers.map(s =>
+              s.id === speaker.id ? speaker : s
+            );
+            updateFormData({ speakers: updatedSpeakers });
+          } else {
+            // Add new speaker
+            updateFormData({
+              speakers: [...formData.speakers, speaker]
+            });
+          }
+        }}
+        isSubmitting={isSubmitting}
+      />
     </KeyboardAvoidingView>
   );
 }

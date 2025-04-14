@@ -1,5 +1,6 @@
 // app/(auth)/register.tsx
 import React, { useState, useRef } from 'react';
+import { enhancedImageService, ImageType, ImageQuality, ImageSize } from '../services/enhancedImageService';
 import {
   View,
   Text,
@@ -197,156 +198,45 @@ export default function Register() {
     }
   };
   
-  // Upload profile image to Firebase Storage with comprehensive error handling and validation
+  // Upload profile image using the enhanced image service
   const uploadProfileImage = async (imageUri: string): Promise<string | null> => {
     try {
       setUploadingImage(true);
       
-      // 1. Check for missing or incorrect file
+      // Check for missing file
       if (!imageUri) {
         console.warn("No image URI provided for upload");
         return null;
       }
       
-      console.log('Starting profile image upload with URI:', imageUri);
+      // Use the enhanced image service
       
-      // 2. Validate file format based on URI extension
-      const extension = imageUri.split('.').pop()?.toLowerCase() || '';
-      const validImageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-      
-      if (!validImageExtensions.includes(extension)) {
-        console.warn(`Potentially unsupported image format: ${extension}`);
-        // We'll still try to upload, but log the warning
-      }
-      
-      // Create a unique filename with timestamp and random string
-      const filename = `profile_${Date.now()}_${Math.random().toString(36).substring(2, 10)}.${extension || 'jpg'}`;
-      
-      // 3. Ensure correct Firebase Storage path - use a simpler path for now
-      // Using a direct path to profile_images without userId for better compatibility with storage rules
-      const storagePath = `profile_images`;
-      
-      // Get storage reference
-      const storage = getStorage();
-      
-      // Verify storage bucket is configured
-      if (!storage.app.options.storageBucket) {
-        console.error('Firebase Storage bucket is not configured properly');
-        Alert.alert(
-          'Configuration Error',
-          'The app is not properly configured for image uploads. You can continue registration without a profile image.'
-        );
-        return null;
-      }
-      
-      console.log('Firebase Storage bucket:', storage.app.options.storageBucket);
-      console.log('Storage path:', storagePath);
-      
-      // Create storage reference with a simpler path structure
-      const storageRef = ref(storage, `${storagePath}/${filename}`);
-      console.log('Full storage reference path:', storageRef.fullPath);
-      
-      // 4. Simplified and robust image fetching
-      console.log('Fetching image data from URI...');
-      
-      // Ensure URI is properly formatted for fetch
-      let fetchUri = imageUri;
-      
-      // Handle different URI formats based on platform
-      if (Platform.OS === 'ios') {
-        // For iOS, ensure the URI has the file:// prefix
-        fetchUri = imageUri.startsWith('file://') ? imageUri : `file://${imageUri}`;
-      } else if (Platform.OS === 'android') {
-        // For Android, use the URI as is, but log it for debugging
-        console.log('Android URI format:', imageUri);
-      }
-      
-      console.log('Formatted fetch URI:', fetchUri);
-      
-      // Fetch with timeout to prevent hanging
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
-      try {
-        const response = await fetch(fetchUri, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      // Configure upload options
+      const uploadOptions = {
+        quality: ImageQuality.HIGH,
+        maxWidth: ImageSize.MEDIUM,
+        maxHeight: ImageSize.MEDIUM,
+        compress: true,
+        generateThumbnail: false,
+        metadata: {
+          uploadedDuring: 'registration',
+          timestamp: new Date().toISOString()
+        },
+        onProgress: (progress: number) => {
+          // Optional: Handle progress updates if needed
+          console.log(`Profile image upload progress: ${progress * 100}%`);
         }
-        
-        const blob = await response.blob();
-        console.log('Image blob created successfully');
-        console.log('Blob size:', blob.size, 'bytes');
-        console.log('Blob type:', blob.type || 'unknown');
-        
-        // 5. Check for empty or invalid blob
-        if (!blob || blob.size === 0) {
-          throw new Error('Created blob is empty or invalid');
-        }
-        
-        // 6. Compress large images to prevent upload issues
-        const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
-        if (blob.size > MAX_FILE_SIZE) {
-          console.warn(`Image file is large (${(blob.size/1024/1024).toFixed(2)}MB). Compressing before upload.`);
-          // We'll still try to upload, but with a warning
-        }
-        
-        // 7. Upload with detailed logging
-        console.log('Starting upload to Firebase Storage...');
-        console.log('Upload reference:', storageRef.fullPath);
-        
-        const uploadSnapshot = await uploadBytes(storageRef, blob);
-        console.log('Upload successful!');
-        console.log('Upload metadata:', uploadSnapshot.metadata);
-        
-        // 8. Get download URL with error handling
-        console.log('Retrieving download URL...');
-        const downloadURL = await getDownloadURL(storageRef);
-        console.log('Download URL obtained:', downloadURL);
-        
-        if (!downloadURL) {
-          throw new Error('Download URL is empty or undefined');
-        }
-        
-        return downloadURL;
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        console.error('Error during image fetch or upload:', fetchError);
-        
-        // Enhanced error logging for Firebase Storage errors
-        if (typeof fetchError === 'object' && fetchError !== null) {
-          const error = fetchError as any;
-          if (error.code) {
-            console.error('Error code:', error.code);
-            
-            // Check for specific Firebase Storage errors
-            if (error.code === 'storage/object-not-found') {
-              console.error('The object does not exist');
-            } else if (error.code === 'storage/unauthorized') {
-              console.error('User is not authorized to perform the operation');
-            } else if (error.code === 'storage/canceled') {
-              console.error('User canceled the upload');
-            } else if (error.code === 'storage/unknown') {
-              console.error('Unknown error occurred, inspect the server response');
-            }
-          }
-          
-          if (error.message) {
-            console.error('Error message:', error.message);
-          }
-          
-          if (error.serverResponse) {
-            console.error('Server response:', error.serverResponse);
-          }
-        }
-        
-        throw fetchError;
-      }
+      };
+      
+      // Upload the image using the enhanced service
+      const downloadURL = await enhancedImageService.uploadProfileImage(imageUri, uploadOptions);
+      console.log('Profile image uploaded successfully, URL:', downloadURL);
+      
+      return downloadURL;
     } catch (error: any) {
       console.error('Error uploading profile image:', error);
       
-      // Provide user-friendly error messages
+      // Provide user-friendly error message
       let errorMessage = 'There was a problem uploading your profile image. You can continue registration and add a photo later.';
       
       if (error.code === 'storage/unauthorized') {
@@ -357,10 +247,6 @@ export default function Register() {
         errorMessage = 'An unknown error occurred during upload. Please try again.';
       } else if (error.code === 'storage/quota-exceeded') {
         errorMessage = 'Storage quota exceeded. Please try a smaller image.';
-      } else if (error.code === 'storage/invalid-checksum') {
-        errorMessage = 'The file appears to be corrupted. Please select a different image.';
-      } else if (error.code === 'storage/retry-limit-exceeded') {
-        errorMessage = 'Upload failed after multiple attempts. Please check your connection and try again.';
       }
       
       Alert.alert('Upload Error', errorMessage);
@@ -372,7 +258,7 @@ export default function Register() {
     }
   };
   
-  // Helper function to check image size
+  // Helper function to check image size - now using the enhanced image service
   const checkImageSize = async (uri: string): Promise<boolean> => {
     try {
       // Get file info to check size
@@ -397,32 +283,21 @@ export default function Register() {
       return false;
     }
   };
-  // Pick profile image using expo-image-picker
+  // Pick profile image using the enhanced image service
   const pickImage = async () => {
     try {
-      // Request permission if needed
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'We need access to your photo library to set a profile picture.'
-        );
-        return;
-      }
+      // Use the enhanced image service
       
-      // Launch image picker with correct options and lower quality to reduce file size
-      const result = await ImagePicker.launchImageLibraryAsync({
+      // Use the enhanced service to pick an image
+      const selectedImageUri = await enhancedImageService.pickImage({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.5, // Reduced quality to help with upload issues
-        exif: false, // Don't include EXIF data to reduce file size
+        quality: 0.7,
+        exif: false
       });
       
-      console.log('Image picker result:', result);
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedImageUri = result.assets[0].uri;
+      if (selectedImageUri) {
         console.log('Selected image URI:', selectedImageUri);
         handleChange('profileImage', selectedImageUri);
       }
@@ -494,7 +369,8 @@ export default function Register() {
         if (currentStep === 2 && userData.profileImage && !userData.profileImageUrl) {
           console.log('Checking and uploading profile image before proceeding to next step');
           try {
-            // Check image size first
+            // Check image size first - this is now redundant as the enhanced service handles this,
+            // but keeping it for backward compatibility
             const isValidSize = await checkImageSize(userData.profileImage);
             if (!isValidSize) {
               Alert.alert(
@@ -570,18 +446,7 @@ export default function Register() {
         if (userData.profileImage && !profileImageUrl) {
           console.log('Uploading profile image during registration submission');
           try {
-            // Check image size first
-            const isValidSize = await checkImageSize(userData.profileImage);
-            if (!isValidSize) {
-              Alert.alert(
-                'Large Image Detected',
-                'Your selected image is quite large and may cause upload issues. We will attempt to upload it anyway, but registration may proceed without the image if upload fails.',
-                [
-                  { text: 'Continue', style: 'default' }
-                ]
-              );
-            }
-            
+            // The enhanced image service handles size checking and compression
             profileImageUrl = await uploadProfileImage(userData.profileImage);
             console.log('Profile image uploaded during registration, URL:', profileImageUrl);
           } catch (uploadError) {

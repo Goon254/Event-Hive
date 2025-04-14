@@ -4,13 +4,14 @@
  * Second section of the event creation form for date and time information.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { format } from 'date-fns';
 import { EventForm, FormErrors, NavigationDirection } from '../../types';
 import { TIME_ZONES } from '../../constants';
 import { SectionNavigation } from '../shared/SectionNavigation';
+import { DatePickerModal } from '../modals/DatePickerModal';
 import styles from '../../styles';
 
 interface DateTimeSectionProps {
@@ -44,29 +45,39 @@ export function DateTimeSection({
   isSubmitting,
   showDatePickerModal,
 }: DateTimeSectionProps) {
+  // Local state for date picker
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   
   /**
    * Handle start date and time selection
    */
   const handleStartDateTimeSelect = () => {
-    showDatePickerModal('start', (selectedDate) => {
-      updateFormData({
-        date: selectedDate,
-        time: selectedDate
-      });
-    });
+    setShowStartDatePicker(true);
   };
   
   /**
    * Handle end date and time selection
    */
   const handleEndDateTimeSelect = () => {
-    showDatePickerModal('end', (selectedDate) => {
+    setShowEndDatePicker(true);
+  };
+  
+  /**
+   * Handle date selection from modal
+   */
+  const handleDateSelected = (date: Date, isStartDate: boolean) => {
+    if (isStartDate) {
       updateFormData({
-        endDate: selectedDate,
-        endTime: selectedDate
+        date: date,
+        time: date
       });
-    });
+    } else {
+      updateFormData({
+        endDate: date,
+        endTime: date
+      });
+    }
   };
   
   return (
@@ -105,7 +116,6 @@ export function DateTimeSection({
         <TouchableOpacity
           style={styles.dateButton}
           onPress={handleStartDateTimeSelect}
-          disabled={isSubmitting}
         >
           <Text style={styles.dateButtonText}>
             {format(formData.time, 'h:mm a')}
@@ -144,6 +154,29 @@ export function DateTimeSection({
           </Text>
         </TouchableOpacity>
       </View>
+      
+      {/* Date Picker Modals */}
+      <DatePickerModal
+        visible={showStartDatePicker}
+        onClose={() => setShowStartDatePicker(false)}
+        initialDate={formData.date}
+        onSave={(date) => handleDateSelected(date, true)}
+        title="Select Start Date & Time"
+        showTime={true}
+        isSubmitting={isSubmitting}
+        minDate={new Date()} // Can't select dates in the past
+      />
+      
+      <DatePickerModal
+        visible={showEndDatePicker}
+        onClose={() => setShowEndDatePicker(false)}
+        initialDate={formData.endDate}
+        onSave={(date) => handleDateSelected(date, false)}
+        title="Select End Date & Time"
+        showTime={true}
+        isSubmitting={isSubmitting}
+        minDate={formData.date} // End date must be after start date
+      />
       
       {/* Time Zone */}
       <View style={styles.formGroup}>

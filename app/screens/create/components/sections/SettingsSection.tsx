@@ -4,12 +4,13 @@
  * Sixth section of the event creation form for event settings and policies.
  */
 
-import React from 'react';
-import { View, Text, Switch, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Switch, TouchableOpacity, FlatList, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { EventForm, FormErrors, NavigationDirection, CustomField } from '../../types';
 import { FormField } from '../shared/FormField';
 import { SectionNavigation } from '../shared/SectionNavigation';
+import { Linking } from 'react-native';
 import styles from '../../styles';
 
 interface SettingsSectionProps {
@@ -115,8 +116,69 @@ export function SettingsSection({
             No custom fields added. Add fields to collect additional information from attendees.
           </Text>
         ) : (
-          <View>
-            {/* Custom fields list would go here */}
+          <View style={styles.customFieldsList}>
+            <FlatList
+              data={formData.customFields}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.customFieldItem}>
+                  <View style={styles.customFieldInfo}>
+                    <Text style={styles.customFieldLabel}>{item.label}</Text>
+                    <View style={styles.customFieldDetails}>
+                      <Text style={styles.customFieldType}>
+                        Type: {item.type.charAt(0).toUpperCase() + item.type.slice(1)}
+                      </Text>
+                      <Text style={styles.customFieldRequired}>
+                        {item.required ? ' • Required' : ' • Optional'}
+                      </Text>
+                    </View>
+                    {item.options && item.options.length > 0 && (
+                      <Text style={styles.customFieldOptions}>
+                        Options: {item.options.join(', ')}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={styles.customFieldActions}>
+                    <TouchableOpacity
+                      style={styles.editFieldButton}
+                      onPress={() => {
+                        setCurrentField(item);
+                        showCustomFieldModal();
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      <MaterialIcons name="edit" size={20} color="#4B5563" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.removeFieldButton}
+                      onPress={() => {
+                        Alert.alert(
+                          'Remove Field',
+                          `Are you sure you want to remove the "${item.label}" field?`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Remove',
+                              onPress: () => {
+                                const updatedFields = formData.customFields.filter(
+                                  field => field.id !== item.id
+                                );
+                                updateFormData({ customFields: updatedFields });
+                              },
+                              style: 'destructive'
+                            }
+                          ]
+                        );
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      <MaterialIcons name="delete" size={20} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+              scrollEnabled={false}
+            />
           </View>
         )}
       </View>
@@ -131,8 +193,15 @@ export function SettingsSection({
         </View>
         <TouchableOpacity
           onPress={() => {
-            // TODO: Show terms and conditions
-            alert('Terms and conditions will be displayed here.');
+            // Open the terms and conditions page in the browser
+            Linking.openURL('https://www.scango.co/terms-and-conditions')
+              .catch(err => {
+                console.error('Failed to open terms and conditions:', err);
+                Alert.alert(
+                  'Error',
+                  'Could not open the Terms & Conditions page. Please check your internet connection.'
+                );
+              });
           }}
           disabled={isSubmitting}
         >

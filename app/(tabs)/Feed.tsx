@@ -23,6 +23,7 @@ import socialService from '../services/socialService';
 import { SocialPost, ContentType, PrivacyLevel } from '../models/social';
 import * as ImagePicker from 'expo-image-picker';
 import { createShadow } from '../utils/platformUtils';
+import { enhancedImageService, ImageType, ImageQuality, ImageSize } from '../services/enhancedImageService';
 import { useSocialPosts } from '../hooks/useSocialPosts';
 // Using our own date utilities instead of date-fns to avoid RangeError issues
 import { toDateObject, getRelativeTime } from '../utils/dateUtils';
@@ -196,21 +197,23 @@ export default function SocialFeedScreen() {
     }
   };
 
-  // Pick an image from gallery
+  // Pick an image from gallery using enhanced image service
   const pickImage = async () => {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
+      // Use the enhanced image service to pick an image
+      const selectedImageUri = await enhancedImageService.pickImage({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
       });
       
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setPostImage(result.assets[0].uri);
+      if (selectedImageUri) {
+        setPostImage(selectedImageUri);
       }
     } catch (error) {
       console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
     }
   };
 

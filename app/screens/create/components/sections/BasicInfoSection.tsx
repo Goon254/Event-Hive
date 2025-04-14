@@ -12,7 +12,8 @@ import { EVENT_CATEGORIES } from '../../constants';
 import { FormField } from '../shared/FormField';
 import { TagInput } from '../shared/TagInput';
 import { SectionNavigation } from '../shared/SectionNavigation';
-import ImageUpload from '../../../../container/events/ImageUpload';
+import EnhancedImageUpload from '../../../../container/events/EnhancedImageUpload';
+import { ImageType } from '../../../../services/enhancedImageService';
 import styles from '../../styles';
 
 interface BasicInfoSectionProps {
@@ -82,9 +83,15 @@ export function BasicInfoSection({
         <Text style={styles.helperText}>
           This will be the main image displayed for your event
         </Text>
-        <ImageUpload
+        <EnhancedImageUpload
           onImageSelected={handleImageSelected}
           initialImage={formData.imageUri || undefined}
+          width={300}
+          height={200}
+          imageType={ImageType.EVENT}
+          id={formData.id}
+          isSubmitting={isSubmitting}
+          placeholderText="Upload Event Image"
         />
       </View>
 

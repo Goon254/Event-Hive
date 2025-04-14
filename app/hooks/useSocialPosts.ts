@@ -3,7 +3,7 @@ import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useAuth } from '../AuthContext';
 import socialService from '../services/socialService';
-import { imageUploadService } from '../services/imageUploadService';
+import { enhancedImageService, ImageType, ImageQuality, ImageSize } from '../services/enhancedImageService';
 import { ContentType, PrivacyLevel } from '../models/social';
 
 /**
@@ -56,23 +56,48 @@ export function useSocialPosts() {
       let mediaUrls: string[] = [];
       if (mediaFiles.length > 0) {
         try {
-          // Use the unified image upload service
-          const uploadResult = await imageUploadService.uploadPostImages(
-            user.id,
-            mediaFiles,
-            undefined, // No post ID yet
-            (progress) => {
+          // Configure upload options
+          const uploadOptions = {
+            quality: ImageQuality.HIGH,
+            maxWidth: ImageSize.LARGE,
+            maxHeight: ImageSize.LARGE,
+            compress: true,
+            generateThumbnail: true,
+            thumbnailSize: 300,
+            metadata: {
+              userId: user.id,
+              contentType: ContentType.MIXED,
+              privacyLevel,
+              uploadedAt: new Date().toISOString()
+            },
+            onProgress: (progress: number) => {
               // Update overall progress
               setUploadProgress(progress);
             }
+          };
+          
+          // Upload each image using the enhanced image service
+          const uploadPromises = mediaFiles.map(uri =>
+            enhancedImageService.uploadPostImage(uri, undefined, uploadOptions)
           );
           
+          // Wait for all uploads to complete
+          const results = await Promise.allSettled(uploadPromises);
+          
+          // Process results
+          const successfulUploads = results
+            .filter((result): result is PromiseFulfilledResult<{url: string, thumbnailUrl?: string}> =>
+              result.status === 'fulfilled'
+            )
+            .map(result => result.value.url);
+          
           // Get successful uploads
-          mediaUrls = uploadResult.urls;
+          mediaUrls = successfulUploads;
           
           // Handle any errors
-          if (uploadResult.errors.length > 0) {
-            console.warn(`${uploadResult.errors.length} images failed to upload`);
+          const failedUploads = results.filter(result => result.status === 'rejected').length;
+          if (failedUploads > 0) {
+            console.warn(`${failedUploads} images failed to upload`);
             
             // If all uploads failed, throw an error
             if (mediaUrls.length === 0) {
