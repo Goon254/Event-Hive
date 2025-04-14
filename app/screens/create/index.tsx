@@ -5,15 +5,26 @@
  * Orchestrates the multi-step form and manages shared state.
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../AuthContext';
+import { TicketType, CustomField, Speaker } from './types';
 
 // Components
 import { EventFormHeader } from './components/EventFormHeader';
 import { EventFormProgress } from './components/EventFormProgress';
 import { BasicInfoSection } from './components/sections/BasicInfoSection';
+import { DateTimeSection } from './components/sections/DateTimeSection';
+import { LocationSection } from './components/sections/LocationSection';
+import { TicketsSection } from './components/sections/TicketsSection';
+import { SpeakersSection } from './components/sections/SpeakersSection';
+import { SettingsSection } from './components/sections/SettingsSection';
+import { PreviewModal } from './components/modals/PreviewModal';
+import { TicketModal } from './components/modals/TicketModal';
+import { DatePickerModal } from './components/modals/DatePickerModal';
+import { CustomFieldModal } from './components/modals/CustomFieldModal';
+import { SpeakerModal } from './components/modals/SpeakerModal';
 
 // Hooks
 import { useEventForm } from './hooks/useEventForm';
@@ -31,6 +42,19 @@ export default function CreateEventScreen() {
   const { user, isLoading: authLoading } = useAuth();
   const scrollViewRef = useRef<ScrollView>(null);
   
+  // Local state for modals
+  const [showTicketModal, setShowTicketModal] = useState(false);
+  const [currentTicket, setCurrentTicket] = useState<TicketType | undefined>(undefined);
+  
+  const [showCustomFieldModal, setShowCustomFieldModal] = useState(false);
+  const [currentField, setCurrentField] = useState<CustomField | undefined>(undefined);
+  
+  const [showSpeakerModal, setShowSpeakerModal] = useState(false);
+  const [currentSpeaker, setCurrentSpeaker] = useState<Speaker | undefined>(undefined);
+  
+  const [datePickerMode, setDatePickerMode] = useState<'start' | 'end' | 'deadline'>('start');
+  const [datePickerCallback, setDatePickerCallback] = useState<(date: Date) => void>(() => {});
+  
   // Initialize form state and validation
   const {
     formData,
@@ -47,7 +71,19 @@ export default function CreateEventScreen() {
     handleImageSelected,
     showPreview,
     setShowPreview,
-    // Other form state and functions...
+    // Date & Time picker states
+    showDatePicker,
+    showEndDatePicker,
+    showTimePicker,
+    showEndTimePicker,
+    showDeadlinePicker,
+    currentPickerMode,
+    setShowDatePicker,
+    setShowEndDatePicker,
+    setShowTimePicker,
+    setShowEndTimePicker,
+    setShowDeadlinePicker,
+    setCurrentPickerMode,
   } = useEventForm();
   
   // Initialize submission handling
@@ -114,24 +150,116 @@ export default function CreateEventScreen() {
             isSubmitting={isSubmitting}
           />
         )}
+        {activeSection === 2 && (
+          <DateTimeSection
+            formData={formData}
+            formErrors={formErrors}
+            updateFormData={updateFormData}
+            navigateSection={navigateSection}
+            isSubmitting={isSubmitting}
+            showDatePickerModal={(mode, callback) => {
+              setDatePickerMode(mode);
+              setDatePickerCallback(() => callback);
+              if (mode === 'start') {
+                setShowDatePicker(true);
+              } else if (mode === 'end') {
+                setShowEndDatePicker(true);
+              }
+            }}
+          />
+        )}
         
-        {/* 
-          TODO: Implement and add other sections:
-          - DateTimeSection (section 2)
-          - LocationSection (section 3)
-          - TicketsSection (section 4)
-          - SpeakersSection (section 5)
-          - SettingsSection (section 6)
-        */}
+        {activeSection === 3 && (
+          <LocationSection
+            formData={formData}
+            formErrors={formErrors}
+            updateFormData={updateFormData}
+            navigateSection={navigateSection}
+            isSubmitting={isSubmitting}
+          />
+        )}
+        
+        {activeSection === 4 && (
+          <TicketsSection
+            formData={formData}
+            formErrors={formErrors}
+            updateFormData={updateFormData}
+            navigateSection={navigateSection}
+            isSubmitting={isSubmitting}
+            showDeadlinePicker={showDeadlinePicker}
+            setShowDeadlinePicker={setShowDeadlinePicker}
+            showTicketModal={() => setShowTicketModal(true)}
+            setCurrentTicket={setCurrentTicket}
+          />
+        )}
+        
+        {activeSection === 5 && (
+          <SpeakersSection
+            formData={formData}
+            formErrors={formErrors}
+            updateFormData={updateFormData}
+            navigateSection={navigateSection}
+            isSubmitting={isSubmitting}
+            handleImageSelected={handleImageSelected}
+            showSpeakerModal={() => setShowSpeakerModal(true)}
+            setCurrentSpeaker={setCurrentSpeaker}
+          />
+        )}
+        
+        {activeSection === 6 && (
+          <SettingsSection
+            formData={formData}
+            formErrors={formErrors}
+            updateFormData={updateFormData}
+            navigateSection={navigateSection}
+            isSubmitting={isSubmitting}
+            submitForm={submitForm}
+            showCustomFieldModal={() => setShowCustomFieldModal(true)}
+            setCurrentField={setCurrentField}
+          />
+        )}
       </ScrollView>
       
-      {/* 
-        TODO: Implement and add modals:
+      {/* Preview Modal */}
+      <PreviewModal
+        visible={showPreview}
+        onClose={() => setShowPreview(false)}
+        eventData={formData}
+        onSubmit={submitForm}
+        isSubmitting={isSubmitting}
+      />
+      
+      {/* Ticket Modal */}
+      <TicketModal
+        visible={showTicketModal}
+        onClose={() => {
+          setShowTicketModal(false);
+          setCurrentTicket(undefined);
+        }}
+        ticket={currentTicket}
+        onSave={(ticket) => {
+          if (currentTicket) {
+            // Update existing ticket
+            const updatedTickets = formData.ticketTypes.map(t =>
+              t.id === ticket.id ? ticket : t
+            );
+            updateFormData({ ticketTypes: updatedTickets });
+          } else {
+            // Add new ticket
+            updateFormData({
+              ticketTypes: [...formData.ticketTypes, ticket],
+              price: '' // Clear single price when adding ticket types
+            });
+          }
+        }}
+        isSubmitting={isSubmitting}
+      />
+      
+      {/*
+        TODO: Implement and add other modals:
         - DatePickerModal
-        - TicketModal
         - CustomFieldModal
         - SpeakerModal
-        - PreviewModal
       */}
     </KeyboardAvoidingView>
   );

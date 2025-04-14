@@ -26,40 +26,19 @@ export default function ScanScreen() {
     setScanned(true);
     
     try {
-      // QR format: scangoapp://event-checkin/EVENT_ID/USER_ID
-      if (data.startsWith('scangoapp://event-checkin/')) {
-        const parts = data.split('/');
-        if (parts.length >= 4) {
-          const eventId = parts[2];
-          const attendeeId = parts[3];
-          
-          // Process check-in
-          const success = await eventService.processQRCheckIn(eventId, attendeeId);
-          
-          if (success) {
-            Alert.alert(
-              "Check-in Successful",
-              "Attendee has been checked in!",
-              [{ text: "OK", onPress: () => setScanned(false) }]
-            );
-          } else {
-            Alert.alert(
-              "Check-in Failed",
-              "This attendee may already be checked in or is not registered for this event.",
-              [{ text: "Try Again", onPress: () => setScanned(false) }]
-            );
-          }
-        } else {
-          Alert.alert(
-            "Invalid QR Code",
-            "The QR code is formatted incorrectly.",
-            [{ text: "Try Again", onPress: () => setScanned(false) }]
-          );
-        }
+      // Process the QR code using our enhanced service
+      const { success, message } = await eventService.processQRCheckIn(data, user?.id || 'unknown');
+      
+      if (success) {
+        Alert.alert(
+          "Check-in Successful",
+          message,
+          [{ text: "OK", onPress: () => setScanned(false) }]
+        );
       } else {
         Alert.alert(
-          "Invalid QR Code",
-          "This doesn't appear to be a ScanGo QR code.",
+          "Check-in Failed",
+          message,
           [{ text: "Try Again", onPress: () => setScanned(false) }]
         );
       }

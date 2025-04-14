@@ -15,6 +15,7 @@ import { db, storage } from '../../lib/firebaseConfig';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sanitizeForFirestore } from './migrationService';
+import { imageUploadService } from './imageUploadService';
 
 // Constants
 const API_BASE_URL = 'https://api.scangoapp.com';
@@ -166,25 +167,31 @@ export class ProfileService {
    */
   async uploadProfileImage(userId: string, imageUri: string): Promise<string> {
     try {
-      // Create a blob from the image URI
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
+      // Validate inputs
+      if (!userId) {
+        throw new Error('User ID is required for profile image upload');
+      }
       
-      // Create a unique filename
-      const filename = `profile_${userId}_${Date.now()}`;
-      const storageRef = ref(storage, `profile_images/${filename}`);
+      if (!imageUri) {
+        throw new Error('Image URI is required for profile image upload');
+      }
       
-      // Upload the image
-      await uploadBytes(storageRef, blob);
-      
-      // Get the download URL
-      const downloadURL = await getDownloadURL(storageRef);
+      // Upload the image and get the download URL
+      const downloadURL = await imageUploadService.uploadProfileImage(userId, imageUri, (progress: number) => {
+        // Optional: Handle progress updates if needed
+        console.log(`Profile image upload progress: ${progress * 100}%`);
+      });
       
       // Update the user profile with the new image URL
-      await updateDoc(doc(db, 'users', userId), {
-        profileImageUrl: downloadURL,
-        updatedAt: serverTimestamp()
-      });
+      try {
+        await updateDoc(doc(db, 'users', userId), {
+          profileImageUrl: downloadURL,
+          updatedAt: serverTimestamp()
+        });
+      } catch (updateError) {
+        console.error('Error updating user profile with image URL:', updateError);
+        throw new Error('Failed to update profile with new image URL');
+      }
       
       // Clear cache
       await AsyncStorage.removeItem(`${PROFILE_CACHE_KEY}_${userId}`);

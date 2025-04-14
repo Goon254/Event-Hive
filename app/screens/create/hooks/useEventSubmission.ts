@@ -8,6 +8,7 @@ import { Alert, Platform } from 'react-native';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { EventForm, User } from '../types';
 import eventService from '../../../services/eventServices';
+import { imageUploadService } from '../../../services/imageUploadService';
 
 /**
  * Custom hook for handling event submission
@@ -40,48 +41,36 @@ export function useEventSubmission(
         return "";
       }
       
-      const storage = getStorage();
-      const filename = uri.substring(uri.lastIndexOf('/') + 1);
-      const eventImagesRef = ref(storage, `event-images/${Date.now()}_${filename}`);
-      
-      // For React Native, we need to prepare the URI properly
-      const fileUri = Platform.OS === 'ios' ? uri.replace('file://', '') : uri;
-      
-      // Fetch the image and convert to blob
-      const response = await fetch(uri);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      if (!user || !user.id) {
+        throw new Error('User ID is required for event image upload');
       }
       
-      const blob = await response.blob();
-      if (!blob) {
-        throw new Error("Failed to create blob from image");
-      }
+      // Use the unified image upload service
+      const onProgress = (progress: number) => {
+        setUploadProgress(progress);
+      };
       
-      // Upload the blob
-      setUploadProgress(0.3);
-      const uploadTask = await uploadBytes(eventImagesRef, blob);
-      setUploadProgress(0.7);
-      
-      // Get download URL
-      const downloadURL = await getDownloadURL(eventImagesRef);
-      setUploadProgress(1.0);
+      // Upload the image using the imageUploadService
+      const downloadURL = await imageUploadService.uploadEventImage(
+        user.id,
+        uri,
+        undefined, // No event ID yet
+        onProgress
+      );
       
       return downloadURL;
     } catch (error) {
       console.error('Error uploading image:', error);
-      // Add more detailed error logging
-      if ((error as { code?: string }).code) {
-        if (error instanceof Error && 'code' in error) {
-          console.error(`Firebase error code: ${(error as { code: string }).code}`);
-        }
+      
+      // Provide more specific error message if available
+      if (error instanceof Error) {
+        throw error;
       }
       
-      // Return empty string instead of throwing an error,
-      // so event creation can continue even if image upload fails
-      return "";
+      // Generic error if not an Error instance
+      throw new Error('Failed to upload image. Please try again with a different image.');
     }
-  }, []);
+  }, [user]);
 
   /**
    * Reset the form to its initial state
@@ -172,13 +161,45 @@ export function useEventSubmission(
           mainImageUrl = await uploadImage(formData.imageUri);
         }
       } catch (imageError) {
-        console.warn('Main image upload failed, continuing without image:', imageError);
-        // Show warning but continue with event creation
-        Alert.alert(
-          'Image Upload Warning',
-          'We encountered an issue uploading your image, but will continue creating your event.',
-          [{ text: 'Continue' }]
-        );
+        console.warn('Main image upload failed:', imageError);
+        
+        // Provide more specific error message based on the error
+        let errorMessage = 'We encountered an issue uploading your image.';
+        
+        if (imageError instanceof Error) {
+          errorMessage = imageError.message;
+        }
+        
+        // Ask user if they want to continue without the image or try again
+        return new Promise((resolve) => {
+          Alert.alert(
+            'Image Upload Failed',
+            `${errorMessage} Would you like to continue creating the event without an image?`,
+            [
+              {
+                text: 'Try Again',
+                style: 'cancel',
+                onPress: () => {
+                  setIsSubmitting(false);
+                  resolve(false);
+                }
+              },
+              {
+                text: 'Continue Without Image',
+                onPress: () => {
+                  // Continue with event creation without the image
+                  mainImageUrl = null;
+                  resolve(true);
+                }
+              }
+            ],
+            { cancelable: false }
+          );
+        }).then(shouldContinue => {
+          if (!shouldContinue) {
+            return false; // Exit the function
+          }
+        });
       }
   
       // Format location string based on event type
@@ -251,6 +272,9 @@ export function useEventSubmission(
         ...(mainImageUrl ? { imageUrl: mainImageUrl } : {}),
         // Store cancellation policy
         cancellationPolicy: formData.cancellationPolicy || '',
+        // Add required fields for Event type
+        privacyLevel: formData.isPrivate ? 'private' as const : 'public' as const,
+        publishStatus: 'published' as const
       };
 
       // Now create the event with the properly formatted data

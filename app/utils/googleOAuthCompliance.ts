@@ -25,10 +25,22 @@ const TOKEN_KEY = 'google_oauth_tokens';
 // Verify app is properly registered with Google
 export const verifyAppConfiguration = (): boolean => {
   // Check if we have valid client IDs configured
-  const { googleClientId, googleExpoClientId } = Constants.expoConfig?.extra || {};
+  const {
+    googleClientIdAndroid,
+    googleClientIdIos,
+    googleClientIdWeb,
+    googleClientIdExpo
+  } = Constants.expoConfig?.extra || {};
   
-  if (!googleClientId || !googleExpoClientId) {
-    console.error('Missing Google OAuth client IDs in app configuration');
+  // Check for the appropriate client ID based on platform
+  let clientId;
+  if (Platform.OS === 'ios') clientId = googleClientIdIos;
+  else if (Platform.OS === 'android') clientId = googleClientIdAndroid;
+  else if (Platform.OS === 'web') clientId = googleClientIdWeb;
+  else clientId = googleClientIdExpo; // For Expo Go
+  
+  if (!clientId || clientId.includes('YOUR_') || clientId === '') {
+    console.error('Missing Google OAuth client ID for platform:', Platform.OS);
     return false;
   }
   
@@ -177,6 +189,13 @@ export const clearTokens = async (): Promise<void> => {
  * This ensures the redirect URI matches what's configured in Google Cloud Console
  */
 export const getRedirectUri = (): string => {
+  // Get redirect URIs from app config
+  const {
+    oauthRedirectUriIos,
+    oauthRedirectUriAndroid,
+    oauthRedirectUriWeb
+  } = Constants.expoConfig?.extra || {};
+  
   // For Expo Go
   if (Constants.appOwnership === 'expo') {
     return `${Constants.expoConfig?.scheme || 'exp'}://expo-development-client`;
@@ -188,6 +207,16 @@ export const getRedirectUri = (): string => {
     throw new Error('App scheme is not defined in app.json/app.config.js');
   }
   
+  // Use configured redirect URIs if available
+  if (Platform.OS === 'ios' && oauthRedirectUriIos) {
+    return oauthRedirectUriIos;
+  } else if (Platform.OS === 'android' && oauthRedirectUriAndroid) {
+    return oauthRedirectUriAndroid;
+  } else if (Platform.OS === 'web' && oauthRedirectUriWeb) {
+    return oauthRedirectUriWeb;
+  }
+  
+  // Fallback to default URIs
   if (Platform.OS === 'web') {
     // For web, use the current origin
     return window.location.origin;
@@ -248,8 +277,25 @@ export const getCompliantOAuthConfig = async (additionalScopes: string[] = []): 
   const { codeVerifier, codeChallenge } = await generatePKCE();
   
   // Get the correct client ID based on platform
-  const { googleClientId, googleExpoClientId } = Constants.expoConfig?.extra || {};
-  const clientId = Constants.appOwnership === 'expo' ? googleExpoClientId : googleClientId;
+  const {
+    googleClientIdAndroid,
+    googleClientIdIos,
+    googleClientIdWeb,
+    googleClientIdExpo
+  } = Constants.expoConfig?.extra || {};
+  
+  let clientId;
+  if (Constants.appOwnership === 'expo') {
+    clientId = googleClientIdExpo;
+  } else if (Platform.OS === 'ios') {
+    clientId = googleClientIdIos;
+  } else if (Platform.OS === 'android') {
+    clientId = googleClientIdAndroid;
+  } else if (Platform.OS === 'web') {
+    clientId = googleClientIdWeb;
+  } else {
+    clientId = googleClientIdExpo;
+  }
   
   return {
     clientId,

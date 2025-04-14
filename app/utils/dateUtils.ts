@@ -1,139 +1,196 @@
 import { Timestamp } from 'firebase/firestore';
+import { format, parse, isValid, formatDistance, differenceInDays } from 'date-fns';
 
 /**
- * Converts a Firebase Timestamp or Date object to a JavaScript Date
- * @param date Firebase Timestamp or Date object
- * @returns JavaScript Date object
+ * Comprehensive date utilities for standardized date handling
+ * Addresses "invalid time value" errors by providing consistent
+ * conversion and formatting functions
  */
-export const toDate = (date: Date | Timestamp | any | null): Date | null => {
+
+// Get user's timezone
+export const getUserTimezone = (): string => {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+};
+
+/**
+ * Convert any date representation to a JavaScript Date object
+ * Handles multiple formats:
+ * - JavaScript Date objects
+ * - Firebase Timestamps
+ * - Timestamp-like objects with seconds
+ * - ISO strings
+ * - Unix timestamps (numbers)
+ */
+export const toDateObject = (date: any): Date | null => {
   if (!date) return null;
   
   try {
-    // Handle different date formats
+    // Already a Date object
     if (date instanceof Date) {
-      return date;
-    } else if (date.toDate && typeof date.toDate === 'function') {
-      // Firebase Timestamp
-      return date.toDate();
-    } else if (typeof date === 'object' && 'seconds' in date) {
-      // Firebase Timestamp-like object
-      return new Date((date as any).seconds * 1000);
-    } else {
-      // Try to parse as string or number
-      return new Date(date);
+      return isValid(date) ? date : null;
     }
+    
+    // Firebase Timestamp
+    if (date.toDate && typeof date.toDate === 'function') {
+      return date.toDate();
+    }
+    
+    // Timestamp-like object with seconds
+    if (typeof date === 'object' && 'seconds' in date) {
+      return new Date(date.seconds * 1000);
+    }
+    
+    // ISO string or other date string
+    if (typeof date === 'string') {
+      try {
+        // Try as ISO format
+        const parsed = new Date(date);
+        return isValid(parsed) ? parsed : null;
+      } catch (e) {
+        return null;
+      }
+    }
+    
+    // Unix timestamp (number)
+    if (typeof date === 'number') {
+      const parsed = new Date(date);
+      return isValid(parsed) ? parsed : null;
+    }
+    
+    return null;
   } catch (error) {
-    console.warn('Error converting to date:', error, date);
+    console.error('Error converting to date object:', error, date);
     return null;
   }
 };
 
 /**
- * Formats a date for display with configurable options
- * @param date Firebase Timestamp or Date object
- * @param options Date formatting options
- * @returns Formatted date string
+ * Convert date to Firebase Timestamp
+ * Ensures consistent storage format in Firestore
  */
-export const formatDate = (
-  date: Date | Timestamp | null,
-  options: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
+export const toFirestoreTimestamp = (date: Date | string | number | null): Timestamp | null => {
+  if (!date) return null;
+  
+  try {
+    const dateObj = date instanceof Date ? date : toDateObject(date);
+    if (!dateObj) return null;
+    
+    return Timestamp.fromDate(dateObj);
+  } catch (error) {
+    console.error('Error converting to Firestore timestamp:', error, date);
+    return null;
   }
-): string => {
-  const jsDate = toDate(date);
-  if (!jsDate) return 'No date';
-  return jsDate.toLocaleDateString('en-US', options);
 };
 
 /**
- * Formats a time for display
- * @param time Firebase Timestamp or Date object
- * @param options Time formatting options
- * @returns Formatted time string
+ * Format date for display with timezone consideration
+ * @param date Any date representation
+ * @param formatStr Format string (date-fns format)
+ * @param timezone User's timezone (defaults to device timezone)
  */
-export const formatTime = (
-  time: Date | Timestamp | null,
-  options: Intl.DateTimeFormatOptions = {
-    hour: '2-digit',
-    minute: '2-digit'
+export const formatDateWithTimezone = (
+  date: any, 
+  formatStr: string = 'MMM d, yyyy', 
+  timezone: string = getUserTimezone()
+): string => {
+  try {
+    const dateObj = toDateObject(date);
+    if (!dateObj) return 'Invalid date';
+    
+    // Format the date directly without timezone conversion
+    // We'll handle timezone display in the UI as needed
+    return format(dateObj, formatStr);
+  } catch (error) {
+    console.error('Error formatting date with timezone:', error, date);
+    return 'Invalid date';
   }
-): string => {
-  const jsDate = toDate(time);
-  if (!jsDate) return 'No time';
-  return jsDate.toLocaleTimeString('en-US', options);
 };
 
 /**
- * Combines date and time into a single Date object
- * @param date Firebase Timestamp or Date object for the date
- * @param time Firebase Timestamp or Date object for the time
- * @returns Combined JavaScript Date object
+ * Format date in standard format
+ * @param date Any date representation
  */
-export const combineDateAndTime = (
-  date: Date | Timestamp | null,
-  time: Date | Timestamp | null
-): Date | null => {
-  const jsDate = toDate(date);
-  const jsTime = toDate(time);
-  
-  if (!jsDate || !jsTime) return null;
-  
-  return new Date(
-    jsDate.getFullYear(),
-    jsDate.getMonth(),
-    jsDate.getDate(),
-    jsTime.getHours(),
-    jsTime.getMinutes(),
-    jsTime.getSeconds()
-  );
+export const formatDate = (date: any): string => {
+  return formatDateWithTimezone(date, 'MMM d, yyyy');
 };
 
 /**
- * Calculates the number of days between now and a target date
- * @param date Firebase Timestamp or Date object
- * @returns Number of days from now (positive for future dates, negative for past dates)
+ * Format time in standard format
+ * @param date Any date representation
  */
-export const getDaysFromNow = (date: Date | Timestamp | null): number | null => {
-  const jsDate = toDate(date);
-  if (!jsDate) return null;
-  
-  const now = new Date();
-  const diffTime = jsDate.getTime() - now.getTime();
-  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+export const formatTime = (date: any): string => {
+  return formatDateWithTimezone(date, 'h:mm a');
 };
 
 /**
- * Returns a human-readable string for days until an event
- * @param date Firebase Timestamp or Date object
- * @returns Formatted string (e.g., "3 days from now" or "2 days ago")
+ * Format date and time in standard format
+ * @param date Any date representation
  */
-export const getRelativeDays = (date: Date | Timestamp | null): string => {
-  const days = getDaysFromNow(date);
-  if (days === null) return 'No date';
-  
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Tomorrow';
-  if (days === -1) return 'Yesterday';
-  
-  return days > 0 
-    ? `${days} days from now` 
-    : `${Math.abs(days)} days ago`;
+export const formatDateTime = (date: any): string => {
+  return formatDateWithTimezone(date, 'MMM d, yyyy h:mm a');
 };
 
 /**
- * Determines if a date is in the past, present (today), or future
- * @param date Firebase Timestamp or Date object
- * @returns 'past', 'present', or 'future'
+ * Get relative time (e.g., "2 days ago", "in 3 hours")
+ * @param date Any date representation
  */
-export const getTimeframe = (
-  date: Date | Timestamp | null
-): 'past' | 'present' | 'future' | null => {
-  const days = getDaysFromNow(date);
-  if (days === null) return null;
-  
-  if (days < 0) return 'past';
-  if (days === 0) return 'present';
-  return 'future';
+export const getRelativeTime = (date: any): string => {
+  try {
+    const dateObj = toDateObject(date);
+    if (!dateObj) return 'Invalid date';
+    
+    return formatDistance(dateObj, new Date(), { addSuffix: true });
+  } catch (error) {
+    console.error('Error getting relative time:', error, date);
+    return 'Invalid date';
+  }
+};
+
+/**
+ * Get days until event
+ * @param date Any date representation
+ * @returns Formatted string (e.g., "1 day" or "5 days")
+ */
+export const getDaysUntil = (date: any): string => {
+  try {
+    const dateObj = toDateObject(date);
+    if (!dateObj) return '';
+    
+    const now = new Date();
+    const diffDays = differenceInDays(dateObj, now);
+    
+    if (diffDays < 0) return 'Past event';
+    return diffDays === 1 ? '1 day' : `${diffDays} days`;
+  } catch (error) {
+    console.error('Error calculating days until:', error, date);
+    return '';
+  }
+};
+
+/**
+ * Convert local date to UTC for storage
+ * @param date Local date
+ * @param timezone User's timezone
+ */
+export const toUTCDate = (date: Date): Date => {
+  // Create a UTC date from the local date
+  return new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+};
+
+/**
+ * Validate if a date is valid
+ * @param date Any date representation
+ */
+export const isValidDate = (date: any): boolean => {
+  return toDateObject(date) !== null;
+};
+
+/**
+ * Get ISO string for storage
+ * Ensures consistent string format for dates
+ * @param date Any date representation
+ */
+export const toISOString = (date: any): string | null => {
+  const dateObj = toDateObject(date);
+  return dateObj ? dateObj.toISOString() : null;
 };

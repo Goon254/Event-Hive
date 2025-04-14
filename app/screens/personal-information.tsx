@@ -18,6 +18,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../AuthContext';
 import { FontAwesome } from '@expo/vector-icons';
+import { useProfile } from '../hooks/useProfile';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createShadow, safeTopPadding } from '../utils/platformUtils';
 import * as ImagePicker from 'expo-image-picker';
@@ -46,6 +47,12 @@ export default function PersonalInformationScreen() {
   const [isImageChanged, setIsImageChanged] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  
+  // Use the profile hook to get the uploadProfileImage function
+  const {
+    uploadProfileImage,
+    isImageUploading
+  } = useProfile(user?.id);
 
   // User information state
   const [userInfo, setUserInfo] = useState<UserInformation>({
@@ -123,7 +130,7 @@ export default function PersonalInformationScreen() {
   };
 
   const pickImage = async () => {
-    if (!isEditMode) return;
+    if (!isEditMode || !user) return;
     
     try {
       // Request permission
@@ -143,8 +150,33 @@ export default function PersonalInformationScreen() {
       });
       
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        setProfileImage(result.assets[0].uri);
+        const selectedImageUri = result.assets[0].uri;
+        
+        // Show the selected image immediately for better UX
+        setProfileImage(selectedImageUri);
         setIsImageChanged(true);
+        
+        // Upload the image using the profile service
+        try {
+          setIsSaving(true);
+          const imageUrl = await uploadProfileImage(selectedImageUri);
+          
+          // Update the user info with the new image URL
+          setUserInfo(prev => ({
+            ...prev,
+            profilePicture: imageUrl || prev.profilePicture
+          }));
+          
+          Alert.alert('Success', 'Profile image updated successfully');
+        } catch (uploadError) {
+          console.error('Error uploading profile image:', uploadError);
+          Alert.alert('Error', 'Failed to upload profile image. Please try again.');
+          
+          // Revert the image change if upload failed
+          setIsImageChanged(false);
+        } finally {
+          setIsSaving(false);
+        }
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -249,22 +281,31 @@ export default function PersonalInformationScreen() {
         {/* Profile Picture */}
         <View style={styles.profileImageSection}>
           <View style={styles.profileImageContainer}>
-            <Image
-              source={{ uri: profileImage || userInfo.profilePicture }}
-              style={styles.profileImage}
-              accessibilityLabel="Profile picture"
-            />
-            {isEditMode && (
+            {isImageUploading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.loadingText}>Uploading...</Text>
+              </View>
+            ) : (
+              <Image
+                source={{ uri: profileImage || userInfo.profilePicture }}
+                style={styles.profileImage}
+                accessibilityLabel="Profile picture"
+              />
+            )}
+            {isEditMode && !isImageUploading && (
               <TouchableOpacity
                 style={styles.editImageButton}
                 onPress={pickImage}
+                disabled={isSaving || isImageUploading}
               >
                 <FontAwesome name="camera" size={16} color="#FFFFFF" />
               </TouchableOpacity>
             )}
           </View>
           <Text style={styles.changePhotoText}>
-            {isEditMode ? 'Tap to change profile photo' : ''}
+            {isEditMode && !isImageUploading ? 'Tap to change profile photo' :
+             isImageUploading ? 'Uploading profile photo...' : ''}
           </Text>
         </View>
         

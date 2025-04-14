@@ -6,6 +6,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
 import eventService, { Event as EventType } from '../services/eventServices';
+import { qrCodeService, QRCodeData } from '../services/qrCodeService';
+import { formatDate, formatTime, toDateObject } from '../utils/dateUtils';
+import NetInfo from '@react-native-community/netinfo';
 
 export default function QRCodeScreen() {
   const { eventId } = useLocalSearchParams();
@@ -13,17 +16,37 @@ export default function QRCodeScreen() {
   const { user } = useAuth();
   const [event, setEvent] = useState<EventType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [qrCodeData, setQrCodeData] = useState<{ data: QRCodeData; uri: string } | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
   
-  const qrValue = `scangoapp://event-checkin/${eventId}/${user?.id || 'guest'}`;
-
   useEffect(() => {
     const fetchEventDetails = async () => {
       if (!eventId) return;
       try {
         setIsLoading(true);
+        
+        // Check network status
+        const netInfo = await NetInfo.fetch();
+        setIsOffline(!netInfo.isConnected);
+        
+        // Fetch event details
         const eventData = await eventService.getEventById(eventId.toString());
         if (eventData) {
           setEvent(eventData as EventType);
+          
+          // Generate QR code
+          const qrCode = await qrCodeService.generateQRCode(
+            eventId.toString(),
+            user?.id || 'guest',
+            {
+              userName: user?.name || 'Guest User',
+              eventTitle: eventData.title,
+              timestamp: new Date().getTime()
+            },
+            24 // QR code expires in 24 hours
+          );
+          
+          setQrCodeData(qrCode);
         } else {
           router.back();
         }
@@ -35,40 +58,22 @@ export default function QRCodeScreen() {
     };
 
     fetchEventDetails();
-  }, [eventId]);
+  }, [eventId, user]);
 
   const handleShare = async () => {
-    if (!event) return;
+    if (!event || !qrCodeData) return;
     try {
       await Share.share({
         title: `Check-in QR code for ${event.title}`,
         message: `Scan this QR code to check in to ${event.title}`,
-        url: qrValue
+        url: qrCodeData.uri
       });
     } catch (error) {
       console.error('Error sharing QR code:', error);
     }
   };
 
-  const formatDate = (date?: Date | { toDate: () => Date }) => {
-      if (!date) return 'N/A';
-      const eventDate = date instanceof Date ? date : date.toDate();
-      return eventDate.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short', 
-        day: 'numeric',
-        year: 'numeric'
-      });
-    };
-  
-  const formatTime = (time?: Date | { toDate: () => Date }) => {
-      if (!time) return 'N/A';
-      const eventTime = time instanceof Date ? time : time.toDate();
-      return eventTime.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    };
+  // Using the standardized dateUtils functions instead of local implementations
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -95,12 +100,17 @@ export default function QRCodeScreen() {
             <View style={styles.qrWrapper}>
               <View style={styles.qrContainer}>
                 <QRCode
-                  value={qrValue}
+                  value={qrCodeData?.uri || `scangoapp://event-checkin/${eventId}/${user?.id || 'guest'}`}
                   size={220}
                   backgroundColor="white"
                   color="#000"
                   logoBackgroundColor="white"
                 />
+                {isOffline && (
+                  <View style={styles.offlineIndicator}>
+                    <Text style={styles.offlineText}>Offline Mode</Text>
+                  </View>
+                )}
               </View>
               <Text style={styles.instructions}>
                 Present this QR code for check-in
@@ -113,7 +123,7 @@ export default function QRCodeScreen() {
                 <View>
                   <Text style={styles.infoLabel}>Date & Time</Text>
                   <Text style={styles.infoText}>
-                    {formatDate(event?.date)} at {formatTime(event?.time)}
+                    {formatDate(toDateObject(event?.date))} at {formatTime(toDateObject(event?.time))}
                   </Text>
                 </View>
               </View>
@@ -140,7 +150,7 @@ export default function QRCodeScreen() {
             </View>
             
             <Text style={styles.note}>
-              This QR code is unique to you and this event. Do not share unless intended for someone else to check in.
+              This QR code is unique to you and this event. It contains encrypted information and expires after 24 hours. Do not share unless intended for someone else to check in.
             </Text>
           </View>
         )}
@@ -244,6 +254,20 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     textAlign: 'center',
     paddingHorizontal: 32,
+  },
+  offlineIndicator: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  offlineText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   loadingContainer: {
     flex: 1,

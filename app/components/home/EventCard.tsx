@@ -10,13 +10,14 @@ import {
   Platform
 } from 'react-native';
 import { router } from 'expo-router';
-import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import { FontAwesome, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Event } from '../../services/eventServices';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, formatTime, toDateObject } from '../../utils/dateUtils';
 import { getEventColor, createShadow } from './utils/uiHelpers';
+import { useFeatureFlags } from '../../utils/featureFlags';
 
 interface EventCardProps {
   item: Event;
@@ -40,6 +41,61 @@ const EventCard = ({
   translateValue
 }: EventCardProps) => {
   const colorScheme = useColorScheme();
+  const { isEnabled } = useFeatureFlags();
+  const showPrivacyControls = isEnabled('NEW_EVENT_PRIVACY');
+  
+  // Render privacy indicator based on event privacy level
+  const renderPrivacyIndicator = () => {
+    if (!showPrivacyControls) return null;
+    
+    switch(item.privacyLevel) {
+      case 'private':
+        return (
+          <View style={styles.privacyBadge}>
+            <FontAwesome name="lock" size={12} color="#FFF" />
+            <Text style={styles.privacyText}>Private</Text>
+          </View>
+        );
+      case 'connections':
+        return (
+          <View style={styles.privacyBadge}>
+            <FontAwesome name="users" size={12} color="#FFF" />
+            <Text style={styles.privacyText}>Connections</Text>
+          </View>
+        );
+      default:
+        return (
+          <View style={styles.privacyBadge}>
+            <FontAwesome name="globe" size={12} color="#FFF" />
+            <Text style={styles.privacyText}>Public</Text>
+          </View>
+        );
+    }
+  };
+  
+  // Render publish status indicator
+  const renderPublishStatus = () => {
+    if (!showPrivacyControls) return null;
+    
+    switch(item.publishStatus) {
+      case 'draft':
+        return (
+          <View style={[styles.publishStatusBadge, { backgroundColor: '#6B7280' }]}>
+            <MaterialIcons name="edit" size={12} color="#FFF" />
+            <Text style={styles.publishStatusText}>Draft</Text>
+          </View>
+        );
+      case 'scheduled':
+        return (
+          <View style={[styles.publishStatusBadge, { backgroundColor: '#8B5CF6' }]}>
+            <MaterialIcons name="schedule" size={12} color="#FFF" />
+            <Text style={styles.publishStatusText}>Scheduled</Text>
+          </View>
+        );
+      default:
+        return null; // Don't show badge for published events
+    }
+  };
   
   return (
     <Animated.View
@@ -56,6 +112,7 @@ const EventCard = ({
         accessibilityLabel={`${item.title} event on ${formatDate(item.date)}`}
         accessibilityRole="button"
         accessibilityHint="Opens event details"
+        testID={`event-card-${item.id}`}
       >
         <View style={styles.eventImageWrapper}>
           {item.imageUrl ? (
@@ -83,6 +140,12 @@ const EventCard = ({
             </Text>
           </View>
           
+          {/* Privacy indicator */}
+          {renderPrivacyIndicator()}
+          
+          {/* Publish status indicator */}
+          {renderPublishStatus()}
+          
           {/* Attending indicator */}
           {isAttending && (
             <View style={styles.attendingBadge}>
@@ -104,6 +167,7 @@ const EventCard = ({
               <FontAwesome name="calendar" size={14} color="#007AFF" />
               <Text style={styles.eventMetaText}>
                 {formatDate(item.date)}
+                {item.time && ` at ${formatTime(item.time)}`}
               </Text>
             </View>
             
@@ -142,6 +206,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#252525', // Slightly lighter than the main background for better contrast
     marginRight: 16,
+    borderWidth: 1,
+    borderColor: '#3B82F6', // Add border to make it more visible
     ...cardShadow,
   },
   eventImageWrapper: {
@@ -203,6 +269,46 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: { zIndex: 1 }
     }),
+  },
+  privacyBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...Platform.select({
+      ios: { zIndex: 1 }
+    }),
+  },
+  privacyText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: 4,
+  },
+  publishStatusBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...Platform.select({
+      ios: { zIndex: 1 }
+    }),
+  },
+  publishStatusText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginLeft: 4,
   },
   eventContent: {
     padding: 14,

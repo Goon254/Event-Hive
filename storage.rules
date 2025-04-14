@@ -1,0 +1,207 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isPublic(doc) {
+      return doc.data.privacyLevel == 'public';
+    }
+    
+    function isConnectionsOnly(doc) {
+      return doc.data.privacyLevel == 'connections';
+    }
+    
+    function isConnection(userId1, userId2) {
+      let connectionId1 = userId1 + '_' + userId2;
+      let connectionId2 = userId2 + '_' + userId1;
+      return exists(/databases/{database}/documents/connections/$(connectionId1)) ||
+             exists(/databases/{database}/documents/connections/$(connectionId2));
+    }
+    
+    // User profiles - readable by anyone, writable only by owner
+    match /users/{userId} {
+      allow read;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if false; // Don't allow user deletion through client
+    }
+    
+    // Social posts
+    match /socialPosts/{postId} {
+      // Anyone can read public posts
+      allow read: if isPublic(resource);
+      
+      // Connections can read connections-only posts
+      allow read: if isConnectionsOnly(resource) && 
+                    (isOwner(resource.data.userId) || 
+                     isConnection(request.auth.uid, resource.data.userId));
+      
+      // Private posts only readable by owner
+      allow read: if !isPublic(resource) && 
+                    !isConnectionsOnly(resource) && 
+                    isOwner(resource.data.userId);
+      
+      // Only signed-in users can create posts
+      allow create: if isSignedIn() && 
+                      request.resource.data.userId == request.auth.uid;
+      
+      // Only post owner can update or delete
+      allow update, delete: if isSignedIn() && 
+                              isOwner(resource.data.userId);
+      
+      // Likes subcollection
+      match /likes/{likeId} {
+        allow read;
+        allow create: if isSignedIn() && likeId == request.auth.uid;
+        allow delete: if isSignedIn() && likeId == request.auth.uid;
+      }
+      
+      // Comments subcollection
+      match /comments/{commentId} {
+        allow read;
+        allow create: if isSignedIn() && 
+                        request.resource.data.userId == request.auth.uid;
+        allow update, delete: if isSignedIn() && 
+                                isOwner(resource.data.userId);
+      }
+    }
+    
+    // Connections between users
+    match /connections/{connectionId} {
+      allow read: if isSignedIn() && 
+                    (isOwner(resource.data.userId) || 
+                     isOwner(resource.data.connectionId));
+      allow create: if isSignedIn() && 
+                      (request.resource.data.userId == request.auth.uid || 
+                       request.resource.data.connectionId == request.auth.uid);
+      allow update: if isSignedIn() && 
+                      (isOwner(resource.data.userId) || 
+                       isOwner(resource.data.connectionId));
+      allow delete: if isSignedIn() && 
+                      (isOwner(resource.data.userId) || 
+                       isOwner(resource.data.connectionId));
+    }
+    
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && 
+                    isOwner(resource.data.userId);
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && 
+                      isOwner(resource.data.userId);
+      allow delete: if isSignedIn() && 
+                      isOwner(resource.data.userId);
+    }
+    // Events collection with privacy controls
+    match /events/{eventId} {
+      // Public events readable by anyone
+      allow read: if resource.data.privacyLevel == 'public' ||
+                    !('privacyLevel' in resource.data); // For backward compatibility
+      
+      // Connections-only events
+      allow read: if resource.data.privacyLevel == 'connections' &&
+                    (isOwner(resource.data.createdBy) ||
+                     isConnection(request.auth.uid, resource.data.createdBy));
+      
+      // Private events only readable by owner
+      allow read: if resource.data.privacyLevel == 'private' &&
+                    isOwner(resource.data.createdBy);
+      
+      // Only authenticated users can create events
+      allow create: if isSignedIn();
+      
+      // Only the creator can update or delete events
+      allow update, delete: if isSignedIn() &&
+                               request.auth.uid == resource.data.createdBy;
+      
+      // Attendees subcollection - NEW
+      match /attendees/{attendeeId} {
+        // Anyone can read attendees
+        allow read: if true;
+        
+        // Only authenticated users can write to attendees
+        allow write: if isSignedIn();
+      }
+    }
+    
+    // Allow read access to all collections for debugging
+    match /{document=**} {
+      allow read: if true;
+    }
+    
+    // Allow collection group queries for attendees
+    match /{path=**}/attendees/{attendeeId} {
+      allow read: if isSignedIn();
+    }
+  }
+}
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Common helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Default rule - deny all
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+    
+    // Profile images
+    match /profile_images/{userId}/{fileName} {
+      // Anyone can read profile images
+      allow read: if true;
+      
+      // Only the owner can write their profile image
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+    
+    // Post images
+    match /posts/{userId}/{postId}/{fileName} {
+      // Anyone can read post images
+      allow read: if true;
+      
+      // Only the owner can upload post images
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+    
+    // Event images
+    match /events/{userId}/{eventId}/{fileName} {
+      // Anyone can read event images
+      allow read: if true;
+      
+      // Only the owner can upload event images
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+    
+    // Speaker images for events
+    match /events/{userId}/{eventId}/speakers/{speakerId}/{fileName} {
+      // Anyone can read speaker images
+      allow read: if true;
+      
+      // Only the event owner can upload speaker images
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+    
+    // General uploads folder with user isolation
+    match /uploads/{userId}/{fileName} {
+      // Anyone can read general uploads
+      allow read: if true;
+      
+      // Only the owner can upload to their folder
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+  }
+}

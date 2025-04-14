@@ -1,3 +1,4 @@
+
 # Android Keystore Generation Guide
 
 This guide explains how to use the provided scripts to generate an Android debug keystore and obtain the SHA-1 fingerprint needed for Google Sign-In integration.

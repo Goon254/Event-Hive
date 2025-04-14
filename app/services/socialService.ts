@@ -23,6 +23,7 @@ import {
 import { db, auth, storage } from '../../lib/firebaseConfig';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { sanitizeForFirestore } from './migrationService';
+import { imageUploadService } from './imageUploadService';
 import { 
   SocialPost, 
   Connection, 
@@ -76,34 +77,49 @@ class SocialService {
       // Upload media files if any
       let mediaUrls: string[] = [];
       if (mediaFiles && mediaFiles.length > 0) {
-        for (const file of mediaFiles) {
-          if (typeof file === 'string') {
-            // If it's already a URL or local URI, upload it to Firebase Storage
-            try {
-              // For local URIs, we need to fetch the file first
-              const response = await fetch(file);
-              const blob = await response.blob();
+        try {
+          // Filter out only string URIs (from expo-image-picker)
+          const stringMediaFiles = mediaFiles.filter(file => typeof file === 'string') as string[];
+          
+          // Use the unified image upload service for multiple files
+          if (stringMediaFiles.length > 0) {
+            const uploadResult = await imageUploadService.uploadPostImages(
+              currentUser.uid,
+              stringMediaFiles,
+              undefined, // No post ID yet
+              (progress) => {
+                // Optional: Handle overall progress updates
+                console.log(`Post images upload progress: ${progress * 100}%`);
+              }
+            );
+            
+            // Add successful uploads to mediaUrls
+            mediaUrls = uploadResult.urls;
+            
+            // Log any errors that occurred during upload
+            if (uploadResult.errors.length > 0) {
+              console.warn(`${uploadResult.errors.length} images failed to upload`);
+              uploadResult.errors.forEach(err => {
+                console.error(`Error uploading image at index ${err.index}:`, err.error);
+              });
               
-              // Generate a unique filename
-              const filename = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-              const storageRef = ref(storage, `posts/${currentUser.uid}/${filename}`);
-              
-              // Upload to Firebase Storage
-              await uploadBytes(storageRef, blob);
-              const downloadUrl = await getDownloadURL(storageRef);
-              mediaUrls.push(downloadUrl);
-            } catch (uploadError) {
-              console.error('Error uploading media from URI:', uploadError);
-              // If upload fails, use the original URI as fallback (for development)
-              mediaUrls.push(file);
+              // If all uploads failed, throw an error
+              if (mediaUrls.length === 0 && uploadResult.errors.length > 0) {
+                throw new Error('Failed to upload any media files. Please try again with different images.');
+              }
             }
-          } else {
-            // If it's a File object, upload it directly
-            const storageRef = ref(storage, `posts/${currentUser.uid}/${Date.now()}_${file.name}`);
-            await uploadBytes(storageRef, file);
-            const downloadUrl = await getDownloadURL(storageRef);
-            mediaUrls.push(downloadUrl);
           }
+          
+          // Handle File objects if any (for web platform)
+          const fileObjects = mediaFiles.filter(file => typeof file !== 'string') as File[];
+          if (fileObjects.length > 0) {
+            // This would need a different approach for File objects
+            // For now, we'll just log a warning
+            console.warn('File object uploads not implemented in unified service yet');
+          }
+        } catch (uploadError) {
+          console.error('Error uploading media files:', uploadError);
+          throw new Error(`Failed to upload media: ${uploadError instanceof Error ? uploadError.message : 'Unknown error'}`);
         }
       }
   
@@ -146,7 +162,22 @@ class SocialService {
       } as SocialPost;
     } catch (error) {
       console.error('Error creating post:', error);
-      throw error;
+      
+      // Provide more specific error messages based on the type of error
+      if (error instanceof Error) {
+        // Check if it's a media upload error
+        if (error.message.includes('media') || error.message.includes('upload') || error.message.includes('storage')) {
+          throw new Error(`Failed to upload media: ${error.message}. Please try again with a different file or smaller file size.`);
+        }
+        
+        // Check if it's a Firestore error
+        if (error.message.includes('firestore') || error.message.includes('permission') || error.message.includes('document')) {
+          throw new Error(`Failed to save post: ${error.message}. Please check your connection and try again.`);
+        }
+      }
+      
+      // Generic error if we can't determine the specific type
+      throw new Error('Failed to create post. Please try again later.');
     }
   }
 
@@ -636,16 +667,34 @@ class SocialService {
         
         // Then delete media files
         for (const url of mediaUrls) {
+          // Extract the path from the URL outside the try block
+          const path = url.split('?')[0].split('/o/')[1];
+          if (!path) {
+            console.warn(`Could not extract storage path from URL: ${url}`);
+            continue;
+          }
+          
+          const decodedPath = decodeURIComponent(path);
+          
           try {
-            // Extract the path from the URL
-            const path = url.split('?')[0].split('/o/')[1];
-            if (path) {
-              const decodedPath = decodeURIComponent(path);
-              const storageRef = ref(storage, decodedPath);
-              await deleteObject(storageRef);
-            }
+            const storageRef = ref(storage, decodedPath);
+            await deleteObject(storageRef);
           } catch (storageError) {
             console.error('Error deleting media file:', storageError);
+            
+            // Log detailed information about Firebase Storage errors
+            if (storageError && typeof storageError === 'object' && 'code' in storageError) {
+              const code = (storageError as { code: string }).code;
+              console.error(`Firebase Storage error code: ${code}`);
+              
+              // Handle specific Firebase Storage errors
+              if (code === 'storage/object-not-found') {
+                console.warn(`File not found in storage: ${decodedPath}`);
+              } else if (code === 'storage/unauthorized') {
+                console.error(`Not authorized to delete file: ${decodedPath}`);
+              }
+            }
+            
             // Continue with other deletions even if one fails
           }
         }
@@ -1096,6 +1145,68 @@ class SocialService {
       await deleteDoc(notificationRef);
     } catch (error) {
       console.error('Error deleting notification:', error);
+      throw error;
+    }
+  }
+  // Generate a shareable link for a post
+  async generateShareableLink(postId: string): Promise<string> {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error('User not authenticated');
+      
+      // Get the post to verify it exists and check privacy settings
+      const postRef = doc(db, 'socialPosts', postId);
+      const postDoc = await getDoc(postRef);
+      
+      if (!postDoc.exists()) {
+        throw new Error('Post not found');
+      }
+      
+      const postData = postDoc.data();
+      
+      // Check if post is public (only public posts can be shared externally)
+      if (postData.privacyLevel !== PrivacyLevel.PUBLIC) {
+        throw new Error('Only public posts can be shared with external links');
+      }
+      
+      // Create a dynamic link using the app's domain
+      // In a real implementation, you would use Firebase Dynamic Links or a similar service
+      // For this implementation, we'll create a simple URL that can be used within the app
+      
+      // Base URL for the app (would be configured in a real app)
+      const appBaseUrl = 'https://scango-app.com';
+      
+      // Create a shareable link with the post ID
+      const shareableLink = `${appBaseUrl}/post/${postId}`;
+      
+      // Increment the share count on the post
+      await updateDoc(postRef, {
+        shares: increment(1)
+      });
+      
+      // Create notification for post owner if it's not the current user
+      if (postData.userId !== currentUser.uid) {
+        const notificationData = {
+          userId: postData.userId,
+          type: 'share',
+          relatedUserId: currentUser.uid,
+          relatedUserName: currentUser.displayName || 'Anonymous',
+          relatedUserAvatar: currentUser.photoURL || null,
+          relatedPostId: postId,
+          read: false,
+          createdAt: serverTimestamp()
+        };
+        
+        // Sanitize notification data
+        const sanitizedNotificationData = sanitizeForFirestore(notificationData);
+        
+        const notificationRef = doc(collection(db, 'notifications'));
+        await setDoc(notificationRef, sanitizedNotificationData);
+      }
+      
+      return shareableLink;
+    } catch (error) {
+      console.error('Error generating shareable link:', error);
       throw error;
     }
   }

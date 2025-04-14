@@ -160,6 +160,26 @@ export const uploadFile = async (
     } catch (error) {
       console.error(`Upload attempt ${attemptCount} failed:`, error);
       
+      // Log detailed information about Firebase Storage errors
+      if (error instanceof StorageError) {
+        console.error(`Firebase Storage error code: ${error.code}`);
+        console.error(`Firebase Storage error message: ${error.message}`);
+        console.error(`Firebase Storage error details:`, error.customData);
+        
+        // Handle specific Firebase Storage errors
+        switch (error.code) {
+          case 'storage/unauthorized':
+            console.error('User does not have permission to access the storage location');
+            break;
+          case 'storage/canceled':
+            console.error('User canceled the upload');
+            break;
+          case 'storage/unknown':
+            console.error('Unknown error occurred, inspect the server response');
+            break;
+        }
+      }
+      
       // Check if we should retry
       if (attemptCount < MAX_RETRY_ATTEMPTS) {
         console.log(`Retrying upload in ${RETRY_DELAY/1000} seconds...`);
@@ -181,8 +201,16 @@ export const uploadFile = async (
     return await attemptUpload();
   } catch (error) {
     console.error('Error uploading file after all retries:', error);
-    // Return empty string instead of throwing to allow graceful fallbacks
-    return '';
+    
+    // Provide more detailed error information
+    if (error instanceof StorageError) {
+      console.error(`Final Firebase Storage error code: ${error.code}`);
+      console.error(`Final Firebase Storage error message: ${error.message}`);
+    }
+    
+    // Throw the error instead of silently returning empty string
+    // This will allow the calling code to handle the error appropriately
+    throw error;
   }
 };
 
@@ -195,14 +223,14 @@ export const uploadFile = async (
  * @returns Array of download URLs for successfully uploaded files
  */
 export const uploadMultipleFiles = async (
-  uris: string[], 
+  uris: string[],
   path: string = 'uploads',
   onProgress?: (overall: number) => void,
   onFileProgress?: (index: number, progress: number) => void
-): Promise<string[]> => {
+): Promise<{urls: string[], errors: {index: number, error: Error}[]}> => {
   try {
     if (!uris || uris.length === 0) {
-      return [];
+      return {urls: [], errors: []};
     }
     
     const totalFiles = uris.length;
@@ -210,6 +238,7 @@ export const uploadMultipleFiles = async (
     
     // Use sequential uploads with progress tracking
     const downloadUrls: string[] = [];
+    const errors: {index: number, error: Error}[] = [];
     
     for (let i = 0; i < uris.length; i++) {
       try {
@@ -226,10 +255,19 @@ export const uploadMultipleFiles = async (
           }
         };
         
-        const url = await uploadFile(uris[i], path, undefined, fileProgress);
-        
-        if (url) {
+        try {
+          const url = await uploadFile(uris[i], path, undefined, fileProgress);
           downloadUrls.push(url);
+        } catch (uploadError) {
+          console.error(`Error uploading file ${i}:`, uploadError);
+          
+          // Add to errors array with index
+          errors.push({
+            index: i,
+            error: uploadError instanceof Error ? uploadError : new Error(String(uploadError))
+          });
+          
+          // Continue with next file instead of failing the whole batch
         }
         
         completedFiles++;
@@ -239,21 +277,26 @@ export const uploadMultipleFiles = async (
           onProgress(completedFiles / totalFiles);
         }
       } catch (error) {
-        console.error(`Error uploading file ${i}:`, error);
-        // Continue with next file instead of failing the whole batch
+        console.error(`Error processing file ${i}:`, error);
+        errors.push({
+          index: i,
+          error: error instanceof Error ? error : new Error(String(error))
+        });
       }
     }
     
     // Log failed uploads
-    const failedCount = uris.length - downloadUrls.length;
-    if (failedCount > 0) {
-      console.warn(`${failedCount} of ${uris.length} files failed to upload`);
+    if (errors.length > 0) {
+      console.warn(`${errors.length} of ${uris.length} files failed to upload`);
     }
     
-    return downloadUrls;
+    return {
+      urls: downloadUrls,
+      errors: errors
+    };
   } catch (error) {
     console.error('Error in bulk file upload:', error);
-    return [];
+    throw error;
   }
 };
 

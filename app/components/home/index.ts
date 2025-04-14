@@ -1,5 +1,5 @@
 // Export all components from the home directory
-export { default as HomeScreen } from './HomeScreen';
+// HomeScreen has been moved to app/(tabs)/Home.tsx
 export { default as EventCard } from './EventCard';
 export { default as FeaturedEvent } from './FeaturedEvent';
 export { default as CategoryButtons } from './CategoryButtons';

@@ -28,6 +28,16 @@ export interface Speaker {
   role: string;
   bio: string;
   imageUri: string | null;
+  // Additional fields for enhanced speaker profiles
+  socialLinks?: {
+    twitter?: string;
+    linkedin?: string;
+    website?: string;
+  };
+  expertiseTags?: string[];
+  contactEmail?: string;
+  contactPhone?: string;
+  sessionTitle?: string;
 }
 
 // Main form data structure

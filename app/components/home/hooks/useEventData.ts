@@ -119,11 +119,12 @@ export const useEventData = (userId?: string) => {
         
         // Try to load from cache if offline
         const cachedEvents = await loadFromCache(CACHE_KEYS.ALL_EVENTS);
-        if (cachedEvents) {
+        if (cachedEvents && Array.isArray(cachedEvents) && cachedEvents.length > 0) {
           setEvents(cachedEvents);
           processEvents(cachedEvents);
-          console.log('Loaded events from cache while offline');
+          console.log(`Loaded ${cachedEvents.length} events from cache while offline`);
         } else {
+          console.error('No valid cached events data available:', cachedEvents);
           throw new Error('No internet connection and no cached data available');
         }
         return;
@@ -132,14 +133,17 @@ export const useEventData = (userId?: string) => {
       // If we're online but not forcing refresh, try cache first
       if (!forceRefresh) {
         const cachedEvents = await loadFromCache(CACHE_KEYS.ALL_EVENTS);
-        if (cachedEvents) {
+        if (cachedEvents && Array.isArray(cachedEvents) && cachedEvents.length > 0) {
           setEvents(cachedEvents);
           processEvents(cachedEvents);
           setLoading(false);
+          console.log(`Using ${cachedEvents.length} cached events while fetching fresh data`);
           
           // Load fresh data in the background
           fetchFreshData();
           return;
+        } else {
+          console.log('No valid cached events available, fetching fresh data');
         }
       }
       
@@ -149,13 +153,14 @@ export const useEventData = (userId?: string) => {
     } catch (error) {
       console.error('Error loading events:', error);
       setError(error instanceof Error ? error : new Error('Failed to load events'));
-      
       // Try to load from cache as fallback
       const cachedEvents = await loadFromCache(CACHE_KEYS.ALL_EVENTS);
-      if (cachedEvents) {
+      if (cachedEvents && Array.isArray(cachedEvents) && cachedEvents.length > 0) {
         setEvents(cachedEvents);
         processEvents(cachedEvents);
-        console.log('Loaded events from cache after error');
+        console.log(`Loaded ${cachedEvents.length} events from cache after error`);
+      } else {
+        console.error('No valid cached events available as fallback');
       }
     } finally {
       if (isMounted.current) {
@@ -167,10 +172,17 @@ export const useEventData = (userId?: string) => {
   
   // Helper function to process events data
   const processEvents = useCallback((sortedEvents: Event[]) => {
+    if (!sortedEvents || !Array.isArray(sortedEvents)) {
+      console.error('Invalid events data passed to processEvents:', sortedEvents);
+      return;
+    }
+    
+    console.log(`Processing ${sortedEvents.length} events`);
+    
     // Filter for upcoming events (events in the future)
     const now = new Date();
     const upcoming = sortedEvents.filter(event => {
-      if (!event.date) return false;
+      if (!event || !event.date) return false;
       
       // Safely handle different date formats
       let eventDate: Date;
@@ -222,8 +234,14 @@ export const useEventData = (userId?: string) => {
     try {
       const eventsData = await eventService.getEvents();
       
+      // Check if we have valid events data
+      if (!eventsData || !eventsData.items) {
+        console.error('Invalid events data returned:', eventsData);
+        throw new Error('Failed to load events: Invalid data structure');
+      }
+      
       // Sort events by date (newest first)
-      const sortedEvents = eventsData.events.sort((a, b) => {
+      const sortedEvents = eventsData.items.sort((a, b) => {
         if (!a.date || !b.date) return 0;
         
         // Safely handle different date formats
@@ -257,7 +275,6 @@ export const useEventData = (userId?: string) => {
           console.warn('Error comparing event dates:', error, a, b);
           return 0;
         }
-        return dateB.getTime() - dateA.getTime();
       });
       
       // Save to cache
@@ -267,6 +284,8 @@ export const useEventData = (userId?: string) => {
       
       setEvents(sortedEvents);
       processEvents(sortedEvents);
+      
+      console.log('Successfully loaded and processed events:', sortedEvents.length);
       
       // Fetch user-specific data if user is logged in
       if (userId) {
@@ -299,9 +318,9 @@ export const useEventData = (userId?: string) => {
             const attending = await eventService.getUserAttendingEvents(userId);
             
             // Check if we got any events back
-            if (attending && attending.events && attending.events.length > 0) {
+            if (attending && attending.items && attending.items.length > 0) {
               if (isMounted.current) {
-                const eventIds = attending.events.map(event => event.id);
+                const eventIds = attending.items.map((event: Event) => event.id);
                 setAttendingEvents(eventIds);
                 await saveToCache(CACHE_KEYS.ATTENDING_EVENTS(userId), eventIds);
               }
@@ -316,6 +335,16 @@ export const useEventData = (userId?: string) => {
             }
           } catch (attendingError) {
             console.error('Error fetching attending events:', attendingError);
+            
+            // Check if it's an index error and provide more specific feedback
+            if (attendingError instanceof Error &&
+                attendingError.message.includes('requires an index')) {
+              console.warn('Missing Firestore index detected. Please deploy the required indexes.');
+              
+              // Show a more user-friendly error
+              setError(new Error('Database index error. Please try again later or contact support.'));
+            }
+            
             // Continue with the app even if attending events can't be fetched
             // Try to load from cache as fallback
             const cachedAttending = await loadFromCache(CACHE_KEYS.ATTENDING_EVENTS(userId));
@@ -364,7 +393,7 @@ export const useEventData = (userId?: string) => {
 
   // Filter events based on selected filters
   useEffect(() => {
-    if (!events.length) {
+    if (!events || !events.length) {
       setFilteredEvents([]);
       return;
     }
@@ -412,40 +441,148 @@ export const useEventData = (userId?: string) => {
   const getEventStatus = useCallback((event: Event): FilterType => {
     if (!event || !event.date) return 'all';
     
-    const now = new Date();
-    const eventDate = event.date instanceof Date ? event.date : (event.date.toDate ? event.date.toDate() : now);
-    const eventTime = event.time instanceof Date ? event.time : (event.time?.toDate ? event.time.toDate() : now);
-    
-    // Combine date and time
-    const eventDateTime = new Date(
-      eventDate.getFullYear(),
-      eventDate.getMonth(),
-      eventDate.getDate(),
-      eventTime.getHours(),
-      eventTime.getMinutes()
-    );
-    
-    // Add event duration (assuming 3 hours if not specified)
-    const eventDuration = event.duration || 3 * 60 * 60 * 1000; // 3 hours in ms
-    const eventEndTime = new Date(eventDateTime.getTime() + eventDuration);
-    
-    if (now < eventDateTime) {
-      return 'upcoming';
-    } else if (now >= eventDateTime && now <= eventEndTime) {
-      return 'ongoing';
-    } else {
-      return 'completed';
+    try {
+      const now = new Date();
+      
+      // Safely handle event date
+      let eventDate: Date;
+      try {
+        if (event.date instanceof Date) {
+          eventDate = event.date;
+        } else if (event.date.toDate && typeof event.date.toDate === 'function') {
+          eventDate = event.date.toDate();
+        } else if (typeof event.date === 'object' && 'seconds' in event.date) {
+          eventDate = new Date((event.date as any).seconds * 1000);
+        } else {
+          eventDate = new Date(event.date as any);
+        }
+        
+        // Validate the date is valid
+        if (isNaN(eventDate.getTime())) {
+          console.warn('Invalid event date detected:', event.date);
+          return 'all';
+        }
+      } catch (error) {
+        console.warn('Error processing event date:', error, event);
+        return 'all';
+      }
+      
+      // Safely handle event time - using a more robust approach
+      let hours = 12;
+      let minutes = 0;
+      
+      try {
+        if (!event.time) {
+          // Default to noon if no time specified
+          // We'll just use the default hours and minutes (12:00)
+        } else if (event.time instanceof Date) {
+          hours = event.time.getHours();
+          minutes = event.time.getMinutes();
+        } else if (event.time.toDate && typeof event.time.toDate === 'function') {
+          const timeDate = event.time.toDate();
+          hours = timeDate.getHours();
+          minutes = timeDate.getMinutes();
+        } else if (typeof event.time === 'object' && 'seconds' in event.time) {
+          const timeDate = new Date((event.time as any).seconds * 1000);
+          hours = timeDate.getHours();
+          minutes = timeDate.getMinutes();
+        } else {
+          try {
+            // Try to parse as string or number
+            const timeDate = new Date(event.time as any);
+            if (!isNaN(timeDate.getTime())) {
+              hours = timeDate.getHours();
+              minutes = timeDate.getMinutes();
+            }
+          } catch (e) {
+            console.warn('Could not parse time, using default noon time');
+            // Keep default noon time
+          }
+        }
+      } catch (error) {
+        console.warn('Error extracting time components:', error, event);
+        // Keep default noon time
+      }
+      
+      // Create a new date object from the event date and set the time components
+      // This is safer than creating a new date with year, month, day, hours, minutes
+      const eventDateTime = new Date(eventDate.getTime());
+      try {
+        eventDateTime.setHours(hours, minutes, 0, 0);
+      } catch (e) {
+        console.warn('Error setting time on event date:', e);
+        // If setting hours/minutes fails, just keep the date as is
+      }
+      
+      // Add event duration (assuming 3 hours if not specified)
+      const eventDuration = event.duration || 3 * 60 * 60 * 1000; // 3 hours in ms
+      const eventEndTime = new Date(eventDateTime.getTime() + eventDuration);
+      
+      if (now < eventDateTime) {
+        return 'upcoming';
+      } else if (now >= eventDateTime && now <= eventEndTime) {
+        return 'ongoing';
+      } else {
+        return 'completed';
+      }
+    } catch (error) {
+      console.error('Error determining event status:', error, event);
+      return 'all';
     }
   }, []);
 
-  // Get days until event
+  // Get days until event with improved error handling and more robust date parsing
   const getDaysUntil = useCallback((date: Date | any) => {
     if (!date) return '';
-    const eventDate = date instanceof Date ? date : (date.toDate ? date.toDate() : new Date());
-    const now = new Date();
-    const diffTime = Math.abs(eventDate.getTime() - now.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays === 1 ? '1 day' : `${diffDays} days`;
+    
+    try {
+      // Safely handle different date formats
+      let eventDate: Date | null = null;
+      
+      if (date instanceof Date) {
+        eventDate = new Date(date.getTime()); // Create a copy to avoid mutation
+      } else if (date.toDate && typeof date.toDate === 'function') {
+        try {
+          eventDate = date.toDate();
+        } catch (e) {
+          console.warn('Error calling toDate():', e);
+        }
+      } else if (typeof date === 'object' && 'seconds' in date) {
+        try {
+          eventDate = new Date((date as any).seconds * 1000);
+        } catch (e) {
+          console.warn('Error creating date from seconds:', e);
+        }
+      } else {
+        try {
+          // Try to parse as string or number with explicit handling
+          const parsedDate = new Date(date as any);
+          if (!isNaN(parsedDate.getTime())) {
+            eventDate = parsedDate;
+          }
+        } catch (e) {
+          console.warn('Error parsing date string/number:', e);
+        }
+      }
+      
+      // If we couldn't parse the date or it's invalid, return empty string
+      if (!eventDate || isNaN(eventDate.getTime())) {
+        console.warn('Could not parse valid date in getDaysUntil:', date);
+        return '';
+      }
+      
+      const now = new Date();
+      const diffTime = Math.abs(eventDate.getTime() - now.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      // Handle edge cases
+      if (diffDays === 0) return 'Today';
+      if (diffDays === 1) return '1 day';
+      return `${diffDays} days`;
+    } catch (error) {
+      console.error('Error calculating days until event:', error, date);
+      return '';
+    }
   }, []);
 
   return {

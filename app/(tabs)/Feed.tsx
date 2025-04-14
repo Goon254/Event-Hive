@@ -13,7 +13,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Modal
+  Modal,
+  Share
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
@@ -22,8 +23,9 @@ import socialService from '../services/socialService';
 import { SocialPost, ContentType, PrivacyLevel } from '../models/social';
 import * as ImagePicker from 'expo-image-picker';
 import { createShadow } from '../utils/platformUtils';
-import { format } from 'date-fns';
-import { formatDistance } from 'date-fns/formatDistance';
+import { useSocialPosts } from '../hooks/useSocialPosts';
+// Using our own date utilities instead of date-fns to avoid RangeError issues
+import { toDateObject, getRelativeTime } from '../utils/dateUtils';
 import migrationService from '../services/migrationService';
 import { auth } from '../../lib/firebaseConfig';
 export default function SocialFeedScreen() {
@@ -40,7 +42,14 @@ export default function SocialFeedScreen() {
   const [postText, setPostText] = useState('');
   const [postImage, setPostImage] = useState<string | null>(null);
   const [postPrivacy, setPostPrivacy] = useState<PrivacyLevel>(PrivacyLevel.PUBLIC);
-  const [isUploading, setIsUploading] = useState(false);
+  
+  // Use the social posts hook for post creation and image uploads
+  const {
+    createPost,
+    isLoading: isPostLoading,
+    isUploading,
+    uploadProgress
+  } = useSocialPosts();
   
   // Comment states
   const [commentText, setCommentText] = useState('');
@@ -123,8 +132,25 @@ export default function SocialFeedScreen() {
       if (result.posts.length < 10) {
         setHasMorePosts(false);
       }
+      // Ensure unique posts by ID to prevent duplicate key warnings
+      if (refresh) {
+        setPosts(result.posts);
+      } else {
+        // Create a map of existing posts by ID
+        const existingPostsMap = new Map(posts.map(post => [post.id, post]));
+        
+        // Add new posts only if they don't already exist
+        const updatedPosts = [...posts];
+        result.posts.forEach(post => {
+          if (!existingPostsMap.has(post.id)) {
+            updatedPosts.push(post);
+          }
+        });
+        
+        setPosts(updatedPosts);
+      }
       
-      setPosts(refresh ? result.posts : [...posts, ...result.posts]);
+      setLastDoc(result.lastDoc);
       setLastDoc(result.lastDoc);
       
       // Set up real-time listener for posts
@@ -196,31 +222,18 @@ export default function SocialFeedScreen() {
     }
     
     try {
-      setIsUploading(true);
-      
-      // Prepare post data
-      const postData = {
-        userId: user?.id || '',
-        userName: user?.name || '',
-        userAvatar: user?.avatar,
-        content: postText.trim(),
-        contentType: postImage ? ContentType.MIXED : ContentType.TEXT,
-        privacyLevel: postPrivacy,
-        likes: 0,
-        comments: 0,
-        shares: 0
-      };
-      
-      // Upload media if any
-      let mediaFiles = [];
+      // Prepare media files array
+      let mediaFiles: string[] = [];
       if (postImage) {
-        // The image will be uploaded to Firebase Storage in the socialService
-        // The URI is passed to the service which handles the upload
         mediaFiles.push(postImage);
       }
       
-      // Create the post
-      const newPost = await socialService.createPost(postData, mediaFiles);
+      // Create the post using the hook
+      const newPost = await createPost(
+        postText.trim(),
+        mediaFiles,
+        postPrivacy
+      );
       
       // Add to posts list and reset form
       setPosts([newPost, ...posts]);
@@ -230,9 +243,13 @@ export default function SocialFeedScreen() {
       
     } catch (error) {
       console.error('Error creating post:', error);
-      Alert.alert('Error', 'Failed to create post. Please try again.');
-    } finally {
-      setIsUploading(false);
+      
+      // Show more specific error message if available
+      const errorMessage = error instanceof Error
+        ? error.message
+        : 'Failed to create post. Please try again.';
+        
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -334,23 +351,58 @@ export default function SocialFeedScreen() {
   // Share a post
   const sharePost = async (post: SocialPost) => {
     try {
-      // Call the Firestore service to share the post
-      await socialService.sharePost(post.id);
+      // Generate a shareable link for the post
+      const shareableLink = await socialService.generateShareableLink(post.id);
       
-      // Show success message
-      Alert.alert('Success', 'Post shared successfully');
+      // Use the Share API to share the link
+      const result = await Share.share({
+        message: `Check out this post from ${post.userName}: ${shareableLink}`,
+        url: shareableLink,
+        title: 'Share Post'
+      });
+      
+      if (result.action === Share.sharedAction) {
+        // Update the share count in the UI
+        setPosts(posts.map(p => {
+          if (p.id === post.id) {
+            return { ...p, shares: p.shares + 1 };
+          }
+          return p;
+        }));
+      }
     } catch (error) {
       console.error('Error sharing post:', error);
-      Alert.alert('Error', 'Failed to share post. Please try again.');
+      
+      // Show more specific error message based on the error type
+      if (error instanceof Error) {
+        if (error.message.includes('privacy')) {
+          Alert.alert('Privacy Restriction', 'Only public posts can be shared with external links.');
+        } else {
+          Alert.alert('Error', `Failed to share post: ${error.message}`);
+        }
+      } else {
+        Alert.alert('Error', 'Failed to share post. Please try again.');
+      }
     }
   };
 
-  // Format the timestamp for display
+  // Format the timestamp for display with robust error handling
   const formatTimestamp = (timestamp: any) => {
     if (!timestamp) return 'Just now';
     
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return formatDistance(date, new Date(), { addSuffix: true });
+    try {
+      // Use our robust date conversion utility
+      const dateObj = toDateObject(timestamp);
+      
+      // If we couldn't parse the date, return a default value
+      if (!dateObj) return 'Recently';
+      
+      // Use our utility that handles relative time formatting
+      return getRelativeTime(dateObj);
+    } catch (error) {
+      console.warn('Error formatting timestamp:', error);
+      return 'Recently';
+    }
   };
 
   // Render each post item
@@ -444,7 +496,14 @@ export default function SocialFeedScreen() {
             onPress={submitPost}
             disabled={isUploading || (!postText.trim() && !postImage)}
           >
-            <Text style={styles.postButtonText}>Post</Text>
+            {isUploading ? (
+              <View style={styles.uploadingContainer}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+                <Text style={styles.uploadingText}>{Math.round(uploadProgress * 100)}%</Text>
+              </View>
+            ) : (
+              <Text style={styles.postButtonText}>Post</Text>
+            )}
           </TouchableOpacity>
         </View>
         
@@ -655,7 +714,7 @@ export default function SocialFeedScreen() {
         <FlatList
           data={posts}
           renderItem={renderPostItem}
-          keyExtractor={item => item.id}
+          keyExtractor={(item, index) => item.id || `post-${index}`}
           contentContainerStyle={styles.postList}
           refreshControl={
             <RefreshControl
@@ -1111,5 +1170,16 @@ const styles = StyleSheet.create({
   },
     sendButtonDisabled: {
       opacity: 0.5,
+    },
+    uploadingContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    uploadingText: {
+      color: '#FFFFFF',
+      marginLeft: 8,
+      fontSize: 12,
+      fontWeight: 'bold',
     },
   });

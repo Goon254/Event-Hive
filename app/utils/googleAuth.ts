@@ -2,6 +2,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import { Platform, Alert } from 'react-native';
+import { useEffect } from 'react';
 import { getAuth, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebaseConfig';
@@ -13,17 +14,25 @@ import { sanitizeForFirestore } from '../services/migrationService';
 WebBrowser.maybeCompleteAuthSession();
 
 // Get client IDs from app config
-const {
-  googleClientIdAndroid,
-  googleClientIdIos,
-  googleClientIdWeb,
-  googleClientIdExpo
-} = Constants.expoConfig?.extra || {
-  googleClientIdAndroid: 'YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com',
-  googleClientIdIos: 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com',
-  googleClientIdWeb: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com',
-  googleClientIdExpo: 'YOUR_EXPO_CLIENT_ID.apps.googleusercontent.com'
+const getGoogleClientId = () => {
+  const {
+    googleClientIdIos,
+    googleClientIdAndroid,
+    googleClientIdWeb,
+    googleClientIdExpo
+  } = Constants.expoConfig?.extra || {};
+  
+  if (Platform.OS === 'ios') return googleClientIdIos;
+  if (Platform.OS === 'android') return googleClientIdAndroid;
+  if (Platform.OS === 'web') return googleClientIdWeb;
+  return googleClientIdExpo; // For Expo Go
 };
+
+// Fallback values in case config is missing
+const googleClientIdAndroid = Constants.expoConfig?.extra?.googleClientIdAndroid || 'YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com';
+const googleClientIdIos = Constants.expoConfig?.extra?.googleClientIdIos || 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com';
+const googleClientIdWeb = Constants.expoConfig?.extra?.googleClientIdWeb || 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
+const googleClientIdExpo = Constants.expoConfig?.extra?.googleClientIdExpo || 'YOUR_EXPO_CLIENT_ID.apps.googleusercontent.com';
 
 /**
  * Hook to use Google authentication with OAuth 2.0 compliance
@@ -47,6 +56,16 @@ export const useGoogleAuth = () => {
     responseType: 'code', // Use authorization code flow for better security
   });
 
+  // Log client IDs for debugging
+  useEffect(() => {
+    console.log('Current platform:', Platform.OS);
+    console.log('Using client ID:', getGoogleClientId());
+    console.log('Android client ID:', googleClientIdAndroid);
+    console.log('iOS client ID:', googleClientIdIos);
+    console.log('Web client ID:', googleClientIdWeb);
+    console.log('Expo client ID:', googleClientIdExpo);
+  }, []);
+
   /**
    * Sign in with Google and link with Firebase with enhanced security
    */
@@ -55,6 +74,12 @@ export const useGoogleAuth = () => {
       // Check if OAuth configuration is valid before proceeding
       if (!valid) {
         throw new Error(`Google OAuth configuration issues: ${issues.join(', ')}`);
+      }
+      
+      // Get the appropriate client ID for the current platform
+      const clientId = getGoogleClientId();
+      if (!clientId || clientId.includes('YOUR_') || clientId === '') {
+        throw new Error('Missing Google OAuth client ID for this platform');
       }
       
       // Generate PKCE and state parameters for enhanced security

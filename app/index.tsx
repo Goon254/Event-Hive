@@ -51,7 +51,7 @@ export default function LandingPage() {
   
   return (
     <ImageBackground
-      source={require('../assets/images/react-logo.png')}
+      source={require('../assets/images/hive.png')}
       style={styles.backgroundImage}
     >
       <LinearGradient

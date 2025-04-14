@@ -99,17 +99,27 @@ service cloud.firestore {
       allow delete: if isSignedIn() && 
                       isOwner(resource.data.userId);
     }
-    // Events collection - NEW
+    // Events collection with privacy controls
     match /events/{eventId} {
-      // Anyone can read events
-      allow read: if true;
+      // Public events readable by anyone
+      allow read: if resource.data.privacyLevel == 'public' ||
+                    !('privacyLevel' in resource.data); // For backward compatibility
+      
+      // Connections-only events
+      allow read: if resource.data.privacyLevel == 'connections' &&
+                    (isOwner(resource.data.createdBy) ||
+                     isConnection(request.auth.uid, resource.data.createdBy));
+      
+      // Private events only readable by owner
+      allow read: if resource.data.privacyLevel == 'private' &&
+                    isOwner(resource.data.createdBy);
       
       // Only authenticated users can create events
       allow create: if isSignedIn();
       
       // Only the creator can update or delete events
       allow update, delete: if isSignedIn() &&
-                              request.auth.uid == resource.data.createdBy;
+                               request.auth.uid == resource.data.createdBy;
       
       // Attendees subcollection - NEW
       match /attendees/{attendeeId} {
@@ -121,10 +131,14 @@ service cloud.firestore {
       }
     }
     
+    // Allow read access to all collections for debugging
+    match /{document=**} {
+      allow read: if true;
+    }
+    
     // Allow collection group queries for attendees
     match /{path=**}/attendees/{attendeeId} {
       allow read: if isSignedIn();
-    }
     }
   }
 }

@@ -61,7 +61,7 @@ export default function TabsLayout() {
           }}
         />
         <Tabs.Screen
-          name="Connections"
+          name="connections"
           options={{
             title: 'Connections',
             tabBarIcon: ({ color }) => (

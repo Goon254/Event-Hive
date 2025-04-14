@@ -11,13 +11,14 @@ import {
   Platform,
   Modal,
   ScrollView,
-  Alert
+  Alert,
+  ProgressBarAndroid
 } from 'react-native';
 import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { PrivacyLevel, ContentType } from '../models/social';
 import { useAuth } from '../AuthContext';
-import socialService from '../services/socialService';
+import { useSocialPosts } from '../hooks/useSocialPosts';
 import { createShadow } from '../utils/platformUtils';
 
 interface PostCreationProps {
@@ -30,8 +31,15 @@ export default function PostCreation({ onClose, onPostCreated }: PostCreationPro
   const [postText, setPostText] = useState('');
   const [postImage, setPostImage] = useState<string | null>(null);
   const [postPrivacy, setPostPrivacy] = useState<PrivacyLevel>(PrivacyLevel.PUBLIC);
-  const [isUploading, setIsUploading] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  
+  // Use the social posts hook for post creation and image uploads
+  const {
+    createPost,
+    isLoading,
+    isUploading,
+    uploadProgress
+  } = useSocialPosts();
 
   // Pick an image from gallery
   const pickImage = async () => {
@@ -120,29 +128,18 @@ export default function PostCreation({ onClose, onPostCreated }: PostCreationPro
     }
     
     try {
-      setIsUploading(true);
-      
-      // Prepare post data
-      const postData = {
-        userId: user?.id || '',
-        userName: user?.name || 'Anonymous',
-        userAvatar: user?.avatar,
-        content: postText.trim(),
-        contentType: postImage ? ContentType.MIXED : ContentType.TEXT,
-        privacyLevel: postPrivacy,
-        likes: 0,
-        comments: 0,
-        shares: 0
-      };
-      
-      // Upload media if any
+      // Prepare media files array
       let mediaFiles: string[] = [];
       if (postImage) {
         mediaFiles.push(postImage);
       }
       
-      // Create the post
-      const newPost = await socialService.createPost(postData, mediaFiles);
+      // Create the post using the hook
+      const newPost = await createPost(
+        postText.trim(),
+        mediaFiles,
+        postPrivacy
+      );
       
       // Notify parent and close
       onPostCreated(newPost);
@@ -150,9 +147,13 @@ export default function PostCreation({ onClose, onPostCreated }: PostCreationPro
       
     } catch (error) {
       console.error('Error creating post:', error);
-      Alert.alert('Error', 'Failed to create post. Please try again.');
-    } finally {
-      setIsUploading(false);
+      
+      // Show more specific error message if available
+      const errorMessage = error instanceof Error
+        ? error.message
+        : 'Failed to create post. Please try again.';
+        
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -249,7 +250,10 @@ export default function PostCreation({ onClose, onPostCreated }: PostCreationPro
           disabled={isUploading || (!postText.trim() && !postImage)}
         >
           {isUploading ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <View style={styles.uploadingContainer}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.uploadingText}>{Math.round(uploadProgress * 100)}%</Text>
+            </View>
           ) : (
             <Text style={styles.postButtonText}>Post</Text>
           )}
@@ -512,5 +516,16 @@ const styles = StyleSheet.create({
   privacyOptionDescription: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  uploadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  uploadingText: {
+    color: '#FFFFFF',
+    marginLeft: 8,
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });

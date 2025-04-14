@@ -12,7 +12,7 @@ import { router } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Event } from '../../services/eventServices';
-import { formatDate, formatTime } from '../../utils/dateUtils';
+import { formatDate, formatTime, toDateObject } from '../../utils/dateUtils';
 import { getEventColor, createShadow } from './utils/uiHelpers';
 
 interface FeaturedEventProps {
@@ -51,6 +51,7 @@ const FeaturedEvent = ({
         accessibilityLabel={`Featured event: ${event.title} on ${formatDate(event.date)}`}
         accessibilityRole="button"
         accessibilityHint="Opens featured event details"
+        testID={`featured-event-${event.id}`}
       >
         <View style={styles.imageContainer}>
           {event.imageUrl ? (
@@ -62,6 +63,7 @@ const FeaturedEvent = ({
           ) : (
             <View style={[styles.featuredImage, { backgroundColor: getEventColor(event.title) }]}>
               <Text style={styles.featuredImageText}>{event.title.charAt(0).toUpperCase()}</Text>
+              <Text style={styles.debugText}>Event ID: {event.id}</Text>
             </View>
           )}
           
@@ -80,17 +82,21 @@ const FeaturedEvent = ({
           <View style={styles.featuredDetailsRow}>
             <View style={styles.featuredDetail}>
               <FontAwesome name="calendar" size={16} color="#FFF" />
-              <Text style={styles.featuredDetailText}>{formatDate(event.date)}</Text>
+              <Text style={styles.featuredDetailText}>
+                {formatDate(event.date)}
+              </Text>
             </View>
             <View style={styles.featuredDetail}>
               <FontAwesome name="clock-o" size={16} color="#FFF" />
-              <Text style={styles.featuredDetailText}>{formatTime(event.date)}</Text>
+              <Text style={styles.featuredDetailText}>
+                {event.time ? formatTime(event.time) : formatTime(event.date)}
+              </Text>
             </View>
           </View>
           
           <View style={styles.featuredCountdown}>
             <Text style={styles.featuredCountdownText}>
-              {daysUntil} until event
+              {daysUntil ? `${daysUntil} until event` : 'Coming soon'}
             </Text>
           </View>
         </View>
@@ -110,6 +116,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#1E1E1E', // Updated background color to match theme
     position: 'relative',
+    borderWidth: 1,
+    borderColor: '#3B82F6', // Add border to make it more visible
     ...cardShadow,
   },
   imageContainer: {
@@ -127,6 +135,16 @@ const styles = StyleSheet.create({
     fontSize: 72,
     fontWeight: 'bold',
     color: 'white',
+  },
+  debugText: {
+    fontSize: 12,
+    color: 'white',
+    position: 'absolute',
+    bottom: 5,
+    left: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 3,
+    borderRadius: 3,
   },
   featuredGradient: {
     position: 'absolute',

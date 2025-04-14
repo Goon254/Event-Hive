@@ -1,11 +1,13 @@
 /**
  * Event Services Architecture
- * 
+ *
  * This implementation follows the repository pattern to separate:
  * - Domain models (Event)
  * - Data access (EventRepository)
  * - Business logic (EventService)
  */
+import { qrCodeService } from './qrCodeService';
+import { toDateObject, isValidDate, toFirestoreTimestamp } from '../utils/dateUtils';
 
 import { Alert } from 'react-native';
 import { db } from '../../lib/firebaseConfig';
@@ -46,6 +48,7 @@ export interface Event {
   date: Date | any; // Support for Firebase Timestamp
   time?: Date | any;
   imageUrl?: string;
+  thumbnailUrl?: string; // New field for image thumbnail
   location?: string;
   locationDetails?: {
     address?: string;
@@ -65,6 +68,13 @@ export interface Event {
   category?: string;
   tags?: string[];
   duration?: number; // in milliseconds
+  
+  // New privacy and publishing fields
+  privacyLevel: 'public' | 'connections' | 'private';
+  publishStatus: 'draft' | 'published' | 'scheduled';
+  scheduledPublishDate?: Date | any;
+  
+  // Timestamps
   createdAt?: any;
   updatedAt?: any;
 }
@@ -98,6 +108,8 @@ export interface EventFilterOptions extends PaginationOptions {
   searchTerm?: string;
   isPaid?: boolean;
   tags?: string[];
+  privacyLevel?: 'public' | 'connections' | 'private';
+  publishStatus?: 'draft' | 'published' | 'scheduled';
 }
 
 /**
@@ -143,11 +155,12 @@ class FirestoreEventRepository implements EventRepository {
     return {
       id: doc.id,
       ...data,
-      // Ensure date is properly handled (could be Timestamp or Date)
-      date: data.date && typeof data.date.toDate === 'function' ? data.date.toDate() : data.date,
-      time: data.time && typeof data.time.toDate === 'function' ? data.time.toDate() : data.time,
-      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
-      updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt
+      // Use dateUtils for consistent date handling
+      date: toDateObject(data.date),
+      time: toDateObject(data.time),
+      createdAt: toDateObject(data.createdAt),
+      updatedAt: toDateObject(data.updatedAt),
+      scheduledPublishDate: toDateObject(data.scheduledPublishDate)
     } as Event;
   }
   
@@ -197,9 +210,13 @@ class FirestoreEventRepository implements EventRepository {
    */
   async create(eventData: Omit<Event, 'id'>): Promise<Event> {
     try {
-      // Add timestamps
+      // Add timestamps and default values for new fields
       const eventWithTimestamps = {
         ...eventData,
+        // Set default privacy level to public if not specified
+        privacyLevel: eventData.privacyLevel || 'public',
+        // Set default publish status to published if not specified
+        publishStatus: eventData.publishStatus || 'published',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
@@ -338,7 +355,9 @@ class FirestoreEventRepository implements EventRepository {
         dateTo,
         isPaid,
         searchTerm,
-        tags
+        tags,
+        privacyLevel,
+        publishStatus
       } = options;
       
       // Build base query
@@ -363,6 +382,16 @@ class FirestoreEventRepository implements EventRepository {
       
       if (isPaid !== undefined) {
         eventQuery = query(eventQuery, where('isPaid', '==', isPaid));
+      }
+      
+      // Add privacy level filter if provided
+      if (privacyLevel) {
+        eventQuery = query(eventQuery, where('privacyLevel', '==', privacyLevel));
+      }
+      
+      // Add publish status filter if provided
+      if (publishStatus) {
+        eventQuery = query(eventQuery, where('publishStatus', '==', publishStatus));
       }
       
       // Add startAfter if provided
@@ -566,9 +595,27 @@ class FirestoreEventRepository implements EventRepository {
           return new Error('The operation was cancelled');
         case 'invalid-argument':
           return new Error('Invalid data provided');
+        case 'failed-precondition':
+          // This often happens when a required index is missing
+          if (error.message.includes('requires an index')) {
+            console.error('Missing Firestore index detected:', error.message);
+            // Extract the index creation URL if available
+            const indexUrlMatch = error.message.match(/https:\/\/console\.firebase\.google\.com\/[^\s]+/);
+            if (indexUrlMatch) {
+              console.info('Index creation URL:', indexUrlMatch[0]);
+            }
+            return new Error('Database query requires an index. Please try again later or contact support.');
+          }
+          return new Error(`Database precondition failed: ${error.message}`);
         default:
           return new Error(`Database error: ${error.message}`);
       }
+    }
+    
+    // Check for index errors in non-FirestoreError objects
+    if (error instanceof Error && error.message.includes('requires an index')) {
+      console.error('Missing Firestore index detected in non-FirestoreError:', error.message);
+      return new Error('Database query requires an index. Please try again later or contact support.');
     }
     
     return error instanceof Error ? error : new Error('An unknown error occurred');
@@ -609,6 +656,23 @@ class EventValidator {
       errors.push('Event title is required');
     } else if (eventData.title.length > 100) {
       errors.push('Event title must be less than 100 characters');
+    }
+    
+    // Validate privacy level
+    if (eventData.privacyLevel &&
+        !['public', 'connections', 'private'].includes(eventData.privacyLevel)) {
+      errors.push('Invalid privacy level');
+    }
+    
+    // Validate publish status
+    if (eventData.publishStatus &&
+        !['draft', 'published', 'scheduled'].includes(eventData.publishStatus)) {
+      errors.push('Invalid publish status');
+    }
+    
+    // If scheduled, require scheduledPublishDate
+    if (eventData.publishStatus === 'scheduled' && !eventData.scheduledPublishDate) {
+      errors.push('Scheduled publish date is required for scheduled events');
     }
     
     if (!eventData.date) {
@@ -662,6 +726,25 @@ class EventValidator {
       } else if (eventData.title.length > 100) {
         errors.push('Event title must be less than 100 characters');
       }
+    }
+    
+    // Validate privacy level if provided
+    if (eventData.privacyLevel &&
+        !['public', 'connections', 'private'].includes(eventData.privacyLevel)) {
+      errors.push('Invalid privacy level');
+    }
+    
+    // Validate publish status if provided
+    if (eventData.publishStatus &&
+        !['draft', 'published', 'scheduled'].includes(eventData.publishStatus)) {
+      errors.push('Invalid publish status');
+    }
+    
+    // If scheduled, require scheduledPublishDate
+    if (eventData.publishStatus === 'scheduled' &&
+        !eventData.scheduledPublishDate &&
+        eventData.scheduledPublishDate !== undefined) {
+      errors.push('Scheduled publish date is required for scheduled events');
     }
     
     // Validate price if isPaid is being updated to true
@@ -990,7 +1073,8 @@ class EventService {
       }
       
       // Check if the event date has passed
-      if (event.date && new Date(event.date) < new Date()) {
+      const eventDate = toDateObject(event.date);
+      if (eventDate && eventDate < new Date()) {
         return { canJoin: false, reason: 'Event has already occurred' };
       }
       
@@ -998,6 +1082,101 @@ class EventService {
     } catch (error) {
       console.error('Error in canUserJoinEvent service:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get attendees for a specific event
+   */
+  async getEventAttendees(eventId: string): Promise<string[]> {
+    try {
+      console.log('Getting event with ID:', eventId);
+      
+      const event = await this.getEventById(eventId);
+      if (!event) {
+        throw new Error('Event not found');
+      }
+      
+      return event.attendees || [];
+    } catch (error) {
+      console.error('Error in getEventAttendees service:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Process QR code check-in for an event
+   * @param qrCodeURI The QR code URI to process
+   * @param validatorId The ID of the person validating the QR code
+   * @returns Promise resolving to success status and message
+   */
+  async processQRCheckIn(qrCodeURI: string, validatorId: string): Promise<{success: boolean, message: string}> {
+    try {
+      console.log('Processing QR check-in with URI:', qrCodeURI);
+      
+      // Validate the QR code
+      const validationResult = await qrCodeService.validateQRCode(qrCodeURI, validatorId);
+      
+      if (!validationResult.isValid) {
+        console.error('QR code validation failed:', validationResult.message);
+        return {
+          success: false,
+          message: validationResult.message
+        };
+      }
+      
+      // If we have QR data, extract eventId and userId
+      if (validationResult.data) {
+        const { eventId, userId } = validationResult.data;
+        
+        // Get the event
+        const event = await this.getEventById(eventId);
+        if (!event) {
+          console.error('Event not found');
+          return {
+            success: false,
+            message: 'Event not found'
+          };
+        }
+
+        // Check if attendee is registered for this event
+        const attendees = event.attendees || [];
+        if (!attendees.includes(userId)) {
+          console.error('Attendee not registered for this event');
+          return {
+            success: false,
+            message: 'Attendee not registered for this event'
+          };
+        }
+        
+        // If this is an offline validation, we'll just return success
+        // The actual check-in will be processed when online
+        if (validationResult.isOfflineValidation) {
+          console.log('Offline check-in successful for attendee:', userId);
+          return {
+            success: true,
+            message: 'Offline check-in successful. Will sync when online.'
+          };
+        }
+        
+        console.log('Check-in successful for attendee:', userId);
+        return {
+          success: true,
+          message: 'Check-in successful'
+        };
+      }
+      
+      // If we don't have QR data but validation passed, return generic success
+      return {
+        success: true,
+        message: 'Check-in successful'
+      };
+    } catch (error) {
+      console.error('Error in processQRCheckIn service:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
     }
   }
 }

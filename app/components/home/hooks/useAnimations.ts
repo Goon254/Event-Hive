@@ -1,15 +1,18 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useMemo } from 'react';
 import { Animated, Easing, Dimensions } from 'react-native';
 
 /**
  * Custom hook for managing animations in the Home screen
  * Extracts animation logic from the component for better separation of concerns
+ * Optimized to prevent unnecessary re-renders
  */
 export const useAnimations = (maxItems: number = 20) => {
+  // Cache window dimensions to avoid recalculating on each render
+  const windowHeight = useRef(Dimensions.get('window').height).current;
   // Main animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
-  const exploreModalTranslateY = useRef(new Animated.Value(Dimensions.get('window').height)).current;
+  const exploreModalTranslateY = useRef(new Animated.Value(windowHeight)).current;
   
   // Animation pool for list items
   const itemAnimations = useRef<{
@@ -80,14 +83,14 @@ export const useAnimations = (maxItems: number = 20) => {
   // Function to hide explore modal with animation
   const hideExploreModal = useCallback((onComplete?: () => void) => {
     Animated.timing(exploreModalTranslateY, {
-      toValue: Dimensions.get('window').height,
+      toValue: windowHeight,
       duration: 300,
       useNativeDriver: true,
       easing: Easing.in(Easing.ease)
     }).start(() => {
       onComplete?.();
     });
-  }, [exploreModalTranslateY]);
+  }, [exploreModalTranslateY, windowHeight]);
 
   // Get animation values for a specific item
   const getItemAnimationValues = useCallback((index: number) => {
@@ -102,7 +105,8 @@ export const useAnimations = (maxItems: number = 20) => {
     return { fadeValue, translateValue };
   }, []);
 
-  return {
+  // Memoize the return value to prevent unnecessary object recreation on each render
+  return useMemo(() => ({
     // Animation values
     fadeAnim,
     translateY,
@@ -114,5 +118,14 @@ export const useAnimations = (maxItems: number = 20) => {
     showExploreModal,
     hideExploreModal,
     getItemAnimationValues
-  };
+  }), [
+    fadeAnim,
+    translateY,
+    exploreModalTranslateY,
+    animateListItems,
+    animateContentAppearance,
+    showExploreModal,
+    hideExploreModal,
+    getItemAnimationValues
+  ]);
 };
