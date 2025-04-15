@@ -4,7 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  FlatList,
+  ScrollView,
   ActivityIndicator,
   Animated,
   Dimensions
@@ -94,41 +94,41 @@ const EventSection = ({
       <View style={styles.sectionContent}>
         {loading ? (
           <View style={styles.loaderContainer}>
-            <ActivityIndicator 
-              size="small"
+            <ActivityIndicator
+              size="large"
               color="#007AFF"
             />
+            <Text style={styles.loaderText}>Loading events...</Text>
           </View>
-        ) : events.length > 0 ? (
-          <FlatList
-            data={events.slice(0, 5)}
-            renderItem={({ item, index }) => {
-              const { fadeValue, translateValue } = getItemAnimationValues(index);
-              return (
-                <EventCard
-                  item={item}
-                  index={index}
-                  isAttending={attendingEvents.includes(item.id)}
-                  status={getEventStatus(item)}
-                  fadeValue={fadeValue}
-                  translateValue={translateValue}
-                />
-              );
-            }}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.horizontalList}
-            snapToInterval={CARD_WIDTH + 16}
-            decelerationRate="fast"
-            initialNumToRender={2}
-            maxToRenderPerBatch={3}
-            windowSize={3}
-            removeClippedSubviews={true}
-            accessible={true}
-            accessibilityLabel={`${title} events list`}
-            accessibilityHint="Scroll horizontally to view more events"
-          />
+        ) : events && events.length > 0 ? (
+          <View style={styles.eventsContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.horizontalList}
+              decelerationRate="fast"
+              snapToInterval={CARD_WIDTH + 16}
+              accessible={true}
+              accessibilityLabel={`${title} events list`}
+              accessibilityHint="Scroll horizontally to view more events"
+            >
+              {events.slice(0, 5).map((item, index) => {
+                const { fadeValue, translateValue } = getItemAnimationValues(index);
+                console.log(`Rendering event card for ${item.title}`);
+                return (
+                  <EventCard
+                    key={item.id || `event-${index}`}
+                    item={item}
+                    index={index}
+                    isAttending={attendingEvents.includes(item.id)}
+                    status={getEventStatus(item)}
+                    fadeValue={fadeValue}
+                    translateValue={translateValue}
+                  />
+                );
+              })}
+            </ScrollView>
+          </View>
         ) : (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
@@ -163,7 +163,10 @@ const styles = StyleSheet.create({
   sectionContainer: {
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#1E1E1E', // Darker background for better contrast with cards
+    elevation: 3, // Add elevation for Android
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)', // More visible border
   },
   
   // Section header with subtle divider
@@ -177,73 +180,93 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
   seeAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderRadius: 12,
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    backgroundColor: 'rgba(0, 122, 255, 0.3)', // More visible background
   },
   seeAllText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#007AFF',
   },
   
   // Section content container
   sectionContent: {
     padding: 16,
-    paddingBottom: 20,
+    paddingBottom: 24,
+  },
+  eventsContainer: {
+    minHeight: 200, // Ensure there's space for events
+    marginBottom: 8, // Add some bottom margin
+    paddingVertical: 4, // Add some vertical padding
   },
   
   // List styling
   horizontalList: {
     paddingRight: 16,
+    paddingVertical: 4, // Add some vertical padding
+    flexDirection: 'row', // Ensure horizontal layout
+    alignItems: 'flex-start', // Align items at the top
   },
   
   // Loader styling
   loaderContainer: {
-    height: 150,
+    height: 180,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)', // Darker background to make loader more visible
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)', // Subtle border
+  },
+  loaderText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#a9a9a9',
   },
   
   // Empty state styling
   emptyContainer: {
-    padding: 20,
+    padding: 24,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#252525',
-    minHeight: 120,
+    backgroundColor: '#2A2A2A', // Lighter background for better visibility
+    minHeight: 150,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)', // Even more visible border
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 16,
     fontStyle: 'italic',
     textAlign: 'center',
-    marginBottom: 12,
-    color: '#A9A9A9',
+    marginBottom: 16,
+    color: '#CCCCCC',
   },
   
   // Action button styling
   createButton: {
     backgroundColor: '#007AFF',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
     ...buttonShadow,
+    elevation: 4, // Add elevation for Android
   },
   createButtonText: {
     color: 'white',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 16,
   }
 });
 

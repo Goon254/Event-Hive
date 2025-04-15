@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  FlatList,
   RefreshControl,
   ActivityIndicator,
   Platform,
@@ -139,7 +140,7 @@ export default function Home() {
         </View>
       )}
       
-      <ScrollView
+      <FlatList
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
@@ -154,7 +155,9 @@ export default function Home() {
         // Add accessibility props
         accessible={true}
         accessibilityLabel="Home screen content"
-      >
+        data={[1]} // Just need one item to render all content
+        renderItem={() => (
+          <>
         {/* Header with welcome message */}
         <View style={styles.headerContainer}>
           <View style={styles.headerContent}>
@@ -321,7 +324,10 @@ export default function Home() {
             {user && <EventDebug events={myEvents} title="My Events Debug" />}
           </>
         )}
-      </ScrollView>
+          </>
+        )}
+        keyExtractor={() => 'home-content'}
+      />
 
       {/* Floating Action Button for Event Creation */}
       <TouchableOpacity
@@ -334,7 +340,7 @@ export default function Home() {
         accessibilityHint="Opens event creation screen"
       >
         <LinearGradient
-          colors={['#007AFF', '#4F46E5']}
+          colors={['#007AFF', '#4F46E5']} // Use hardcoded colors for LinearGradient
           style={styles.fabGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -373,7 +379,6 @@ export default function Home() {
     </>
   );
 }
-
 // Platform-specific shadows
 const cardShadow = createShadow(2);
 const buttonShadow = createShadow(1);
@@ -382,11 +387,11 @@ const styles = StyleSheet.create({
   // Main containers
   pageContainer: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#121212', // Darker background for better contrast with cards
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#121212',
   },
   contentContainer: {
     paddingBottom: 32,
@@ -395,11 +400,13 @@ const styles = StyleSheet.create({
   // Header section
   headerContainer: {
     backgroundColor: '#007AFF',
-    paddingBottom: 24,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    paddingBottom: 28,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     overflow: 'hidden',
     ...cardShadow,
+    elevation: 8, // Add elevation for Android
+    marginBottom: 10, // Add margin to separate from content
   },
   headerContent: {
     flexDirection: 'row',
@@ -412,15 +419,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   welcomeText: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#FFFFFF',
     letterSpacing: -0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   subtitleText: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 4,
+    fontSize: 18,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 6,
+    fontWeight: '500',
   },
   headerButtons: {
     flexDirection: 'row',
@@ -429,45 +440,52 @@ const styles = StyleSheet.create({
   },
   mapButton: {
     backgroundColor: 'rgba(59, 130, 246, 0.8)',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    ...buttonShadow,
   },
   scanButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    ...buttonShadow,
   },
   
   // Discovery section (search & categories)
   discoverySection: {
-    marginTop: 16,
+    marginTop: 20,
     marginHorizontal: 16,
-    backgroundColor: '#1E1E1E',
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: '#1E1E1E', // Slightly lighter background for better visibility
+    borderRadius: 20,
+    padding: 20,
     ...cardShadow,
+    elevation: 5, // Add elevation for Android
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)', // Add subtle border
   },
   exploreButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#2D2D2D',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 16,
+    padding: 16,
+    borderRadius: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   exploreButtonText: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#FFFFFF',
-    fontWeight: '500',
+    fontWeight: '600',
     flex: 1,
-    marginLeft: 10,
+    marginLeft: 12,
   },
   categoriesContainer: {
     // No additional styling needed as CategoryButtons has its own internal padding
@@ -476,62 +494,72 @@ const styles = StyleSheet.create({
   // Status containers (loading/error)
   statusContainer: {
     margin: 16,
-    padding: 24,
-    backgroundColor: '#1E1E1E',
-    borderRadius: 16,
+    padding: 28,
+    backgroundColor: '#1E1E1E', // Slightly lighter background for better visibility
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     ...cardShadow,
+    elevation: 4, // Add elevation for Android
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)', // More visible border
   },
   statusText: {
-    fontSize: 16,
-    color: '#a9a9a9',
-    marginTop: 12,
+    fontSize: 18,
+    color: '#CCCCCC',
+    marginTop: 16,
+    fontWeight: '500',
   },
   errorText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#EF4444',
-    marginTop: 12,
+    marginTop: 16,
   },
   errorSubtext: {
-    fontSize: 14,
-    color: '#a9a9a9',
+    fontSize: 16,
+    color: '#CCCCCC',
     textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 16,
+    marginTop: 10,
+    marginBottom: 20,
+    paddingHorizontal: 16,
   },
   retryButton: {
     backgroundColor: '#EF4444',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+    ...buttonShadow,
   },
   retryButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+    fontSize: 16,
   },
   
   // Section containers
   sectionContainer: {
     marginTop: 24,
     marginHorizontal: 16,
-    backgroundColor: '#1E1E1E',
-    borderRadius: 16,
+    backgroundColor: '#1E1E1E', // Slightly lighter background for better visibility
+    borderRadius: 20,
     overflow: 'hidden',
     ...cardShadow,
+    elevation: 4, // Add elevation for Android
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)', // More visible border
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    padding: 16,
-    paddingBottom: 8,
+    padding: 18,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   sectionContent: {
-    padding: 16,
+    padding: 18,
   },
   eventsSectionsContainer: {
     marginBottom: 16,
@@ -540,30 +568,33 @@ const styles = StyleSheet.create({
   // Offline banner
   offlineBanner: {
     backgroundColor: '#6B7280',
-    padding: 12,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
   },
   offlineBannerText: {
     color: '#FFFFFF',
-    fontSize: 14,
-    marginLeft: 8,
+    fontSize: 15,
+    fontWeight: '500',
+    marginLeft: 10,
   },
   
   // FAB
   createEventFAB: {
     position: 'absolute',
-    bottom: 24,
-    right: 24,
+    bottom: 28,
+    right: 28,
     ...buttonShadow,
-    borderRadius: 28,
-    elevation: 8,
+    borderRadius: 30,
+    elevation: 10,
   },
   fabGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
   }

@@ -177,7 +177,7 @@ export const useEventData = (userId?: string) => {
       return;
     }
     
-    console.log(`Processing ${sortedEvents.length} events`);
+    console.log(`Processing ${sortedEvents.length} events`, sortedEvents);
     
     // Filter for upcoming events (events in the future)
     const now = new Date();
@@ -213,9 +213,11 @@ export const useEventData = (userId?: string) => {
       setFeaturedEvent(upcoming[0]);
     }
     
-    // Simulate nearby events by taking a random subset
-    const shuffled = [...sortedEvents].sort(() => 0.5 - Math.random());
-    setNearbyEvents(shuffled.slice(0, 5));
+    // Get nearby events - for now, just take the most recent events
+    // This should be replaced with actual geolocation-based filtering in the future
+    const nearbyEventsData = [...sortedEvents].slice(0, 5);
+    console.log('Setting nearby events:', nearbyEventsData.length, nearbyEventsData);
+    setNearbyEvents(nearbyEventsData);
     
     // Filter for user's events if user is logged in
     if (userId) {
@@ -282,6 +284,7 @@ export const useEventData = (userId?: string) => {
       
       if (!isMounted.current) return;
       
+      console.log('Setting events:', sortedEvents.length, sortedEvents);
       setEvents(sortedEvents);
       processEvents(sortedEvents);
       
