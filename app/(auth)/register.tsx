@@ -198,7 +198,10 @@ export default function Register() {
     }
   };
   
-  // Upload profile image using the enhanced image service
+  /**
+   * Upload profile image using the enhanced image service
+   * This function handles image uploads during registration when the user is not yet authenticated
+   */
   const uploadProfileImage = async (imageUri: string): Promise<string | null> => {
     try {
       setUploadingImage(true);
@@ -209,9 +212,9 @@ export default function Register() {
         return null;
       }
       
-      // Use the enhanced image service
+      console.log('Starting profile image upload during registration');
       
-      // Configure upload options
+      // Configure upload options with detailed metadata
       const uploadOptions = {
         quality: ImageQuality.HIGH,
         maxWidth: ImageSize.MEDIUM,
@@ -220,19 +223,32 @@ export default function Register() {
         generateThumbnail: false,
         metadata: {
           uploadedDuring: 'registration',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          appVersion: '1.0.0', // Add app version for tracking
+          platform: Platform.OS
         },
         onProgress: (progress: number) => {
-          // Optional: Handle progress updates if needed
-          console.log(`Profile image upload progress: ${progress * 100}%`);
+          // Handle progress updates
+          console.log(`Profile image upload progress: ${(progress * 100).toFixed(1)}%`);
         }
       };
       
-      // Upload the image using the enhanced service
-      const downloadURL = await enhancedImageService.uploadProfileImage(imageUri, uploadOptions);
-      console.log('Profile image uploaded successfully, URL:', downloadURL);
+      // Use direct uploadImage method for more control
+      const result = await enhancedImageService.uploadImage(
+        imageUri,
+        ImageType.PROFILE,
+        uploadOptions
+      );
       
-      return downloadURL;
+      console.log('Profile image uploaded successfully, URL:', result.url);
+      
+      // Store the pendingPath flag in userData for later use after registration
+      if (result.pendingPath) {
+        console.log('Image uploaded to pending path, will be moved after registration');
+        // You could store this information in AsyncStorage if needed for recovery
+      }
+      
+      return result.url;
     } catch (error: any) {
       console.error('Error uploading profile image:', error);
       

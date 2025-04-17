@@ -16,31 +16,58 @@ service firebase.storage {
       allow write: if false;
     }
     
-    // Allow uploads to events with event ID in the path
-    match /events/{userId}/{eventId}/{fileName} {
-      allow read, write: if true;
-    }
-    
-    // Allow uploads to event speakers
-    match /events/{userId}/{eventId}/speakers/{fileName} {
-      allow read, write: if true;
-    }
-    
-    // For testing purposes - allow all operations on these paths
+    // Profile images - direct upload to profile_images folder
     match /profile_images/{fileName} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if true;
     }
     
+    // Profile images with userId
+    match /profile_images/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Allow uploads to pending profile images during registration
+    match /profile_images/pending/{fileName} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Post images without postId
     match /posts/{userId}/{fileName} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if true;
     }
     
+    // Post images with postId
+    match /posts/{userId}/{postId}/{fileName} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Event images without eventId
     match /events/{userId}/{fileName} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if true;
     }
     
+    // Event images with eventId
+    match /events/{userId}/{eventId}/{fileName} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Event speaker images
+    match /events/{userId}/{eventId}/speakers/{fileName} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Test uploads
     match /test_uploads/{userId}/{fileName} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if true;
     }
     
     // More restrictive rules for production use (commented out for now)

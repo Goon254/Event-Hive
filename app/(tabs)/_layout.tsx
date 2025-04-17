@@ -4,6 +4,8 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import ErrorBoundary from '../container/shared/ErrorBoundary';
 import { Platform, StyleSheet } from 'react-native';
 import { createShadow } from '../utils/platformUtils';
+import theme from '../theme';
+import { COLORS } from '../theme/constants';
 
 export default function TabsLayout() {
   // Create platform-specific tab bar shadow
@@ -14,15 +16,15 @@ export default function TabsLayout() {
       <Tabs
         initialRouteName="Home"
         screenOptions={{
-          tabBarActiveTintColor: '#007AFF',
-          tabBarInactiveTintColor: '#6B7280',
+          tabBarActiveTintColor: COLORS.tabBarActive,
+          tabBarInactiveTintColor: COLORS.tabBarInactive,
           tabBarStyle: {
             height: 60,
             paddingBottom: Platform.OS === 'ios' ? 10 : 8,
             paddingTop: Platform.OS === 'ios' ? 10 : 8,
-            backgroundColor: '#FFFFFF',
+            backgroundColor: COLORS.tabBar,
             borderTopWidth: 1,
-            borderTopColor: '#E5E7EB',
+            borderTopColor: COLORS.border,
             ...tabBarShadow,
           },
           tabBarLabelStyle: {
@@ -30,14 +32,14 @@ export default function TabsLayout() {
             fontWeight: '500',
           },
           headerStyle: {
-            backgroundColor: '#FFFFFF',
+            backgroundColor: COLORS.header,
             height: Platform.OS === 'ios' ? 100 : 80,
             ...createShadow(1),
           },
           headerTitleStyle: {
             fontWeight: Platform.OS === 'ios' ? '700' : 'bold',
             fontSize: 18,
-            color: '#1F2937',
+            color: COLORS.headerText,
           },
         }}
       >
@@ -58,6 +60,7 @@ export default function TabsLayout() {
             tabBarIcon: ({ color }) => (
               <FontAwesome5 name="newspaper" size={22} color={color} />
             ),
+            headerShown: false, // Hide the header for the feed tab
           }}
         />
         <Tabs.Screen
@@ -67,6 +70,7 @@ export default function TabsLayout() {
             tabBarIcon: ({ color }) => (
               <FontAwesome5 name="network-wired" size={22} color={color} />
             ),
+            headerShown: false, // Hide the header for the connections tab
           }}
         />
         <Tabs.Screen
@@ -76,6 +80,7 @@ export default function TabsLayout() {
             tabBarIcon: ({ color }) => (
               <FontAwesome5 name="user" size={22} color={color} />
             ),
+            headerShown: false, // Hide the header for the profile tab
           }}
         />
       </Tabs>

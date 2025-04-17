@@ -2,9 +2,11 @@
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { useAuth } from '../AuthContext';
-import socialService from '../services/socialService';
-import { enhancedImageService, ImageType, ImageQuality, ImageSize } from '../services/enhancedImageService';
+import { socialService } from '../services/social/SocialService';
+import { imageService } from '../services/social/ImageService';
+import { ImageQuality, ImageSize } from '../services/enhancedImageService';
 import { ContentType, PrivacyLevel } from '../models/social';
+import { Timestamp } from 'firebase/firestore';
 
 /**
  * Custom hook for social post operations
@@ -49,7 +51,8 @@ export function useSocialPosts() {
         privacyLevel,
         likes: 0,
         comments: 0,
-        shares: 0
+        shares: 0,
+        createdAt: Timestamp.now() // Add createdAt field
       };
       
       // Upload media files if any
@@ -76,9 +79,9 @@ export function useSocialPosts() {
             }
           };
           
-          // Upload each image using the enhanced image service
+          // Upload each image using the new image service
           const uploadPromises = mediaFiles.map(uri =>
-            enhancedImageService.uploadPostImage(uri, undefined, uploadOptions)
+            imageService.uploadPostImage(uri, undefined, uploadOptions)
           );
           
           // Wait for all uploads to complete
@@ -136,7 +139,7 @@ export function useSocialPosts() {
       }
       
       // Create the post with the media URLs
-      const newPost = await socialService.createPost(postData, mediaUrls);
+      const newPost = await socialService.posts.createPost(postData, mediaUrls);
       return newPost;
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to create post');
@@ -162,7 +165,7 @@ export function useSocialPosts() {
       setIsLoading(true);
       setError(null);
       
-      await socialService.deletePost(postId);
+      await socialService.posts.deletePost(postId);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to delete post');
       setError(error);

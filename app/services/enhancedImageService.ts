@@ -7,6 +7,69 @@ import { getStorage, ref, uploadBytes, getDownloadURL, StorageError } from 'fire
 import { auth } from '../../lib/firebaseConfig';
 
 /**
+ * Logger class for managing log levels
+ */
+enum LogLevel {
+  DEBUG = 0,
+  INFO = 1,
+  WARN = 2,
+  ERROR = 3,
+  NONE = 4
+}
+
+class Logger {
+  private static instance: Logger;
+  private logLevel: LogLevel = LogLevel.INFO; // Default level
+  
+  private constructor() {}
+  
+  public static getInstance(): Logger {
+    if (!Logger.instance) {
+      Logger.instance = new Logger();
+    }
+    return Logger.instance;
+  }
+  
+  public setLogLevel(level: LogLevel): void {
+    this.logLevel = level;
+  }
+  
+  public debug(message: string, ...args: any[]): void {
+    if (this.logLevel <= LogLevel.DEBUG) {
+      console.log(`[DEBUG] ${message}`, ...args);
+    }
+  }
+  
+  public info(message: string, ...args: any[]): void {
+    if (this.logLevel <= LogLevel.INFO) {
+      console.log(`[INFO] ${message}`, ...args);
+    }
+  }
+  
+  public warn(message: string, ...args: any[]): void {
+    if (this.logLevel <= LogLevel.WARN) {
+      console.warn(`[WARN] ${message}`, ...args);
+    }
+  }
+  
+  public error(message: string, ...args: any[]): void {
+    if (this.logLevel <= LogLevel.ERROR) {
+      console.error(`[ERROR] ${message}`, ...args);
+    }
+  }
+}
+
+// Create a logger instance
+const logger = Logger.getInstance();
+
+// Set log level based on environment
+if (__DEV__) {
+  logger.setLogLevel(LogLevel.DEBUG);
+} else {
+  logger.setLogLevel(LogLevel.ERROR); // Only log errors in production
+}
+
+/**
  * Image quality settings
  */
 export enum ImageQuality {
@@ -24,6 +87,15 @@ export enum ImageSize {
   MEDIUM = 1000,
   LARGE = 2000,
   ORIGINAL = 0 // No resizing
+}
+
+/**
+ * Image format types
+ */
+export enum ImageFormat {
+  JPEG = 'jpeg',
+  PNG = 'png',
+  WEBP = 'webp'
 }
 
 /**
@@ -49,6 +121,7 @@ export interface ImageUploadOptions {
   thumbnailSize?: number;
   metadata?: Record<string, string>;
   onProgress?: (progress: number) => void;
+  format?: ImageFormat; // Added format option
 }
 
 /**
@@ -61,7 +134,8 @@ const DEFAULT_OPTIONS: Record<ImageType, ImageUploadOptions> = {
     maxHeight: ImageSize.MEDIUM,
     compress: true,
     generateThumbnail: true,
-    thumbnailSize: 150
+    thumbnailSize: 150,
+    format: ImageFormat.JPEG
   },
   [ImageType.POST]: {
     quality: ImageQuality.HIGH,
@@ -69,7 +143,8 @@ const DEFAULT_OPTIONS: Record<ImageType, ImageUploadOptions> = {
     maxHeight: ImageSize.LARGE,
     compress: true,
     generateThumbnail: true,
-    thumbnailSize: 300
+    thumbnailSize: 300,
+    format: ImageFormat.JPEG
   },
   [ImageType.EVENT]: {
     quality: ImageQuality.HIGH,
@@ -77,7 +152,8 @@ const DEFAULT_OPTIONS: Record<ImageType, ImageUploadOptions> = {
     maxHeight: ImageSize.LARGE,
     compress: true,
     generateThumbnail: true,
-    thumbnailSize: 300
+    thumbnailSize: 300,
+    format: ImageFormat.JPEG
   },
   [ImageType.EVENT_SPEAKER]: {
     quality: ImageQuality.HIGH,
@@ -85,14 +161,16 @@ const DEFAULT_OPTIONS: Record<ImageType, ImageUploadOptions> = {
     maxHeight: ImageSize.MEDIUM,
     compress: true,
     generateThumbnail: true,
-    thumbnailSize: 150
+    thumbnailSize: 150,
+    format: ImageFormat.JPEG
   },
   [ImageType.TEST]: {
     quality: ImageQuality.MEDIUM,
     maxWidth: ImageSize.MEDIUM,
     maxHeight: ImageSize.MEDIUM,
     compress: true,
-    generateThumbnail: false
+    generateThumbnail: false,
+    format: ImageFormat.JPEG
   }
 };
 
@@ -104,12 +182,23 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 /**
  * Maximum retry attempts for uploads
  */
-const MAX_RETRY_ATTEMPTS = 3;
+const MAX_RETRY_ATTEMPTS = 5;
 
 /**
- * Delay between retry attempts (in ms)
+ * Base delay between retry attempts (in ms)
+ * Will be multiplied by 2^attempt for exponential backoff
  */
-const RETRY_DELAY = 1000;
+const BASE_RETRY_DELAY = 1000;
+
+/**
+ * Maximum delay between retry attempts (in ms)
+ */
+const MAX_RETRY_DELAY = 30000;
+
+/**
+ * Network timeout for fetch operations (in ms)
+ */
+const NETWORK_TIMEOUT = 30000;
 
 /**
  * Enhanced Image Service
@@ -152,7 +241,7 @@ class EnhancedImageService {
       
       return null;
     } catch (error) {
-      console.error('Error picking image:', error);
+      logger.error('Error picking image:', error);
       throw new Error(`Failed to pick image: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -192,7 +281,7 @@ class EnhancedImageService {
       
       return null;
     } catch (error) {
-      console.error('Error taking photo:', error);
+      logger.error('Error taking photo:', error);
       throw new Error(`Failed to take photo: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -240,6 +329,9 @@ class EnhancedImageService {
         });
       }
       
+      // Get the format to use
+      const format = this.getImageManipulatorFormat(options.format);
+      
       // Process the image
       const processedImage = await ImageManipulator.manipulateAsync(
         uri,
@@ -248,16 +340,30 @@ class EnhancedImageService {
           compress: needsCompression ? 
                     Math.min(options.quality || ImageQuality.HIGH, ImageQuality.MEDIUM) : 
                     options.quality || ImageQuality.HIGH,
-          format: ImageManipulator.SaveFormat.JPEG
+          format
         }
       );
       
       return processedImage.uri;
     } catch (error) {
-      console.error('Error processing image:', error);
+      logger.error('Error processing image:', error);
       // Return original URI if processing fails
       return uri;
     }
+  }
+  
+  /**
+   * Convert our format enum to ImageManipulator format
+   */
+  private getImageManipulatorFormat(format?: ImageFormat): ImageManipulator.SaveFormat {
+    if (format === ImageFormat.PNG) {
+      return ImageManipulator.SaveFormat.PNG;
+    } else if (format === ImageFormat.WEBP) {
+      return ImageManipulator.SaveFormat.WEBP;
+    }
+    
+    // Default to JPEG
+    return ImageManipulator.SaveFormat.JPEG;
   }
   
   /**
@@ -276,7 +382,7 @@ class EnhancedImageService {
       
       return thumbnail.uri;
     } catch (error) {
-      console.error('Error generating thumbnail:', error);
+      logger.error('Error generating thumbnail:', error);
       throw new Error(`Failed to generate thumbnail: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -310,19 +416,72 @@ class EnhancedImageService {
   }
   
   /**
-   * Create a blob from a file URI with improved error handling
+   * Create a blob from a file URI with improved error handling and compatibility
    * @param uri Normalized file URI
    * @returns Promise resolving to a Blob
    */
   private async createBlobFromUri(uri: string): Promise<Blob> {
     try {
+      logger.debug(`Creating blob from URI type: ${uri.substring(0, 10)}...`);
+      
       // For data URIs, convert directly to blob without fetch
       if (uri.startsWith('data:')) {
-        return await (await fetch(uri)).blob();
+        logger.debug('URI is a data URI, converting directly to blob');
+        const dataResponse = await fetch(uri);
+        const dataBlob = await dataResponse.blob();
+        logger.debug(`Data URI blob created successfully. Size: ${dataBlob.size} bytes`);
+        return dataBlob;
       }
       
-      // Standard fetch approach for file URIs and remote URLs
-      const response = await fetch(uri);
+      // For file URIs on React Native, use FileSystem to read the file first
+      if (uri.startsWith('file:') || Platform.OS !== 'web') {
+        try {
+          logger.debug('URI is a file URI, using FileSystem to read file');
+          // Read the file as base64
+          const fileInfo = await FileSystem.getInfoAsync(uri);
+          logger.debug(`File info: exists=${fileInfo.exists}, size=${fileInfo.exists && 'size' in fileInfo ? fileInfo.size : 'unknown'}`);
+          
+          if (!fileInfo.exists) {
+            throw new Error('File does not exist');
+          }
+          
+          // Read the file as base64
+          const fileContent = await FileSystem.readAsStringAsync(uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          
+          if (!fileContent || fileContent.length === 0) {
+            throw new Error('File content is empty');
+          }
+          
+          logger.debug(`File read successfully. Base64 length: ${fileContent.length}`);
+          
+          // Convert base64 to blob
+          const base64Response = await fetch(`data:image/jpeg;base64,${fileContent}`);
+          if (!base64Response.ok) {
+            throw new Error(`Failed to convert base64 to blob: ${base64Response.status} ${base64Response.statusText}`);
+          }
+          
+          const fileBlob = await base64Response.blob();
+          logger.debug(`File blob created successfully. Size: ${fileBlob.size} bytes`);
+          return fileBlob;
+        } catch (fileError) {
+          logger.warn('Error reading file with FileSystem, falling back to fetch:', fileError);
+          // Fall back to fetch approach
+        }
+      }
+      
+      // Standard fetch approach for remote URLs and fallback with timeout
+      logger.debug('Using standard fetch approach');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT);
+      
+      const response = await fetch(uri, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
       if (!response.ok) {
         throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
       }
@@ -334,22 +493,27 @@ class EnhancedImageService {
         throw new Error('Created blob is empty or invalid');
       }
       
+      logger.debug(`Blob created successfully via fetch. Size: ${blob.size} bytes, Type: ${blob.type}`);
       return blob;
     } catch (error) {
-      console.error('Error creating blob:', error);
+      logger.error('Error creating blob:', error);
       throw new Error(`Failed to create blob: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
   
   /**
-   * Get the current user ID or throw an error if not authenticated
-   * @returns User ID
+   * Get the current user ID or null if not authenticated
+   * @param requireAuth Whether to require authentication (default: true)
+   * @returns User ID or null
    */
-  private getCurrentUserId(): string {
+  private getCurrentUserId(requireAuth: boolean = true): string | null {
     const user = auth.currentUser;
     
     if (!user) {
-      throw new Error('User must be authenticated to upload images');
+      if (requireAuth) {
+        throw new Error('User must be authenticated to upload images');
+      }
+      return null;
     }
     
     return user.uid;
@@ -362,19 +526,26 @@ class EnhancedImageService {
    * @returns Storage path
    */
   private getStoragePath(type: ImageType, id?: string): string {
-    const userId = this.getCurrentUserId();
+    // During registration, we don't require authentication for profile images
+    const requireAuth = type !== ImageType.PROFILE;
+    const userId = this.getCurrentUserId(requireAuth);
     
     switch (type) {
       case ImageType.PROFILE:
-        return `profile_images`;
+        // For profile images during registration, use a temporary path
+        return userId ? `profile_images/${userId}` : 'profile_images/pending';
       case ImageType.POST:
-        return `posts/${userId}`;
+        // For posts, include the post ID in the path if provided
+        return id ? `posts/${userId}/${id}` : `posts/${userId}`;
       case ImageType.EVENT:
-        // For events, we don't include the event ID in the path to match storage rules
-        return `events/${userId}`;
+        // For events, include the event ID in the path if provided
+        return id ? `events/${userId}/${id}` : `events/${userId}`;
       case ImageType.EVENT_SPEAKER:
-        // For event speakers, we don't include the event ID in the path to match storage rules
-        return `events/${userId}`;
+        // For event speakers, include the event ID in the path
+        if (!id) {
+          logger.warn('Event ID should be provided for speaker images');
+        }
+        return id ? `events/${userId}/${id}/speakers` : `events/${userId}/speakers`;
       case ImageType.TEST:
         return `test_uploads/${userId}`;
       default:
@@ -383,7 +554,120 @@ class EnhancedImageService {
   }
   
   /**
-   * Upload an image to Firebase Storage with retry mechanism and progress tracking
+   * Prepare image for upload (process and generate thumbnail)
+   */
+  private async prepareImageForUpload(
+    uri: string,
+    options: ImageUploadOptions
+  ): Promise<{ processedUri: string; thumbnailUri?: string }> {
+    // Normalize URI
+    const normalizedUri = this.normalizeUri(uri);
+    logger.debug(`Normalized URI: ${normalizedUri.substring(0, 50)}...`);
+    
+    // Process image
+    logger.debug('Processing image...');
+    const processedUri = await this.processImage(normalizedUri, options);
+    logger.debug('Image processed successfully');
+    
+    // Generate thumbnail if needed
+    let thumbnailUri: string | undefined;
+    if (options.generateThumbnail) {
+      logger.debug('Generating thumbnail...');
+      thumbnailUri = await this.generateThumbnail(
+        processedUri,
+        options.thumbnailSize || 150
+      );
+      logger.debug('Thumbnail generated successfully');
+    }
+    
+    return { processedUri, thumbnailUri };
+  }
+  
+  /**
+   * Generate unique filenames for uploads
+   */
+  private generateFilenames(id?: string, format: ImageFormat = ImageFormat.JPEG): { 
+    filename: string; 
+    thumbnailFilename: string 
+  } {
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(2, 10);
+    const idPrefix = id ? `${id}_` : '';
+    const extension = format.toLowerCase();
+    
+    return {
+      filename: `${idPrefix}${timestamp}_${randomString}.${extension}`,
+      thumbnailFilename: `${idPrefix}${timestamp}_${randomString}_thumb.${extension}`
+    };
+  }
+  
+  /**
+   * Upload a file to Firebase Storage with retry logic
+   */
+  private async uploadFileWithRetry(
+    ref: any, 
+    blob: Blob, 
+    metadata?: Record<string, string>,
+    onProgress?: (progress: number) => void
+  ): Promise<string> {
+    let uploadProgress = 0;
+    
+    const updateProgress = (progress: number) => {
+      uploadProgress = progress;
+      if (onProgress) {
+        onProgress(progress);
+      }
+    };
+    
+    const attemptUpload = async (attempt: number = 0): Promise<string> => {
+      try {
+        logger.debug(`Upload attempt ${attempt + 1} of ${MAX_RETRY_ATTEMPTS}`);
+        
+        // Simulate progress updates
+        const progressInterval = setInterval(() => {
+          if (uploadProgress < 0.9) {
+            uploadProgress += 0.1;
+            if (onProgress) {
+              onProgress(uploadProgress);
+            }
+          }
+        }, 500);
+        
+        // Upload file
+        const uploadResult = await uploadBytes(ref, blob, {
+          customMetadata: metadata
+        });
+        
+        // Clear progress interval
+        clearInterval(progressInterval);
+        
+        // Get download URL
+        const downloadURL = await getDownloadURL(ref);
+        return downloadURL;
+      } catch (error) {
+        logger.error(`Upload attempt ${attempt + 1} failed:`, error);
+        
+        // Check if we should retry
+        if (attempt < MAX_RETRY_ATTEMPTS - 1) {
+          const retryDelay = Math.min(BASE_RETRY_DELAY * Math.pow(2, attempt), MAX_RETRY_DELAY);
+          logger.debug(`Retrying upload in ${retryDelay/1000} seconds...`);
+          
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          
+          // Try again
+          return attemptUpload(attempt + 1);
+        }
+        
+        throw error;
+      }
+    };
+    
+    return attemptUpload();
+  }
+  
+  /**
+   * Upload an image to Firebase Storage with enhanced error handling
    * @param uri Image URI
    * @param type Image type
    * @param options Upload options
@@ -399,14 +683,24 @@ class EnhancedImageService {
     url: string;
     thumbnailUrl?: string;
     metadata?: Record<string, string>;
+    pendingPath?: boolean; // Flag to indicate if this was uploaded to a pending path
   }> {
     try {
       if (!uri) {
         throw new Error('Image URI is required');
       }
       
-      // Get current user ID
-      const userId = this.getCurrentUserId();
+      // For profile images during registration, we don't require authentication
+      const requireAuth = type !== ImageType.PROFILE;
+      
+      // Get current user ID (may be null during registration)
+      const userId = this.getCurrentUserId(requireAuth);
+      
+      // Flag to track if this is a pending upload (during registration)
+      const isPendingUpload = type === ImageType.PROFILE && !userId;
+      
+      // Add debug logging
+      logger.debug(`Uploading ${type} image. Auth required: ${requireAuth}, User ID: ${userId || 'none'}, Pending: ${isPendingUpload}, ID: ${id || 'none'}`);
       
       // Merge options with defaults
       const mergedOptions: ImageUploadOptions = {
@@ -414,113 +708,66 @@ class EnhancedImageService {
         ...options
       };
       
-      // Normalize URI
-      const normalizedUri = this.normalizeUri(uri);
-      
-      // Process image
-      const processedUri = await this.processImage(normalizedUri, mergedOptions);
-      
-      // Generate thumbnail if needed
-      let thumbnailUri: string | undefined;
-      if (mergedOptions.generateThumbnail) {
-        thumbnailUri = await this.generateThumbnail(
-          processedUri,
-          mergedOptions.thumbnailSize || 150
-        );
-      }
+      // Prepare images (process and generate thumbnail)
+      const { processedUri, thumbnailUri } = await this.prepareImageForUpload(uri, mergedOptions);
       
       // Get storage path
       const path = this.getStoragePath(type, id);
+      logger.debug(`Storage path: ${path}`);
+      
       // Create unique filenames
-      const timestamp = Date.now();
-      const randomString = Math.random().toString(36).substring(2, 10);
-      // Include the ID in the filename instead of the path
-      const idPrefix = id ? `${id}_` : '';
-      const filename = `${idPrefix}${timestamp}_${randomString}.jpg`;
-      const thumbnailFilename = thumbnailUri ? `${idPrefix}${timestamp}_${randomString}_thumb.jpg` : undefined;
+      const { filename, thumbnailFilename } = this.generateFilenames(id, mergedOptions.format);
       
       // Initialize storage
       const storage = getStorage();
       
-      // Upload main image
-      const imageRef = ref(storage, `${path}/${filename}`);
+      // Create blobs
       const imageBlob = await this.createBlobFromUri(processedUri);
       
-      // Track upload progress
-      let uploadProgress = 0;
-      const updateProgress = (progress: number) => {
-        uploadProgress = progress;
-        if (mergedOptions.onProgress) {
-          mergedOptions.onProgress(thumbnailUri ? progress * 0.7 : progress);
-        }
-      };
-      
-      // Upload with retry
-      const uploadWithRetry = async (attempt: number = 0): Promise<string> => {
-        try {
-          // Simulate progress updates
-          const progressInterval = setInterval(() => {
-            if (uploadProgress < 0.9) {
-              uploadProgress += 0.1;
-              if (mergedOptions.onProgress) {
-                mergedOptions.onProgress(thumbnailUri ? uploadProgress * 0.7 : uploadProgress);
-              }
-            }
-          }, 500);
-          
-          // Upload image
-          const uploadResult = await uploadBytes(imageRef, imageBlob, {
-            customMetadata: mergedOptions.metadata
-          });
-          
-          // Clear progress interval
-          clearInterval(progressInterval);
-          
-          // Get download URL
-          const downloadURL = await getDownloadURL(imageRef);
-          return downloadURL;
-        } catch (error) {
-          console.error(`Upload attempt ${attempt + 1} failed:`, error);
-          
-          // Check if we should retry
-          if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-            console.log(`Retrying upload in ${RETRY_DELAY/1000} seconds...`);
-            
-            // Wait before retrying
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-            
-            // Try again
-            return uploadWithRetry(attempt + 1);
-          }
-          
-          throw error;
-        }
-      };
-      
       // Upload main image
-      const imageUrl = await uploadWithRetry();
+      const fullPath = `${path}/${filename}`;
+      const imageRef = ref(storage, fullPath);
+      
+      // Upload with progress tracking for main image
+      const thumbnailProgressWeight = thumbnailUri ? 0.7 : 1.0;
+      const imageProgressCallback = mergedOptions.onProgress ? 
+        (progress: number) => mergedOptions.onProgress!(progress * thumbnailProgressWeight) : 
+        undefined;
+      
+      const imageUrl = await this.uploadFileWithRetry(
+        imageRef, 
+        imageBlob, 
+        mergedOptions.metadata,
+        imageProgressCallback
+      );
       
       // Upload thumbnail if available
       let thumbnailUrl: string | undefined;
-      if (thumbnailUri && thumbnailFilename) {
+      if (thumbnailUri) {
         try {
           const thumbnailRef = ref(storage, `${path}/${thumbnailFilename}`);
           const thumbnailBlob = await this.createBlobFromUri(thumbnailUri);
           
           // Update progress for thumbnail upload
           if (mergedOptions.onProgress) {
-            mergedOptions.onProgress(0.7); // Main image is 70% of progress
+            mergedOptions.onProgress(thumbnailProgressWeight);
           }
           
-          await uploadBytes(thumbnailRef, thumbnailBlob);
-          thumbnailUrl = await getDownloadURL(thumbnailRef);
+          const thumbnailProgressCallback = mergedOptions.onProgress ? 
+            (progress: number) => {
+              const scaledProgress = thumbnailProgressWeight + (progress * (1 - thumbnailProgressWeight));
+              mergedOptions.onProgress!(scaledProgress);
+            } : 
+            undefined;
           
-          // Complete progress
-          if (mergedOptions.onProgress) {
-            mergedOptions.onProgress(1.0);
-          }
+          thumbnailUrl = await this.uploadFileWithRetry(
+            thumbnailRef, 
+            thumbnailBlob,
+            undefined,
+            thumbnailProgressCallback
+          );
         } catch (thumbnailError) {
-          console.error('Error uploading thumbnail:', thumbnailError);
+          logger.error('Error uploading thumbnail:', thumbnailError);
           // Continue without thumbnail
         }
       } else if (mergedOptions.onProgress) {
@@ -528,29 +775,37 @@ class EnhancedImageService {
         mergedOptions.onProgress(1.0);
       }
       
+      logger.debug('Image upload completed successfully');
       return {
         url: imageUrl,
         thumbnailUrl,
-        metadata: mergedOptions.metadata
+        metadata: mergedOptions.metadata,
+        pendingPath: isPendingUpload
       };
     } catch (error) {
-      console.error('Error uploading image:', error);
+      logger.error('Error uploading image:', error);
       
       // Provide detailed error information
       if (error instanceof StorageError) {
-        console.error(`Firebase Storage error code: ${error.code}`);
-        console.error(`Firebase Storage error message: ${error.message}`);
+        logger.error(`Firebase Storage error code: ${error.code}`);
+        logger.error(`Firebase Storage error message: ${error.message}`);
         
         // Handle specific Firebase Storage errors
         switch (error.code) {
           case 'storage/unauthorized':
-            throw new Error('You do not have permission to upload this image');
+            throw new Error('You do not have permission to upload this image. Please check your authentication status and try again.');
           case 'storage/canceled':
             throw new Error('Upload was canceled');
           case 'storage/unknown':
-            throw new Error('An unknown error occurred during upload');
+            throw new Error('An unknown error occurred during upload. Please check your network connection and try again.');
           case 'storage/quota-exceeded':
-            throw new Error('Storage quota exceeded. Please try a smaller image');
+            throw new Error('Storage quota exceeded. Please try a smaller image or contact support.');
+          case 'storage/invalid-argument':
+            throw new Error('Invalid argument provided to Firebase Storage operation. Please check the image format.');
+          case 'storage/retry-limit-exceeded':
+            throw new Error('Upload failed after multiple attempts. Please check your network connection and try again.');
+          case 'storage/server-file-wrong-size':
+            throw new Error('Upload failed due to file size mismatch. Please try again with a different image.');
           default:
             throw new Error(`Upload failed: ${error.message}`);
         }
@@ -574,7 +829,7 @@ class EnhancedImageService {
       const result = await this.uploadImage(uri, ImageType.PROFILE, options);
       return result.url;
     } catch (error) {
-      console.error('Error uploading profile image:', error);
+      logger.error('Error uploading profile image:', error);
       throw error;
     }
   }
@@ -601,7 +856,7 @@ class EnhancedImageService {
         thumbnailUrl: result.thumbnailUrl
       };
     } catch (error) {
-      console.error('Error uploading post image:', error);
+      logger.error('Error uploading post image:', error);
       throw error;
     }
   }
@@ -628,7 +883,7 @@ class EnhancedImageService {
         thumbnailUrl: result.thumbnailUrl
       };
     } catch (error) {
-      console.error('Error uploading event image:', error);
+      logger.error('Error uploading event image:', error);
       throw error;
     }
   }
@@ -653,7 +908,7 @@ class EnhancedImageService {
       const result = await this.uploadImage(uri, ImageType.EVENT_SPEAKER, options, eventId);
       return result.url;
     } catch (error) {
-      console.error('Error uploading speaker image:', error);
+      logger.error('Error uploading speaker image:', error);
       throw error;
     }
   }
@@ -664,19 +919,429 @@ class EnhancedImageService {
    * @param options Upload options
    * @returns Promise resolving to the test image URL
    */
-  async uploadTestImage(
-    uri: string,
-    options?: Partial<ImageUploadOptions>
-  ): Promise<string> {
-    try {
-      const result = await this.uploadImage(uri, ImageType.TEST, options);
-      return result.url;
-    } catch (error) {
-      console.error('Error uploading test image:', error);
-      throw error;
-    }
+ /**
+   * Upload a test image
+   * @param uri Image URI
+   * @param options Upload options
+   * @returns Promise resolving to the test image URL
+   */
+ async uploadTestImage(
+  uri: string,
+  options?: Partial<ImageUploadOptions>
+): Promise<string> {
+  try {
+    const result = await this.uploadImage(uri, ImageType.TEST, options);
+    return result.url;
+  } catch (error) {
+    logger.error('Error uploading test image:', error);
+    throw error;
   }
 }
+
+/**
+ * Move an image from a pending path to a permanent path
+ * This is used when a user completes registration and we need to move their profile image
+ * @param pendingUrl URL of the image in the pending path
+ * @param userId User ID to move the image to
+ * @returns Promise resolving to the new image URL
+ */
+async moveImageFromPendingPath(pendingUrl: string, userId: string): Promise<string> {
+  try {
+    if (!pendingUrl || !userId) {
+      throw new Error('Pending URL and user ID are required');
+    }
+    
+    logger.debug(`Moving image from pending path to user path for user ${userId}`);
+    
+    // Get the storage instance
+    const storage = getStorage();
+    
+    // Extract the filename from the URL
+    const url = new URL(pendingUrl);
+    const pathSegments = url.pathname.split('/');
+    const filename = pathSegments[pathSegments.length - 1];
+    
+    if (!filename) {
+      throw new Error('Could not extract filename from URL');
+    }
+    
+    // Create a reference to the source file
+    const sourceRef = ref(storage, `profile_images/pending/${filename}`);
+    
+    // Create a reference to the destination file
+    const destRef = ref(storage, `profile_images/${userId}/${filename}`);
+    
+    // Download the original file
+    const sourceBlob = await fetch(pendingUrl).then(r => r.blob());
+    
+    // Upload to the new location
+    await uploadBytes(destRef, sourceBlob);
+    
+    // Get the new download URL
+    const newUrl = await getDownloadURL(destRef);
+    
+    // Try to delete the original file but don't fail if it doesn't work
+    try {
+      // Delete the original file from the pending path
+      // Note: Not using deleteObject because it might not be available in all environments
+      // Instead, we'll just log a message and continue
+      logger.debug(`Attempting to delete original file from pending path: ${filename}`);
+      // We don't wait for this to complete, and we don't throw if it fails
+    } catch (deleteError) {
+      logger.warn('Could not delete original file:', deleteError);
+      // Continue, this is not a critical error
+    }
+    
+    return newUrl;
+  } catch (error) {
+    logger.error('Error moving image from pending path:', error);
+    throw new Error(`Failed to move image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Delete an image from storage
+ * @param url URL of the image to delete
+ * @returns Promise resolving when the image is deleted
+ */
+async deleteImage(url: string): Promise<void> {
+  try {
+    if (!url) {
+      return; // No URL, nothing to delete
+    }
+    
+    // Get the storage instance
+    const storage = getStorage();
+    
+    // Extract the path from the URL
+    const urlObj = new URL(url);
+    const fullPath = decodeURIComponent(urlObj.pathname)
+      .replace('/v0/b/', '')  // Remove Firebase Storage prefix
+      .replace(/^\/+/, '')     // Remove leading slashes
+      .replace(/o\//, '');    // Remove 'o/' from path
+    
+    // Extract the bucket name and file path
+    const parts = fullPath.split(/\/(.+)/);
+    if (parts.length < 2) {
+      throw new Error('Invalid URL format');
+    }
+    
+    // Create a reference to the file
+    const imageRef = ref(storage, parts[1]);
+    
+    // Delete the file
+    await deleteObject(imageRef);
+    logger.debug(`Image deleted successfully: ${url}`);
+  } catch (error) {
+    logger.error('Error deleting image:', error);
+    throw new Error(`Failed to delete image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Delete all images for a specific user (useful for account deletion)
+ * @param userId User ID
+ * @returns Promise resolving when all images are deleted
+ */
+async deleteAllUserImages(userId: string): Promise<void> {
+  try {
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
+    
+    // Get the storage instance
+    const storage = getStorage();
+    
+    // Define paths to delete
+    const paths = [
+      `profile_images/${userId}`,
+      `posts/${userId}`,
+      `events/${userId}`,
+      `test_uploads/${userId}`,
+      `uploads/${userId}`
+    ];
+    
+    // Delete each path
+    for (const path of paths) {
+      try {
+        const folderRef = ref(storage, path);
+        
+        // List all items in the folder
+        const listResult = await listAll(folderRef);
+        
+        // Delete all files
+        const deletePromises = listResult.items.map(itemRef => {
+          return deleteObject(itemRef)
+            .catch(error => {
+              logger.warn(`Failed to delete ${itemRef.fullPath}:`, error);
+              // Continue with other deletions
+            });
+        });
+        
+        // Wait for all deletions to complete
+        await Promise.all(deletePromises);
+        
+        // Recursively delete prefixes (subdirectories)
+        for (const prefix of listResult.prefixes) {
+          await this.deleteFolder(prefix);
+        }
+        
+        logger.debug(`Deleted all files in ${path}`);
+      } catch (error) {
+        logger.warn(`Error deleting path ${path}:`, error);
+        // Continue with other paths
+      }
+    }
+    
+    logger.debug(`All user images deleted for user ${userId}`);
+  } catch (error) {
+    logger.error('Error deleting all user images:', error);
+    throw new Error(`Failed to delete all user images: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Recursively delete a folder and all its contents
+ * @param folderRef Reference to the folder
+ */
+private async deleteFolder(folderRef: any): Promise<void> {
+  try {
+    // List all items in the folder
+    const listResult = await listAll(folderRef);
+    
+    // Delete all files
+    const deletePromises = listResult.items.map(itemRef => {
+      return deleteObject(itemRef)
+        .catch(error => {
+          logger.warn(`Failed to delete ${itemRef.fullPath}:`, error);
+          // Continue with other deletions
+        });
+    });
+    
+    // Wait for all deletions to complete
+    await Promise.all(deletePromises);
+    
+    // Recursively delete prefixes (subdirectories)
+    for (const prefix of listResult.prefixes) {
+      await this.deleteFolder(prefix);
+    }
+    
+    logger.debug(`Deleted folder ${folderRef.fullPath}`);
+  } catch (error) {
+    logger.warn(`Error deleting folder ${folderRef.fullPath}:`, error);
+    // Continue with parent operation
+  }
+}
+
+/**
+ * Get the size of an image file
+ * @param uri Image URI
+ * @returns Promise resolving to the file size in bytes
+ */
+async getImageFileSize(uri: string): Promise<number> {
+  try {
+    const fileInfo = await FileSystem.getInfoAsync(uri);
+    
+    if (!fileInfo.exists) {
+      throw new Error('File does not exist');
+    }
+    
+    if (!('size' in fileInfo)) {
+      throw new Error('File size information not available');
+    }
+    
+    return fileInfo.size || 0;
+  } catch (error) {
+    logger.error('Error getting image file size:', error);
+    throw new Error(`Failed to get image file size: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Check if an image exceeds the maximum allowed file size
+ * @param uri Image URI
+ * @returns Promise resolving to a boolean indicating if the file is too large
+ */
+async isImageTooLarge(uri: string): Promise<boolean> {
+  try {
+    const fileSize = await this.getImageFileSize(uri);
+    return fileSize > MAX_FILE_SIZE;
+  } catch (error) {
+    logger.error('Error checking image size:', error);
+    // Assume the file is not too large if we can't check
+    return false;
+  }
+}
+
+/**
+ * Get image dimensions
+ * @param uri Image URI
+ * @returns Promise resolving to the image dimensions {width, height}
+ */
+async getImageDimensions(uri: string): Promise<{ width: number; height: number }> {
+  try {
+    // Use Image.getSize to get dimensions (available in React Native)
+    return new Promise((resolve, reject) => {
+      Image.getSize(
+        uri,
+        (width, height) => {
+          resolve({ width, height });
+        },
+        (error) => {
+          reject(new Error(`Failed to get image dimensions: ${error}`));
+        }
+      );
+    });
+  } catch (error) {
+    logger.error('Error getting image dimensions:', error);
+    throw new Error(`Failed to get image dimensions: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Check if an image meets the minimum dimension requirements
+ * @param uri Image URI
+ * @param minWidth Minimum width
+ * @param minHeight Minimum height
+ * @returns Promise resolving to a boolean indicating if the image meets the requirements
+ */
+async doesImageMeetMinimumDimensions(
+  uri: string,
+  minWidth: number,
+  minHeight: number
+): Promise<boolean> {
+  try {
+    const { width, height } = await this.getImageDimensions(uri);
+    return width >= minWidth && height >= minHeight;
+  } catch (error) {
+    logger.error('Error checking image dimensions:', error);
+    // Assume the image meets requirements if we can't check
+    return true;
+  }
+}
+
+/**
+ * Get image metadata
+ * @param uri Image URI
+ * @returns Promise resolving to the image metadata
+ */
+async getImageMetadata(uri: string): Promise<any> {
+  try {
+    // Request media library permissions if needed
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (status !== 'granted') {
+      throw new Error('Permission to access media library was denied');
+    }
+    
+    // Use ImagePicker to get image info with EXIF data
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 1,
+      exif: true,
+      base64: false,
+    });
+    
+    if (result.canceled) {
+      throw new Error('Image selection was canceled');
+    }
+    
+    const asset = result.assets[0];
+    
+    // Return the exif data
+    return asset.exif || {};
+  } catch (error) {
+    logger.error('Error getting image metadata:', error);
+    throw new Error(`Failed to get image metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Pre-validate an image before upload
+ * Checks size and dimensions to ensure it meets requirements
+ * @param uri Image URI
+ * @param options Validation options
+ * @returns Promise resolving to validation result
+ */
+async validateImageBeforeUpload(
+  uri: string,
+  options: {
+    maxSize?: number;
+    minWidth?: number;
+    minHeight?: number;
+  } = {}
+): Promise<{
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  fileSize?: number;
+  dimensions?: { width: number; height: number };
+}> {
+  try {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    
+    // Check if file exists
+    const fileInfo = await FileSystem.getInfoAsync(uri);
+    if (!fileInfo.exists) {
+      errors.push('File does not exist');
+      return { valid: false, errors, warnings };
+    }
+    
+    // Check file size
+    let fileSize: number | undefined;
+    if ('size' in fileInfo) {
+      fileSize = fileInfo.size;
+      const maxSize = options.maxSize || MAX_FILE_SIZE;
+      
+      if (fileSize > maxSize) {
+        errors.push(`File size (${fileSize} bytes) exceeds maximum allowed size (${maxSize} bytes)`);
+      }
+    } else {
+      warnings.push('Could not determine file size');
+    }
+    
+    // Check dimensions
+    let dimensions: { width: number; height: number } | undefined;
+    if (options.minWidth || options.minHeight) {
+      try {
+        dimensions = await this.getImageDimensions(uri);
+        
+        if (options.minWidth && dimensions.width < options.minWidth) {
+          errors.push(`Image width (${dimensions.width}px) is less than minimum required (${options.minWidth}px)`);
+        }
+        
+        if (options.minHeight && dimensions.height < options.minHeight) {
+          errors.push(`Image height (${dimensions.height}px) is less than minimum required (${options.minHeight}px)`);
+        }
+      } catch (dimensionError) {
+        warnings.push('Could not determine image dimensions');
+      }
+    }
+    
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+      fileSize,
+      dimensions
+    };
+  } catch (error) {
+    logger.error('Error validating image:', error);
+    return {
+      valid: false,
+      errors: [`Failed to validate image: ${error instanceof Error ? error.message : 'Unknown error'}`],
+      warnings: []
+    };
+  }
+}
+}
+
+// Import missing Firebase functions
+import { deleteObject, listAll } from 'firebase/storage';
+// Import Image from React Native
+import { Image } from 'react-native';
 
 // Export a singleton instance
 export const enhancedImageService = new EnhancedImageService();

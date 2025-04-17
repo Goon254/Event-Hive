@@ -22,9 +22,11 @@ import {
   fetchSignInMethodsForEmail
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, getFirestore } from 'firebase/firestore';
-import { auth, db } from '../lib/firebaseConfig';
+import { auth, db, storage } from '../lib/firebaseConfig';
 import { sanitizeForFirestore } from './services/migrationService';
 import { useGoogleAuth, getExistingAccountEmail } from './utils/googleAuth';
+import { ref, getDownloadURL, uploadBytes, getStorage, listAll, deleteObject } from 'firebase/storage';
+import { enhancedImageService } from './services/enhancedImageService';
 
 // Constants
 const AUTH_STORAGE_KEY = 'auth_user_data';
@@ -214,6 +216,105 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /**
+   * Move profile image from pending path to user's profile path
+   * @param userId User ID
+   * @param pendingImageUrl URL of the image in the pending path
+   * @returns Promise resolving to the new image URL
+   */
+  const movePendingProfileImage = async (userId: string, pendingImageUrl: string): Promise<string | null> => {
+    try {
+      console.log('Moving pending profile image:', pendingImageUrl);
+      
+      // Check if the URL is from the pending path
+      if (!pendingImageUrl || !pendingImageUrl.includes('profile_images/pending')) {
+        return pendingImageUrl;
+      }
+      
+      // Extract the filename from the URL
+      const urlParts = pendingImageUrl.split('?')[0].split('/');
+      const fileName = urlParts[urlParts.length - 1];
+      
+      if (!fileName) {
+        console.warn('Could not extract filename from URL:', pendingImageUrl);
+        
+        // Try to list all files in the pending directory as a fallback
+        try {
+          const pendingRef = ref(storage, 'profile_images/pending');
+          const pendingFiles = await listAll(pendingRef);
+          
+          // Find the file that matches the URL
+          let foundFileName = null;
+          for (const item of pendingFiles.items) {
+            const itemUrl = await getDownloadURL(item);
+            if (itemUrl === pendingImageUrl) {
+              foundFileName = item.name;
+              break;
+            }
+          }
+          
+          if (foundFileName) {
+            console.log('Found filename through listing:', foundFileName);
+          } else {
+            console.warn('Could not find pending profile image file');
+            return pendingImageUrl;
+          }
+        } catch (listError) {
+          console.error('Error listing pending files:', listError);
+          return pendingImageUrl;
+        }
+      }
+      
+      console.log('Attempting to download file:', fileName);
+      
+      // Download the file
+      const response = await fetch(pendingImageUrl);
+      if (!response.ok) {
+        console.error('Failed to fetch image:', response.status, response.statusText);
+        return pendingImageUrl;
+      }
+      
+      const blob = await response.blob();
+      if (!blob || blob.size === 0) {
+        console.error('Downloaded blob is empty or invalid');
+        return pendingImageUrl;
+      }
+      
+      console.log('Successfully downloaded blob, size:', blob.size, 'type:', blob.type);
+      
+      // Generate a unique filename to avoid collisions
+      const uniqueFileName = `${Date.now()}_${Math.random().toString(36).substring(2, 10)}_${fileName || 'profile.jpg'}`;
+      
+      // Upload to the user's profile path
+      const userProfileRef = ref(storage, `profile_images/${userId}/${uniqueFileName}`);
+      
+      console.log('Uploading to:', `profile_images/${userId}/${uniqueFileName}`);
+      await uploadBytes(userProfileRef, blob);
+      
+      // Get the new URL
+      const newImageUrl = await getDownloadURL(userProfileRef);
+      
+      // Delete the pending file if we found a filename
+      if (fileName) {
+        try {
+          const pendingFileRef = ref(storage, `profile_images/pending/${fileName}`);
+          await deleteObject(pendingFileRef);
+          console.log('Deleted pending file:', fileName);
+        } catch (deleteError) {
+          console.warn('Error deleting pending file:', deleteError);
+          // Continue even if delete fails
+        }
+      }
+      
+      console.log('Successfully moved profile image to user path:', newImageUrl);
+      return newImageUrl;
+    } catch (error) {
+      console.error('Error moving pending profile image:', error);
+      // Return the original URL if there was an error
+      return pendingImageUrl;
+    }
+  };
+
   const signUp = async (email: string, password: string, name: string, userProfile?: UserProfile) => {
     setState(prevState => ({ ...prevState, isLoading: true, error: null }));
     try {
@@ -221,10 +322,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const { user } = userCredential;
       
-      // Update user profile with name
-      await updateProfile(user, { 
+      // Check if profile image was uploaded to pending path and move it
+      let profileImageUrl = userProfile?.profileImageUrl || null;
+      if (profileImageUrl && profileImageUrl.includes('profile_images/pending')) {
+        try {
+          const newImageUrl = await movePendingProfileImage(user.uid, profileImageUrl);
+          if (newImageUrl) {
+            profileImageUrl = newImageUrl;
+          }
+        } catch (imageError) {
+          console.error('Error moving profile image:', imageError);
+          // Continue with registration even if image move fails
+        }
+      }
+      
+      // Update user profile with name and photo URL
+      await updateProfile(user, {
         displayName: name,
-        ...(userProfile?.profileImageUrl && { photoURL: userProfile.profileImageUrl })
+        ...(profileImageUrl && { photoURL: profileImageUrl })
       });
 
       // Create user document in Firestore
@@ -239,7 +354,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           interests: userProfile?.interests || [],
           userType: userProfile?.userType || 'attendee',
           organizationName: userProfile?.organizationName || null,
-          profileImageUrl: userProfile?.profileImageUrl || null,
+          profileImageUrl: profileImageUrl,
           createdAt: userProfile?.createdAt || new Date().toISOString(),
           uid: user.uid
         };

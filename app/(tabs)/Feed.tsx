@@ -1,5 +1,7 @@
 // app/(tabs)/Feed.tsx
 import React, { useState, useEffect, useCallback } from 'react';
+import { COLORS } from '../theme/constants';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   View,
   Text,
@@ -14,8 +16,10 @@ import {
   Platform,
   Alert,
   Modal,
-  Share
+  Share,
+  Animated as RNAnimated
 } from 'react-native';
+import ScreenLayout from '../components/common/ScreenLayout';
 import { useRouter } from 'expo-router';
 import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
@@ -674,17 +678,43 @@ export default function SocialFeedScreen() {
 
   // Main component render
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Social Feed</Text>
-        <TouchableOpacity 
-          style={styles.searchButton}
-          onPress={() => router.push('//screens/search')}
+    <ScreenLayout
+      backgroundColor={COLORS.background}
+      statusBarColor={COLORS.background}
+      statusBarStyle="light-content"
+    >
+      {/* Animated Header */}
+      <RNAnimated.View style={[
+        styles.header,
+        {
+          height: Platform.OS === 'ios' ? 130 : 110,
+        }
+      ]}>
+        <LinearGradient
+          colors={[COLORS.primaryGradientStart, COLORS.primaryGradientEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGradient}
         >
-          <MaterialIcons name="search" size={24} color="#1F2937" />
-        </TouchableOpacity>
-      </View>
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.welcomeText}>Social Feed</Text>
+              <Text style={styles.subtitleText}>
+                Connect with your community
+              </Text>
+            </View>
+            
+            <View style={styles.headerButtons}>
+              <TouchableOpacity
+                style={styles.headerButton}
+                onPress={() => router.push('//screens/search')}
+              >
+                <MaterialIcons name="search" size={22} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </LinearGradient>
+      </RNAnimated.View>
       
       {/* Create post button */}
       {!isCreatingPost && (
@@ -752,7 +782,7 @@ export default function SocialFeedScreen() {
       
       {/* Comments modal */}
       {renderCommentsModal()}
-    </View>
+    </ScreenLayout>
   );
 }
 
@@ -761,31 +791,46 @@ const cardShadow = createShadow(2);
 const buttonShadow = createShadow(1);
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F3F4F6',
-  },
+  // Enhanced Header - no borders or outlines
   header: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30, // Adjusted to account for status bar spacer
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  headerGradient: {
+    flex: 1,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingBottom: 30, // Extra padding at bottom
+  },
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 60 : 20,
-    paddingBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    ...cardShadow,
+    alignItems: 'flex-start',
+    paddingHorizontal: 24,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
+  welcomeText: {
+    fontSize: 32, // Larger text
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
-  searchButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  subtitleText: {
+    fontSize: 18, // Larger text
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 6,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 16, // Increased spacing
+  },
+  headerButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 48, // Slightly larger
+    height: 48, // Slightly larger
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -793,10 +838,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.card,
     padding: 12,
     marginHorizontal: 16,
-    marginVertical: 12,
+    marginTop: 100, // Add space for the header
+    marginBottom: 12,
     borderRadius: 12,
     ...cardShadow,
   },
@@ -807,7 +853,7 @@ const styles = StyleSheet.create({
   createPostPromptText: {
     marginLeft: 12,
     fontSize: 16,
-    color: '#6B7280',
+    color: COLORS.secondaryText,
   },
   createPostOptions: {
     flexDirection: 'row',
@@ -816,13 +862,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
   },
   createPostCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.card,
     margin: 16,
     borderRadius: 12,
     ...cardShadow,
@@ -833,22 +879,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: COLORS.border,
   },
   createPostTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: COLORS.text,
   },
   postButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#007AFF',
+    backgroundColor: COLORS.primary,
     borderRadius: 16,
     ...buttonShadow,
   },
   postButtonDisabled: {
-    backgroundColor: '#D1D5DB',
+    backgroundColor: COLORS.secondaryText,
   },
   postButtonText: {
     fontSize: 14,
@@ -866,7 +912,7 @@ const styles = StyleSheet.create({
   privacySelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -874,12 +920,12 @@ const styles = StyleSheet.create({
   },
   privacyText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.secondaryText,
     marginHorizontal: 4,
   },
   postInput: {
     fontSize: 16,
-    color: '#1F2937',
+    color: COLORS.text,
     minHeight: 100,
     textAlignVertical: 'top',
   },
@@ -906,7 +952,7 @@ const styles = StyleSheet.create({
   createPostActions: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
     padding: 12,
   },
   mediaButton: {
@@ -918,16 +964,19 @@ const styles = StyleSheet.create({
   mediaButtonText: {
     marginLeft: 4,
     fontSize: 14,
-    color: '#4B5563',
+    color: COLORS.secondaryText,
   },
   postList: {
+    paddingTop: 100, // Add space for the header
     paddingBottom: 20,
   },
   postCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.card,
     marginHorizontal: 16,
     marginVertical: 8,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     ...cardShadow,
   },
   postHeader: {
@@ -944,7 +993,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#3B82F6',
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -957,7 +1006,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#3B82F6',
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -978,11 +1027,11 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1F2937',
+    color: COLORS.text,
   },
   postTime: {
     fontSize: 12,
-    color: '#6B7280',
+    color: COLORS.secondaryText,
   },
   moreButton: {
     padding: 4,
@@ -993,7 +1042,7 @@ const styles = StyleSheet.create({
   },
   postText: {
     fontSize: 16,
-    color: '#1F2937',
+    color: COLORS.text,
     marginBottom: 12,
   },
   postImage: {
@@ -1007,17 +1056,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: COLORS.border,
   },
   likeCount: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.secondaryText,
   },
   commentCount: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.secondaryText,
   },
   postActions: {
     flexDirection: 'row',
@@ -1034,7 +1083,7 @@ const styles = StyleSheet.create({
   actionText: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.secondaryText,
   },
   loadingIndicator: {
     padding: 20,
@@ -1052,28 +1101,28 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: COLORS.text,
     marginTop: 12,
     marginBottom: 8,
   },
   emptyStateText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.secondaryText,
     textAlign: 'center',
     maxWidth: '80%',
   },
   commentsContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
   },
   commentsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: COLORS.border,
     ...Platform.select({
       ios: {
         paddingTop: 60
@@ -1086,17 +1135,17 @@ const styles = StyleSheet.create({
   commentsTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: COLORS.text,
   },
   originalPost: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.card,
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: COLORS.border,
   },
   originalPostText: {
     fontSize: 14,
-    color: '#4B5563',
+    color: COLORS.secondaryText,
     marginTop: 8,
   },
   commentsList: {
@@ -1110,28 +1159,30 @@ const styles = StyleSheet.create({
   commentContent: {
     flex: 1,
     marginLeft: 12,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     padding: 10,
     borderRadius: 12,
   },
   commentUserName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1F2937',
+    color: COLORS.text,
     marginBottom: 4,
   },
   commentText: {
     fontSize: 14,
-    color: '#4B5563',
+    color: COLORS.secondaryText,
   },
   commentTime: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: COLORS.secondaryText,
     marginTop: 4,
   },
   noCommentsText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: COLORS.secondaryText,
     fontStyle: 'italic',
     textAlign: 'center',
     marginTop: 20,
@@ -1141,9 +1192,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: COLORS.background,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: COLORS.border,
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
@@ -1155,7 +1206,9 @@ const styles = StyleSheet.create({
   },
   commentInput: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
@@ -1167,7 +1220,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     justifyContent: 'center',
     alignItems: 'center',
   },

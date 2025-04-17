@@ -10,9 +10,8 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Event } from '../../services/eventServices';
-import { formatDate, formatTime, toDateObject } from '../../utils/dateUtils';
+import { formatDate, formatTime } from '../../utils/dateUtils';
 import { getEventColor, createShadow } from './utils/uiHelpers';
 
 interface FeaturedEventProps {
@@ -24,7 +23,7 @@ interface FeaturedEventProps {
 
 /**
  * FeaturedEvent component - displays the featured event at the top of the home screen
- * Optimized with React.memo to prevent unnecessary re-renders
+ * Styled to match the app design in the screenshot
  */
 const FeaturedEvent = ({
   event,
@@ -33,8 +32,6 @@ const FeaturedEvent = ({
   translateY
 }: FeaturedEventProps) => {
   if (!event) return null;
-  
-  const { width } = Dimensions.get('window');
   
   return (
     <Animated.View
@@ -53,51 +50,46 @@ const FeaturedEvent = ({
         accessibilityHint="Opens featured event details"
         testID={`featured-event-${event.id}`}
       >
-        <View style={styles.imageContainer}>
+        {/* Background - Either image or color with letter */}
+        <View style={styles.backgroundContainer}>
           {event.imageUrl ? (
             <Image 
               source={{ uri: event.imageUrl }} 
-              style={styles.featuredImage}
+              style={styles.backgroundImage}
               resizeMode="cover"
-              onError={(e) => {
-                console.log('Featured image loading error:', e.nativeEvent.error);
-              }}
             />
           ) : (
-            <View style={[styles.featuredImage, { backgroundColor: getEventColor(event.title) }]}>
-              <Text style={styles.featuredImageText}>{event.title.charAt(0).toUpperCase()}</Text>
+            <View style={[styles.backgroundFill, { backgroundColor: getEventColor(event.title) }]}>
+              <Text style={styles.eventLetter}>{event.title.charAt(0).toUpperCase()}</Text>
             </View>
           )}
-          
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.9)']}
-            style={styles.featuredGradient}
-          />
         </View>
-        
-        <View style={styles.featuredContent}>
-          <View style={styles.featuredBadge}>
-            <Text style={styles.featuredBadgeText}>FEATURED</Text>
-          </View>
-          <Text style={styles.featuredTitle} numberOfLines={2}>{event.title}</Text>
+
+        {/* Featured Badge */}
+        <View style={styles.featuredBadgeContainer}>
+          <Text style={styles.featuredBadgeText}>FEATURED</Text>
+        </View>
+
+        {/* Event Content - Overlaid on the image */}
+        <View style={styles.contentContainer}>
+          <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
           
-          <View style={styles.featuredDetailsRow}>
-            <View style={styles.featuredDetail}>
-              <FontAwesome name="calendar" size={16} color="#FFF" />
-              <Text style={styles.featuredDetailText}>
-                {formatDate(event.date)}
-              </Text>
+          <View style={styles.eventDetails}>
+            <View style={styles.detailRow}>
+              <FontAwesome name="calendar" size={16} color="#FFF" style={styles.icon} />
+              <Text style={styles.detailText}>{formatDate(event.date)}</Text>
             </View>
-            <View style={styles.featuredDetail}>
-              <FontAwesome name="clock-o" size={16} color="#FFF" />
-              <Text style={styles.featuredDetailText}>
+            
+            <View style={styles.detailRow}>
+              <FontAwesome name="clock-o" size={16} color="#FFF" style={styles.icon} />
+              <Text style={styles.detailText}>
                 {event.time ? formatTime(event.time) : formatTime(event.date)}
               </Text>
             </View>
           </View>
           
-          <View style={styles.featuredCountdown}>
-            <Text style={styles.featuredCountdownText}>
+          <View style={styles.countdownContainer}>
+            <Text style={styles.countdownText}>
               {daysUntil ? `${daysUntil} until event` : 'Coming soon'}
             </Text>
           </View>
@@ -107,158 +99,105 @@ const FeaturedEvent = ({
   );
 };
 
-// Platform-specific shadows
-const cardShadow = createShadow(2);
-
 const styles = StyleSheet.create({
   featuredContainer: {
-    width: '100%', // Changed from fixed width for better responsiveness
-    height: 280, // Further increased height for better visibility
+    width: '98%',
+    height: 230, // Increased height to match second screenshot
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: '#2A2A2A', // Lighter background for better contrast with text
     position: 'relative',
-    borderWidth: 1,
-    borderColor: '#3B82F6', // Add border to make it more visible
-    ...cardShadow,
-    elevation: 8, // Add elevation for Android
-    marginBottom: 5, // Add margin to prevent clipping shadows
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.27,
-    shadowRadius: 4.65,
+    marginBottom: 16,
   },
-  imageContainer: {
+  backgroundContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  backgroundImage: {
     width: '100%',
     height: '100%',
-    position: 'relative',
-    backgroundColor: '#1A1A1A', // Add background color while image loads
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)', // Subtle separator
   },
-  featuredImage: {
+  backgroundFill: {
     width: '100%',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1A1A1A', // Add background color while image loads
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)', // Add subtle border
-    resizeMode: 'cover', // Ensure image covers the area properly
+    backgroundColor: '#f44336', // Default red color, will be overridden
   },
-  featuredImageText: {
-    fontSize: 72,
+  eventLetter: {
+    fontSize: 80,
     fontWeight: 'bold',
-    color: 'white',
+    color: 'rgba(255, 255, 255, 0.8)',
   },
-  debugText: {
-    fontSize: 12,
-    color: 'white',
+  featuredBadgeContainer: {
     position: 'absolute',
-    bottom: 5,
-    left: 5,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 3,
-    borderRadius: 3,
-  },
-  featuredGradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '95%', // Further increased height for better text visibility
-    borderRadius: 16,
-    opacity: 0.95, // Slightly more opaque for better contrast
-  },
-  featuredContent: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 24,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)', // Even darker semi-transparent background for better text visibility
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.15)', // More visible separator
-  },
-  featuredBadge: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 12,
+    top: 16,
+    left: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     paddingVertical: 6,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.22,
-    shadowRadius: 2.22,
+    paddingHorizontal: 12,
+    borderRadius: 4,
   },
   featuredBadgeText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontWeight: '600',
     fontSize: 14,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
     letterSpacing: 0.5,
   },
-  featuredTitle: {
-    fontSize: 28,
+  contentContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+  },
+  eventTitle: {
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 14,
-    textShadowColor: 'rgba(0, 0, 0, 0.7)',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
-    letterSpacing: 0.5,
   },
-  featuredDetailsRow: {
+  eventDetails: {
     flexDirection: 'row',
-    marginBottom: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Even darker semi-transparent background for better text visibility
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)', // More visible border
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  featuredDetail: {
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginRight: 16,
   },
-  featuredDetailText: {
-    color: '#FFFFFF',
-    marginLeft: 10,
-    fontSize: 16,
-    fontWeight: '600',
+  icon: {
+    marginRight: 6,
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
-    letterSpacing: 0.3,
   },
-  featuredCountdown: {
-    backgroundColor: 'rgba(59, 130, 246, 0.6)', // Even stronger blue tint for better visibility
-    paddingHorizontal: 16,
+  detailText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '500',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  countdownContainer: {
+    backgroundColor: 'rgba(128, 128, 128, 0.6)',
     paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 20,
+    borderRadius: 24,
     alignSelf: 'flex-start',
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)', // More visible border
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
   },
-  featuredCountdownText: {
+  countdownText: {
     color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-    letterSpacing: 0.5,
+    fontWeight: '500',
+    fontSize: 14,
   }
 });
 
-// Use React.memo to prevent unnecessary re-renders
 export default memo(FeaturedEvent);

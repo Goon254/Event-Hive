@@ -1,64 +1,55 @@
 // app/(tabs)/Home.tsx
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { COLORS, GRADIENTS } from '../theme/constants';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   FlatList,
   RefreshControl,
-  ActivityIndicator,
   Platform,
-  Alert
+  Animated as RNAnimated,
+  Dimensions,
+  ScrollView
 } from 'react-native';
 import { router } from 'expo-router';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../AuthContext';
-import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { createShadow } from '../utils/platformUtils';
-import { useFeatureFlags } from '../utils/featureFlags';
-import { useRenderTracking, trackInteraction } from '../utils/performance';
+import ScreenLayout from '../components/common/ScreenLayout';
 
-// Import custom hooks
-import { useEventData, FilterType } from '../components/home/hooks/useEventData';
-import { useAnimations } from '../components/home/hooks/useAnimations';
+// Import components from home directory
+import {
+  EventCard,
+  FeaturedEvent,
+  EventSection,
+  ExploreModal,
+  useEventData,
+  useAnimations
+} from '../components/home';
+import { EVENT_CATEGORIES } from '../components/home/CategoryButtons';
+import { getEventColor } from '../components/home/utils/uiHelpers';
 
-// Import components
-import FeaturedEvent from '../components/home/FeaturedEvent';
-import CategoryButtons from '../components/home/CategoryButtons';
-import EventSection from '../components/home/EventSection';
-import ExploreModal from '../components/home/ExploreModal';
-import EventDebug from '../components/home/EventDebug';
+// Get screen dimensions for responsive design
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /**
- * Home screen component - main screen of the app
- * Optimized for better performance and maintainability
+ * Modern Home screen component with enhanced visual design
+ * Implements a clean, spacious layout with subtle animations
  */
 export default function Home() {
   const colorScheme = useColorScheme();
   const { user } = useAuth();
-  const [showExploreModal, setShowExploreModal] = useState(false);
-  const { isEnabled } = useFeatureFlags();
+  // Force dark mode for the background
+  const isDark = true;
   
-  // Track component renders for performance monitoring
-  useRenderTracking('Home');
+  // Scroll animation value
+  const scrollY = useRef(new RNAnimated.Value(0)).current;
   
-  // Initialize animations
-  const {
-    fadeAnim,
-    translateY,
-    exploreModalTranslateY,
-    animateListItems,
-    animateContentAppearance,
-    showExploreModal: animateShowModal,
-    hideExploreModal: animateHideModal,
-    getItemAnimationValues
-  } = useAnimations();
-  
-  // Initialize event data with enhanced error handling
+  // Use the event data hook to manage all event-related state and operations
   const {
     events,
     upcomingEvents,
@@ -86,289 +77,383 @@ export default function Home() {
     isUserAttending
   } = useEventData(user?.id);
   
-  // Handle showing explore modal - memoized to prevent recreating on each render
-  const handleShowExplore = useCallback(() => {
-    setShowExploreModal(true);
-    animateShowModal();
-  }, [animateShowModal]);
+  // Use the animations hook to manage all animations
+  const {
+    fadeAnim,
+    translateY,
+    exploreModalTranslateY,
+    animateListItems,
+    animateContentAppearance,
+    showExploreModal,
+    hideExploreModal,
+    getItemAnimationValues
+  } = useAnimations();
   
-  // Handle hiding explore modal - memoized to prevent recreating on each render
-  const handleHideExplore = useCallback(() => {
-    animateHideModal(() => {
-      setShowExploreModal(false);
-    });
-  }, [animateHideModal]);
+  // Explore modal state
+  const [exploreModalVisible, setExploreModalVisible] = useState(false);
   
-  // Handle category selection - memoized to prevent recreating on each render
-  const handleSelectCategory = useCallback((categoryId: string) => {
-    setSelectedCategory(categoryId);
-    handleShowExplore();
-  }, [setSelectedCategory, handleShowExplore]);
-  
-  // Show error alert - only when error changes
+  // Animate content on mount with enhanced timing
   useEffect(() => {
-    if (error) {
-      Alert.alert(
-        "Error Loading Events",
-        error.message,
-        [
-          { text: "Retry", onPress: retryLoading },
-          { text: "OK" }
-        ]
-      );
-    }
-  }, [error, retryLoading]);
-
-  // Handle refresh with performance tracking - memoized to prevent recreating on each render
-  const handleRefresh = useCallback(() => {
-    trackInteraction('Refresh Events', async () => {
-      refreshEvents();
-      return true;
+    // Initial appearance animation
+    animateContentAppearance();
+    
+    // Staggered animations for list items
+    const timer = setTimeout(() => {
+      animateListItems(events.length);
+    }, 400);
+    
+    return () => clearTimeout(timer);
+  }, [animateContentAppearance, animateListItems, events.length]);
+  
+  // Handle category selection
+  const handleCategorySelect = (categoryId: string) => {
+    setSelectedCategory(categoryId);
+    handleOpenExploreModal();
+  };
+  
+  // Handle opening the explore modal
+  const handleOpenExploreModal = () => {
+    setExploreModalVisible(true);
+    showExploreModal();
+  };
+  
+  // Handle closing the explore modal
+  const handleCloseExploreModal = () => {
+    hideExploreModal(() => {
+      setExploreModalVisible(false);
     });
-  }, [refreshEvents]);
+  };
+  
+  // Use the centralized theme colors
+  const theme = COLORS;
 
-  // Use useMemo to prevent unnecessary re-renders of the content
-  const renderContent = useMemo(() => (
-    <View style={styles.pageContainer}>
-      {/* Offline Banner */}
-      {isOffline && (
-        <View style={styles.offlineBanner}>
-          <MaterialIcons name="cloud-off" size={16} color="#FFFFFF" />
-          <Text style={styles.offlineBannerText}>
-            You are offline. Some content may be unavailable.
-          </Text>
-        </View>
-      )}
-      
-      <FlatList
-        style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={[Colors[colorScheme ?? 'light'].tint]}
-            tintColor={Colors[colorScheme ?? 'light'].tint}
-          />
+  // Header animation based on scroll position - using scale instead of height for native animation support
+  const headerScale = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [1, 0.7],
+    extrapolate: 'clamp'
+  });
+  
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, -15],
+    extrapolate: 'clamp'
+  });
+
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 60, 90],
+    outputRange: [1, 0.8, 0],
+    extrapolate: 'clamp'
+  });
+
+  const searchBarTranslateY = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, -50],
+    extrapolate: 'clamp'
+  });
+
+  // Calculate the top area height (header + search bar + status bar spacer)
+  const headerTopHeight = Platform.OS === 'ios' ? 190 : 170;
+
+  return (
+    <ScreenLayout
+      backgroundColor={theme.background}
+      statusBarColor={theme.background}
+      statusBarStyle="light-content"
+    >
+      {/* Animated Header */}
+      <RNAnimated.View style={[
+        styles.header,
+        { 
+          height: Platform.OS === 'ios' ? 130 : 110,
+          transform: [
+            { translateY: headerTranslateY },
+            { scaleY: headerScale }
+          ],
+          transformOrigin: 'top'
         }
-        // Add accessibility props
-        accessible={true}
-        accessibilityLabel="Home screen content"
-        data={[1]} // Just need one item to render all content
-        renderItem={() => (
-          <>
-        {/* Header with welcome message */}
-        <View style={styles.headerContainer}>
-          <View style={styles.headerContent}>
-            <View style={styles.welcomeContainer}>
-              <Text style={[styles.welcomeText, { color: Colors[colorScheme ?? 'light'].invertedText }]}>
+      ]}>
+        <LinearGradient
+          colors={[COLORS.primaryGradientStart, COLORS.primaryGradientEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGradient}
+        >
+          <RNAnimated.View style={[styles.headerContent, { opacity: headerOpacity }]}>
+            <View>
+              <Text style={styles.welcomeText}>
                 Welcome{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
               </Text>
-              <Text style={[styles.subtitleText, { color: Colors[colorScheme ?? 'light'].invertedText }]}>
+              <Text style={styles.subtitleText}>
                 Discover exciting events near you
               </Text>
             </View>
+            
             <View style={styles.headerButtons}>
               <TouchableOpacity
-                style={styles.mapButton}
+                style={styles.headerButton}
                 onPress={() => router.push('/screens/NearbyEventsScreen')}
-                activeOpacity={0.7}
-                accessible={true}
-                accessibilityLabel="Find nearby events"
-                accessibilityRole="button"
-                accessibilityHint="Opens map with nearby events"
               >
-                <MaterialIcons name="map" size={20} color="#FFF" />
+                <MaterialIcons name="map" size={22} color="#FFF" />
               </TouchableOpacity>
+              
               <TouchableOpacity
-                style={styles.scanButton}
+                style={styles.headerButton}
                 onPress={() => router.push('/screens/scan')}
-                activeOpacity={0.7}
-                accessible={true}
-                accessibilityLabel="Scan QR code"
-                accessibilityRole="button"
-                accessibilityHint="Opens QR code scanner"
               >
-                <FontAwesome name="qrcode" size={20} color="#FFF" />
+                <FontAwesome name="qrcode" size={22} color="#FFF" />
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </RNAnimated.View>
+        </LinearGradient>
+      </RNAnimated.View>
+      
+      {/* Floating "Explore all events" Button */}
+      <RNAnimated.View style={[
+        styles.searchBarContainer,
+        { transform: [{ translateY: searchBarTranslateY }] }
+      ]}>
+        <TouchableOpacity
+          style={[styles.searchBar, { backgroundColor: theme.card }]}
+          activeOpacity={0.8}
+          onPress={() => router.push('/screens/Explore')}
+        >
+          <FontAwesome name="search" size={18} color={theme.secondaryText} />
+          <Text style={[styles.searchText, { color: theme.secondaryText }]}>
+            Explore all events
+          </Text>
+          <MaterialIcons name="arrow-forward" size={20} color={theme.secondaryText} />
+        </TouchableOpacity>
+      </RNAnimated.View>
 
-        {/* Discovery Section - Contains explore button and categories */}
-        <View style={styles.discoverySection}>
-          {/* Explore Button */}
-          <TouchableOpacity
-            style={styles.exploreButton}
-            onPress={handleShowExplore}
-            activeOpacity={0.8}
-            accessible={true}
-            accessibilityLabel="Explore all events"
-            accessibilityRole="button"
-            accessibilityHint="Opens event explorer"
-          >
-            <FontAwesome name="search" size={16} color="#6B7280" />
-            <Text style={styles.exploreButtonText}>Explore all events</Text>
-            <MaterialIcons name="arrow-forward" size={18} color="#6B7280" />
-          </TouchableOpacity>
-          
-          {/* Categories */}
-          <View style={styles.categoriesContainer}>
-            <CategoryButtons
-              onSelectCategory={handleSelectCategory}
-              fadeAnim={fadeAnim}
-              translateY={translateY}
-            />
-          </View>
-        </View>
-
-        {/* Loading State */}
-        {loading && (
-          <View style={styles.statusContainer}>
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.statusText}>Loading events...</Text>
-          </View>
+      {/* Main Content */}
+      <RNAnimated.FlatList
+        data={[]}
+        renderItem={null}
+        onScroll={RNAnimated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
         )}
-        
-        {/* Error State */}
-        {error && !loading && (
-          <View style={styles.statusContainer}>
-            <MaterialIcons name="error-outline" size={48} color="#EF4444" />
-            <Text style={styles.errorText}>Unable to load events</Text>
-            <Text style={styles.errorSubtext}>{error.message}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={retryLoading}>
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {/* Featured Event Section */}
-        {!loading && featuredEvent && (
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Featured Event</Text>
-            <View style={styles.sectionContent}>
-              <FeaturedEvent
-                event={featuredEvent}
-                daysUntil={getDaysUntil(featuredEvent.date)}
-                fadeAnim={fadeAnim}
-                translateY={translateY}
-              />
-            </View>
-          </View>
-        )}
-
-        {/* Events Sections */}
-        <View style={styles.eventsSectionsContainer}>
-          {/* Upcoming Events Section */}
-          <View style={styles.sectionContainer}>
-            <EventSection
-              title="Upcoming Events"
-              events={upcomingEvents}
-              loading={loading}
-              attendingEvents={attendingEvents}
-              getEventStatus={getEventStatus}
-              onSeeAll={handleShowExplore}
-              emptyText="No upcoming events found."
-              emptyActionText="Explore Events"
-              onCreateEvent={() => router.push('/screens/Explore')}
-              fadeAnim={fadeAnim}
-              translateY={translateY}
-              getItemAnimationValues={getItemAnimationValues}
-            />
-          </View>
-
-          {/* Nearby Events Section */}
-          <View style={styles.sectionContainer}>
-            <EventSection
-              title="Events Near You"
-              events={nearbyEvents}
-              loading={loading}
-              attendingEvents={attendingEvents}
-              getEventStatus={getEventStatus}
-              onSeeAll={handleShowExplore}
-              emptyText="No nearby events found."
-              fadeAnim={fadeAnim}
-              translateY={translateY}
-              getItemAnimationValues={getItemAnimationValues}
-            />
-          </View>
-
-          {/* My Events Section - only shown if user is logged in */}
-          {user && (
-            <View style={styles.sectionContainer}>
-              <EventSection
-                title="Events You're Hosting"
-                events={myEvents}
-                loading={loading}
-                attendingEvents={attendingEvents}
-                getEventStatus={getEventStatus}
-                onSeeAll={() => router.push('/screens/event-history')}
-                emptyText="You haven't created any events yet."
-                emptyActionText="Create Event"
-                onCreateEvent={() => router.push('/screens/Create')}
-                fadeAnim={fadeAnim}
-                translateY={translateY}
-                getItemAnimationValues={getItemAnimationValues}
-              />
-            </View>
-          )}
-        </View>
-
-        {/* Debug Section - Only shown when DEBUG_COMPONENTS feature flag is enabled */}
-        {isEnabled('DEBUG_COMPONENTS') && (
+        scrollEventThrottle={16}
+        ListHeaderComponent={
           <>
-            <EventDebug events={events} title="All Events Debug" />
-            <EventDebug events={upcomingEvents} title="Upcoming Events Debug" />
-            <EventDebug events={nearbyEvents} title="Nearby Events Debug" />
-            {user && <EventDebug events={myEvents} title="My Events Debug" />}
+            {/* Spacer for header and search bar - adjusted for status bar spacer */}
+            <View style={{ height: headerTopHeight + (Platform.OS === 'ios' ? 50 : 30) }} />
+            
+            {/* Categories section - now part of the scrolling content */}
+            <View style={styles.categoriesSection}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoriesContainer}
+              >
+                {EVENT_CATEGORIES.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={styles.categoryButton}
+                    onPress={() => handleCategorySelect(category.id)}
+                  >
+                    <View style={[
+                      styles.categoryIcon, 
+                      { backgroundColor: getEventColor(category.name) }
+                    ]}>
+                      <FontAwesome name={category.icon as any} size={22} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.categoryText}>{category.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            
+            {/* Loading State with simple fade animation (similar to feed section) */}
+            {loading && (
+              <RNAnimated.View 
+                style={[
+                  styles.loadingContainer,
+                  {
+                    opacity: fadeAnim,
+                    transform: [{ translateY }]
+                  }
+                ]}
+              >
+                <MaterialIcons name="hourglass-empty" size={64} color={theme.primary} />
+                <Text style={[styles.loadingText, { color: theme.secondaryText }]}>
+                  Loading events...
+                </Text>
+              </RNAnimated.View>
+            )}
+            
+            {/* Error State with improved visuals */}
+            {error && !loading && (
+              <View style={styles.errorContainer}>
+                <MaterialIcons name="error-outline" size={64} color={theme.error} />
+                <Text style={[styles.errorText, { color: theme.text }]}>
+                  Unable to load events
+                </Text>
+                <Text style={[styles.errorSubtext, { color: theme.secondaryText }]}>
+                  {error.message}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.retryButton, { backgroundColor: theme.error }]}
+                  activeOpacity={0.8}
+                  onPress={retryLoading}
+                >
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {/* Featured Event with full-width design */}
+            {!loading && featuredEvent && (
+              <View style={styles.featuredEventContainer}>
+                <FeaturedEvent
+                  event={featuredEvent}
+                  daysUntil={getDaysUntil(featuredEvent.date)}
+                  fadeAnim={fadeAnim}
+                  translateY={translateY}
+                />
+              </View>
+            )}
+            
+            {/* Upcoming Events */}
+            {!loading && upcomingEvents.length > 0 && (
+              <View style={styles.sectionContainer}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Upcoming Events</Text>
+                  <TouchableOpacity onPress={() => router.push('/screens/Explore')}>
+                    <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '600' }}>See All</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <RNAnimated.ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.horizontalScrollContent}
+                >
+                  {upcomingEvents.slice(0, 5).map((item, index) => {
+                    const { fadeValue, translateValue } = getItemAnimationValues(index);
+                    return (
+                      <EventCard
+                        key={item.id || `event-${index}`}
+                        item={item}
+                        index={index}
+                        isAttending={attendingEvents.includes(item.id)}
+                        status={getEventStatus(item)}
+                        fadeValue={fadeValue}
+                        translateValue={translateValue}
+                      />
+                    );
+                  })}
+                </RNAnimated.ScrollView>
+              </View>
+            )}
+            
+            {/* Nearby Events */}
+            {!loading && nearbyEvents.length > 0 && (
+              <View style={styles.sectionContainer}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Events Near You</Text>
+                  <TouchableOpacity onPress={() => router.push('/screens/Explore')}>
+                    <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '600' }}>See All</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <RNAnimated.ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.horizontalScrollContent}
+                >
+                  {nearbyEvents.map((item, index) => {
+                    const { fadeValue, translateValue } = getItemAnimationValues(index);
+                    return (
+                      <EventCard
+                        key={item.id || `nearby-${index}`}
+                        item={item}
+                        index={index}
+                        isAttending={attendingEvents.includes(item.id)}
+                        status={getEventStatus(item)}
+                        fadeValue={fadeValue}
+                        translateValue={translateValue}
+                      />
+                    );
+                  })}
+                </RNAnimated.ScrollView>
+              </View>
+            )}
+            
+            {/* My Events */}
+            {!loading && user && (
+              <View style={[styles.sectionContainer, { marginBottom: 40 }]}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Your Events</Text>
+                  <TouchableOpacity onPress={() => router.push('/screens/event-history')}>
+                    <Text style={{ color: theme.primary, fontSize: 16, fontWeight: '600' }}>See All</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {myEvents.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={{ fontSize: 16, color: theme.secondaryText, textAlign: 'center', marginBottom: 20 }}>
+                      You haven't created any events yet
+                    </Text>
+                    <TouchableOpacity
+                      style={{ backgroundColor: theme.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+                      onPress={() => router.push('/screens/Create')}
+                    >
+                      <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 16 }}>Create Event</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <RNAnimated.ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.horizontalScrollContent}
+                  >
+                    {myEvents.map((item, index) => {
+                      const { fadeValue, translateValue } = getItemAnimationValues(index);
+                      return (
+                        <EventCard
+                          key={item.id || `my-${index}`}
+                          item={item}
+                          index={index}
+                          isAttending={attendingEvents.includes(item.id)}
+                          status={getEventStatus(item)}
+                          fadeValue={fadeValue}
+                          translateValue={translateValue}
+                        />
+                      );
+                    })}
+                  </RNAnimated.ScrollView>
+                )}
+              </View>
+            )}
+            
+            {/* Bottom Spacer */}
+            <View style={{ height: 120 }} />
           </>
-        )}
-          </>
-        )}
+        }
         keyExtractor={() => 'home-content'}
+        ListEmptyComponent={null}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refreshEvents}
+            colors={[theme.primary]}
+            tintColor={theme.primary}
+            progressBackgroundColor={theme.card}
+          />
+        }
       />
 
-      {/* Floating Action Button for Event Creation */}
-      <TouchableOpacity
-        style={styles.createEventFAB}
-        onPress={() => router.push('/screens/Create')}
-        activeOpacity={0.8}
-        accessible={true}
-        accessibilityLabel="Create new event"
-        accessibilityRole="button"
-        accessibilityHint="Opens event creation screen"
-      >
-        <LinearGradient
-          colors={['#007AFF', '#4F46E5']} // Use hardcoded colors for LinearGradient
-          style={styles.fabGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <FontAwesome name="plus" size={24} color="#FFFFFF" />
-        </LinearGradient>
-      </TouchableOpacity>
-    </View>
-  ), [
-    isOffline, refreshing, handleRefresh, colorScheme, user, loading, error,
-    featuredEvent, upcomingEvents, nearbyEvents, myEvents, attendingEvents,
-    handleShowExplore, handleSelectCategory, retryLoading, getDaysUntil,
-    getEventStatus, fadeAnim, translateY, getItemAnimationValues, isEnabled, events
-  ]);
-
-  return (
-    <>
-      {renderContent}
-      
-      {/* Explore Events Modal */}
+      {/* Explore Modal */}
       <ExploreModal
-        visible={showExploreModal}
+        visible={exploreModalVisible}
         events={filteredEvents}
         searchQuery={searchQuery}
         selectedFilter={selectedFilter}
         selectedCategory={selectedCategory}
         getEventStatus={getEventStatus}
-        onClose={handleHideExplore}
+        onClose={handleCloseExploreModal}
         onReset={resetFilters}
         onSearchChange={setSearchQuery}
         onFilterChange={setSelectedFilter}
@@ -376,160 +461,195 @@ export default function Home() {
         translateY={exploreModalTranslateY}
         loading={loading}
       />
-    </>
+
+      {/* Enhanced Floating Action Button */}
+      <RNAnimated.View style={styles.fabContainer}>
+        <TouchableOpacity
+          style={styles.fab}
+          activeOpacity={0.9}
+          onPress={() => router.push('/screens/Create')}
+        >
+          <LinearGradient
+            colors={[COLORS.primaryGradientStart, COLORS.primaryGradientEnd]}
+            style={styles.fabGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <FontAwesome name="plus" size={24} color="#FFFFFF" />
+          </LinearGradient>
+        </TouchableOpacity>
+      </RNAnimated.View>
+    </ScreenLayout>
   );
 }
-// Platform-specific shadows
-const cardShadow = createShadow(2);
-const buttonShadow = createShadow(1);
+
+// Enhanced shadows for better depth
+const cardShadow = createShadow(3);
+const buttonShadow = createShadow(2);
 
 const styles = StyleSheet.create({
-  // Main containers
-  pageContainer: {
+  // Enhanced Header - no borders or outlines
+  header: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30, // Adjusted to account for status bar spacer
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  headerGradient: {
     flex: 1,
-    backgroundColor: '#121212', // Darker background for better contrast with cards
-  },
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#121212',
-  },
-  contentContainer: {
-    paddingBottom: 32,
-  },
-  
-  // Header section
-  headerContainer: {
-    backgroundColor: '#007AFF',
-    paddingBottom: 28,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    overflow: 'hidden',
-    ...cardShadow,
-    elevation: 8, // Add elevation for Android
-    marginBottom: 10, // Add margin to separate from content
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingBottom: 30, // Extra padding at bottom
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-  },
-  welcomeContainer: {
-    flex: 1,
+    paddingHorizontal: 24,
   },
   welcomeText: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 32, // Larger text
+    fontWeight: '700',
     color: '#FFFFFF',
-    letterSpacing: -0.5,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    letterSpacing: 0.2,
   },
   subtitleText: {
-    fontSize: 18,
+    fontSize: 18, // Larger text
+    fontWeight: '500',
     color: 'rgba(255, 255, 255, 0.9)',
     marginTop: 6,
-    fontWeight: '500',
   },
   headerButtons: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    gap: 16, // Increased spacing
   },
-  mapButton: {
-    backgroundColor: 'rgba(59, 130, 246, 0.8)',
-    width: 48,
-    height: 48,
+  headerButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 48, // Slightly larger
+    height: 48, // Slightly larger
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    ...buttonShadow,
-  },
-  scanButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...buttonShadow,
   },
   
-  // Discovery section (search & categories)
-  discoverySection: {
-    marginTop: 20,
-    marginHorizontal: 16,
-    backgroundColor: '#1E1E1E', // Slightly lighter background for better visibility
-    borderRadius: 20,
-    padding: 20,
-    ...cardShadow,
-    elevation: 5, // Add elevation for Android
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)', // Add subtle border
+  // Floating Search Bar - modified to "Explore all events" button
+  searchBarContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 180 : 140, // Adjusted to account for status bar spacer
+    left: 0,
+    right: 0,
+    zIndex: 5,
+    paddingHorizontal: 24, // Wider padding
   },
-  exploreButton: {
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#2D2D2D',
+    justifyContent: 'space-between', // Spread out the items
     padding: 16,
-    borderRadius: 14,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    backgroundColor: '#1A1A1A', // Match the theme.card color
   },
-  exploreButtonText: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    fontWeight: '600',
-    flex: 1,
+  searchText: {
+    flex: 1, // Take up available space
     marginLeft: 12,
-  },
-  categoriesContainer: {
-    // No additional styling needed as CategoryButtons has its own internal padding
-  },
-  
-  // Status containers (loading/error)
-  statusContainer: {
-    margin: 16,
-    padding: 28,
-    backgroundColor: '#1E1E1E', // Slightly lighter background for better visibility
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...cardShadow,
-    elevation: 4, // Add elevation for Android
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)', // More visible border
-  },
-  statusText: {
-    fontSize: 18,
-    color: '#CCCCCC',
-    marginTop: 16,
+    fontSize: 16,
     fontWeight: '500',
   },
-  errorText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#EF4444',
+  
+  // Categories section - now integrated into the scrolling content
+  categoriesSection: {
+    marginBottom: 24,
+    paddingVertical: 16,
+  },
+  categoriesContainer: {
+    paddingHorizontal: 24,
+  },
+  categoryButton: {
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  categoryIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...buttonShadow,
+  },
+  categoryText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    marginTop: 8,
+  },
+  
+  // Featured event container
+  featuredEventContainer: {
+    marginHorizontal: 16,
+    marginBottom: 24,
+  },
+  
+  // Section containers
+  sectionContainer: {
     marginTop: 16,
+    marginBottom: 16,
+  },
+  
+  // Section headers
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  
+  // Horizontal scroll content
+  horizontalScrollContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  
+  // Enhanced Loading State - no borders
+  loadingContainer: {
+    marginTop: 24,
+    marginBottom: 24,
+    padding: 40,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 20,
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  
+  // Enhanced Error State - no borders
+  errorContainer: {
+    marginTop: 24,
+    marginBottom: 24,
+    padding: 40,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginVertical: 16,
   },
   errorSubtext: {
     fontSize: 16,
-    color: '#CCCCCC',
     textAlign: 'center',
-    marginTop: 10,
-    marginBottom: 20,
-    paddingHorizontal: 16,
+    marginBottom: 24,
+    lineHeight: 24,
   },
   retryButton: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
-    ...buttonShadow,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 12,
   },
   retryButtonText: {
     color: '#FFFFFF',
@@ -537,64 +657,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   
-  // Section containers
-  sectionContainer: {
-    marginTop: 24,
-    marginHorizontal: 16,
-    backgroundColor: '#1E1E1E', // Slightly lighter background for better visibility
-    borderRadius: 20,
-    overflow: 'hidden',
-    ...cardShadow,
-    elevation: 4, // Add elevation for Android
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)', // More visible border
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    padding: 18,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  sectionContent: {
-    padding: 18,
-  },
-  eventsSectionsContainer: {
-    marginBottom: 16,
-  },
-  
-  // Offline banner
-  offlineBanner: {
-    backgroundColor: '#6B7280',
-    padding: 14,
-    flexDirection: 'row',
+  // Empty state
+  emptyContainer: {
+    marginHorizontal: 24,
+    marginTop: 20,
+    padding: 30,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
-  },
-  offlineBannerText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '500',
-    marginLeft: 10,
   },
   
-  // FAB
-  createEventFAB: {
+  // Enhanced FAB - no borders
+  fabContainer: {
     position: 'absolute',
-    bottom: 28,
-    right: 28,
-    ...buttonShadow,
-    borderRadius: 30,
-    elevation: 10,
+    bottom: 32,
+    right: 32,
+    zIndex: 10,
+  },
+  fab: {
+    borderRadius: 32,
   },
   fabGradient: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
   }

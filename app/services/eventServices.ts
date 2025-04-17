@@ -491,15 +491,40 @@ class FirestoreEventRepository implements EventRepository {
    */
   async addAttendee(eventId: string, userId: string): Promise<boolean> {
     try {
-      // Update the event document to add the user to the attendees array
-      const eventDoc = doc(db, this.collectionName, eventId);
-      await updateDoc(eventDoc, {
-        attendees: arrayUnion(userId),
-        updatedAt: serverTimestamp()
+      // Instead of updating the main event document, use the attendees subcollection
+      // Create a document in the attendees subcollection
+      const attendeeDoc = doc(db, `${this.collectionName}/${eventId}/attendees`, userId);
+      await updateDoc(attendeeDoc, {
+        userId: userId,
+        joinedAt: serverTimestamp(),
+        status: 'confirmed'
+      }).catch(error => {
+        // If the document doesn't exist, create it
+        if (error.code === 'not-found') {
+          return addDoc(collection(db, `${this.collectionName}/${eventId}/attendees`), {
+            userId: userId,
+            joinedAt: serverTimestamp(),
+            status: 'confirmed'
+          });
+        }
+        throw error;
       });
       
-      // Invalidate cache
-      this.invalidateCache(eventId);
+      // Also update the main event document's attendees array for backward compatibility
+      // This might fail due to permissions, but we'll handle that gracefully
+      try {
+        const eventDoc = doc(db, this.collectionName, eventId);
+        await updateDoc(eventDoc, {
+          attendees: arrayUnion(userId),
+          updatedAt: serverTimestamp()
+        });
+        
+        // Invalidate cache
+        this.invalidateCache(eventId);
+      } catch (updateError) {
+        console.warn('Could not update main event document, but attendee was added to subcollection:', updateError);
+        // Don't throw here, as the attendee was successfully added to the subcollection
+      }
       
       return true;
     } catch (error) {
@@ -513,15 +538,50 @@ class FirestoreEventRepository implements EventRepository {
    */
   async removeAttendee(eventId: string, userId: string): Promise<boolean> {
     try {
-      // Update the event document to remove the user from the attendees array
-      const eventDoc = doc(db, this.collectionName, eventId);
-      await updateDoc(eventDoc, {
-        attendees: arrayRemove(userId),
-        updatedAt: serverTimestamp()
-      });
+      console.log(`Removing attendee ${userId} from event ${eventId}`);
       
-      // Invalidate cache
-      this.invalidateCache(eventId);
+      // First check if the document exists in the subcollection
+      const attendeeDocRef = doc(db, `${this.collectionName}/${eventId}/attendees`, userId);
+      const attendeeDoc = await getDoc(attendeeDocRef);
+      
+      if (attendeeDoc.exists()) {
+        // Remove the attendee from the subcollection
+        await deleteDoc(attendeeDocRef);
+        console.log(`Deleted attendee document for ${userId}`);
+      } else {
+        // If not found by ID, try to find by userId field
+        const attendeesCollection = collection(db, `${this.collectionName}/${eventId}/attendees`);
+        const q = query(attendeesCollection, where('userId', '==', userId));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          // Delete all matching documents
+          const batch = writeBatch(db);
+          querySnapshot.forEach((doc) => {
+            batch.delete(doc.ref);
+          });
+          await batch.commit();
+          console.log(`Deleted ${querySnapshot.size} attendee documents for userId ${userId}`);
+        } else {
+          console.warn(`No attendee documents found for userId ${userId}`);
+        }
+      }
+      
+      // Also update the main event document for backward compatibility
+      try {
+        const eventDoc = doc(db, this.collectionName, eventId);
+        await updateDoc(eventDoc, {
+          attendees: arrayRemove(userId),
+          updatedAt: serverTimestamp()
+        });
+        console.log(`Updated main event document to remove ${userId}`);
+        
+        // Invalidate cache
+        this.invalidateCache(eventId);
+      } catch (updateError) {
+        console.warn('Could not update main event document, but attendee was removed from subcollection:', updateError);
+        // Don't throw here, as the attendee was successfully removed from the subcollection
+      }
       
       return true;
     } catch (error) {
@@ -978,6 +1038,18 @@ class EventService {
         return true; // User is already an attendee, consider this a success
       }
       
+      // Also check the attendees subcollection
+      try {
+        const attendeeDoc = doc(db, `events/${eventId}/attendees`, userId);
+        const attendeeSnapshot = await getDoc(attendeeDoc);
+        if (attendeeSnapshot.exists()) {
+          return true; // User is already an attendee in the subcollection
+        }
+      } catch (error) {
+        console.warn('Error checking attendee subcollection:', error);
+        // Continue with adding the attendee
+      }
+      
       return await this.repository.addAttendee(eventId, userId);
     } catch (error) {
       console.error('Error in addAttendee service:', error);
@@ -1090,14 +1162,35 @@ class EventService {
    */
   async getEventAttendees(eventId: string): Promise<string[]> {
     try {
-      console.log('Getting event with ID:', eventId);
+      console.log('Getting attendees for event:', eventId);
       
+      // First, check if the event exists
       const event = await this.getEventById(eventId);
       if (!event) {
         throw new Error('Event not found');
       }
       
-      return event.attendees || [];
+      // Fetch attendees from the subcollection
+      const attendeesCollection = collection(db, `events/${eventId}/attendees`);
+      const attendeesSnapshot = await getDocs(attendeesCollection);
+      
+      if (attendeesSnapshot.empty) {
+        // If subcollection is empty, fall back to the main event document's attendees array
+        console.log('No attendees found in subcollection, falling back to main document');
+        return event.attendees || [];
+      }
+      
+      // Extract user IDs from the attendees subcollection
+      const attendeeIds: string[] = [];
+      attendeesSnapshot.forEach(doc => {
+        // Use the document ID as the user ID, or get it from the data if available
+        const data = doc.data();
+        const userId = data.userId || doc.id;
+        attendeeIds.push(userId);
+      });
+      
+      console.log(`Found ${attendeeIds.length} attendees for event ${eventId}`);
+      return attendeeIds;
     } catch (error) {
       console.error('Error in getEventAttendees service:', error);
       throw error;

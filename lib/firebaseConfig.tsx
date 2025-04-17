@@ -8,11 +8,12 @@ import { getStorage, FirebaseStorage } from 'firebase/storage';
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Correct Firebase configuration with proper storage bucket format
 const firebaseConfig = {
   apiKey: "AIzaSyBMUu0L9RiM5Q-y0Ks5ync7GLnRws_Un1s",
   authDomain: "event-hive-992c0.firebaseapp.com",
   projectId: "event-hive-992c0",
-  storageBucket: "event-hive-992c0.firebasestorage.app",
+  storageBucket: "event-hive-992c0.appspot.com", // Standard format for Firebase Storage
   messagingSenderId: "549671182290",
   appId: "1:549671182290:web:7eb4f50a24cccbdaaa320b",
   measurementId: "G-ERG2RHGGZH"
@@ -32,7 +33,7 @@ try {
   analytics = getAnalytics(app);
   auth = getAuth(app);
   db = getFirestore(app);
-  storage = getStorage(app);
+  storage = getStorage(app, firebaseConfig.storageBucket);
   
   console.log("Firebase initialized successfully");
 } catch (error) {

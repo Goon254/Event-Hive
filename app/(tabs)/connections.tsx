@@ -1,6 +1,20 @@
 // app/(tabs)/connections.tsx
 import React, { useState, useRef } from 'react';
-import { View, StyleSheet, Animated, RefreshControl, StatusBar } from 'react-native';
+import { COLORS } from '../theme/constants';
+import { LinearGradient } from 'expo-linear-gradient';
+import {
+  View,
+  StyleSheet,
+  Animated,
+  RefreshControl,
+  Text,
+  Platform,
+  TouchableOpacity,
+  TextInput
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { createShadow } from '../utils/platformUtils';
+import ScreenLayout from '../components/common/ScreenLayout';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../AuthContext';
 
@@ -104,25 +118,132 @@ export default function ConnectionsScreen() {
   };
   
   return (
-    <View style={styles.container} testID="connections-screen">
-      <StatusBar barStyle="dark-content" />
+    <ScreenLayout
+      backgroundColor={COLORS.background}
+      statusBarColor={COLORS.background}
+      statusBarStyle="light-content"
+      testID="connections-screen"
+    >
       
-      <Header 
-        scrollY={scrollY} 
-        pendingCount={pendingConnections.length} 
-        onSettingsPress={() => router.push('/screens/settings')}
-      />
+      {/* Animated Header */}
+      <Animated.View style={[
+        styles.header,
+        {
+          height: Platform.OS === 'ios' ? 130 : 110,
+        }
+      ]}>
+        <LinearGradient
+          colors={[COLORS.primaryGradientStart, COLORS.primaryGradientEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGradient}
+        >
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.welcomeText}>Connections</Text>
+              <Text style={styles.subtitleText}>
+                Grow your network
+              </Text>
+            </View>
+            
+            <View style={styles.headerButtons}>
+              {pendingConnections.length > 0 && (
+                <View style={styles.pendingBadge}>
+                  <Text style={styles.pendingBadgeText}>{pendingConnections.length}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.headerButton}
+                onPress={() => router.push('/screens/settings')}
+              >
+                <MaterialIcons name="settings" size={22} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </LinearGradient>
+      </Animated.View>
       
-      <SearchBar 
-        value={searchQuery} 
-        onChangeText={setSearchQuery} 
-      />
-      
-      <ConnectionTabs 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        pendingCount={pendingConnections.length} 
-      />
+      <View style={{ marginTop: 100 }}>
+        {/* Custom dark themed search bar */}
+        <View style={styles.searchBarContainer}>
+          <View style={styles.searchBar}>
+            <MaterialIcons name="search" size={22} color={COLORS.secondaryText} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search connections..."
+              placeholderTextColor={COLORS.secondaryText}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+        </View>
+        
+        {/* Custom dark themed tabs */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[
+              styles.tab,
+              activeTab === 'connections' && styles.activeTab
+            ]}
+            onPress={() => setActiveTab('connections')}
+          >
+            <Text style={[
+              styles.tabText,
+              activeTab === 'connections' && styles.activeTabText
+            ]}>Connected</Text>
+            {activeTab === 'connections' && <View style={styles.activeTabIndicator} />}
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.tab,
+              activeTab === 'pending' && styles.activeTab
+            ]}
+            onPress={() => setActiveTab('pending')}
+          >
+            <View style={styles.tabContent}>
+              <Text style={[
+                styles.tabText,
+                activeTab === 'pending' && styles.activeTabText
+              ]}>Pending</Text>
+              {pendingConnections.length > 0 && (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>{pendingConnections.length}</Text>
+                </View>
+              )}
+            </View>
+            {activeTab === 'pending' && <View style={styles.activeTabIndicator} />}
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.tab,
+              activeTab === 'suggested' && styles.activeTab
+            ]}
+            onPress={() => setActiveTab('suggested')}
+          >
+            <Text style={[
+              styles.tabText,
+              activeTab === 'suggested' && styles.activeTabText
+            ]}>Suggested</Text>
+            {activeTab === 'suggested' && <View style={styles.activeTabIndicator} />}
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[
+              styles.tab,
+              activeTab === 'discover' && styles.activeTab
+            ]}
+            onPress={() => setActiveTab('discover')}
+          >
+            <Text style={[
+              styles.tabText,
+              activeTab === 'discover' && styles.activeTabText
+            ]}>Discover</Text>
+            {activeTab === 'discover' && <View style={styles.activeTabIndicator} />}
+          </TouchableOpacity>
+        </View>
+      </View>
       
       {isLoading ? (
         <LoadingIndicator message="Loading connections..." />
@@ -146,8 +267,8 @@ export default function ConnectionsScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#007AFF"
-              colors={['#007AFF']}
+              tintColor={COLORS.primaryGradientStart}
+              colors={[COLORS.primaryGradientStart]}
             />
           }
           onScroll={Animated.event(
@@ -176,18 +297,141 @@ export default function ConnectionsScreen() {
           }} 
         />
       )}
-    </View>
+    </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  searchBarContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  searchBar: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    ...createShadow(2),
+  },
+  searchInput: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    marginLeft: 12,
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    marginBottom: 16,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  activeTab: {
+    backgroundColor: 'transparent',
+  },
+  tabContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.secondaryText,
+  },
+  activeTabText: {
+    color: COLORS.primary,
+    fontWeight: 'bold',
+  },
+  activeTabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: '25%',
+    right: '25%',
+    height: 3,
+    backgroundColor: COLORS.primary,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+  },
+  tabBadge: {
+    backgroundColor: COLORS.error,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  tabBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  // Enhanced Header - no borders or outlines
+  header: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30, // Adjusted to account for status bar spacer
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  headerGradient: {
+    flex: 1,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingBottom: 30, // Extra padding at bottom
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 24,
+  },
+  welcomeText: {
+    fontSize: 32, // Larger text
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  subtitleText: {
+    fontSize: 18, // Larger text
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 6,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 16, // Increased spacing
+  },
+  headerButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 48, // Slightly larger
+    height: 48, // Slightly larger
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pendingBadge: {
+    backgroundColor: COLORS.error,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pendingBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   listContainer: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 100, // Add space for the header
     paddingBottom: 100,
   },
 });

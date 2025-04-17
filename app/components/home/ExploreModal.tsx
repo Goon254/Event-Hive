@@ -8,6 +8,7 @@ import {
   ScrollView,
   FlatList,
   Image,
+  ImageBackground,
   Modal,
   Animated,
   Dimensions,
@@ -15,6 +16,7 @@ import {
 } from 'react-native';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Event } from '../../services/eventServices';
 import { FilterType } from './hooks/useEventData';
 import { EVENT_CATEGORIES } from './CategoryButtons';
@@ -38,8 +40,8 @@ interface ExploreModalProps {
 }
 
 /**
- * ExploreModal component - displays a modal for exploring and filtering events
- * Optimized with React.memo to prevent unnecessary re-renders
+ * ExploreModal component - visually enhanced version
+ * Displays a modal for exploring and filtering events with a modern image-focused design
  */
 const ExploreModal = ({
   visible,
@@ -57,6 +59,20 @@ const ExploreModal = ({
   loading
 }: ExploreModalProps) => {
   if (!visible) return null;
+  
+  // Generate status colors based on status
+  const getStatusBgColor = (status: string) => {
+    switch(status.toLowerCase()) {
+      case 'upcoming':
+        return '#3B82F6'; // Blue
+      case 'ongoing': 
+        return '#10B981'; // Green
+      case 'completed':
+        return '#6B7280'; // Gray
+      default:
+        return '#8B5CF6'; // Purple
+    }
+  };
   
   return (
     <Modal
@@ -141,6 +157,11 @@ const ExploreModal = ({
                     style={[
                       styles.exploreFilterButton,
                       selectedFilter === filter && styles.exploreFilterButtonActive,
+                      selectedFilter === filter && {
+                        backgroundColor: filter === 'upcoming' ? '#3B82F6' : 
+                                        filter === 'ongoing' ? '#10B981' : 
+                                        filter === 'completed' ? '#6B7280' : '#8B5CF6'
+                      }
                     ]}
                     onPress={() => onFilterChange(filter as FilterType)}
                     accessible={true}
@@ -220,7 +241,7 @@ const ExploreModal = ({
                 data={events}
                 renderItem={({ item }) => {
                   const status = getEventStatus(item);
-                  const statusColors = getStatusColor(status);
+                  const statusBgColor = getStatusBgColor(status);
                   
                   return (
                     <TouchableOpacity
@@ -234,54 +255,56 @@ const ExploreModal = ({
                       accessibilityRole="button"
                       accessibilityHint="Opens event details"
                     >
-                      <View style={styles.exploreEventImageContainer}>
-                        {item.imageUrl ? (
-                          <Image source={{ uri: item.imageUrl }} style={styles.exploreEventImage} />
-                        ) : (
-                          <View style={[
-                            styles.exploreEventImagePlaceholder,
-                            { backgroundColor: getEventColor(item.title) }
-                          ]}>
-                            <Text style={styles.exploreEventImageText}>
-                              {item.title.charAt(0).toUpperCase()}
-                            </Text>
-                          </View>
+                      {/* Event image or color placeholder */}
+                      <ImageBackground
+                        source={item.imageUrl ? { uri: item.imageUrl } : undefined}
+                        style={[
+                          styles.eventImageBackground,
+                          !item.imageUrl && { backgroundColor: getEventColor(item.title) }
+                        ]}
+                        imageStyle={styles.eventImageStyle}
+                      >
+                        {/* Display letter if no image */}
+                        {!item.imageUrl && (
+                          <Text style={styles.eventImageLetter}>
+                            {item.title.charAt(0).toUpperCase()}
+                          </Text>
                         )}
-                      </View>
+                        
+                        {/* Status badge */}
+                        <View style={[styles.statusBadge, { backgroundColor: statusBgColor }]}>
+                          <Text style={styles.statusText}>{status.toUpperCase()}</Text>
+                        </View>
+                      </ImageBackground>
                       
-                      <View style={styles.exploreEventContent}>
-                        <Text style={styles.exploreEventTitle} numberOfLines={1}>
+                      {/* Event details */}
+                      <View style={styles.eventDetailsContainer}>
+                        <Text style={styles.eventTitle} numberOfLines={1}>
                           {item.title}
                         </Text>
                         
-                        <View style={styles.exploreEventInfo}>
-                          <View style={styles.exploreInfoRow}>
-                            <FontAwesome name="calendar" size={14} color="#6B7280" />
-                            <Text style={styles.exploreEventDetails}>
-                              {formatDate(item.date)}
-                            </Text>
-                          </View>
-                          
-                          <View style={styles.exploreInfoRow}>
-                            <FontAwesome name="map-marker" size={14} color="#6B7280" />
-                            <Text style={styles.exploreEventDetails} numberOfLines={1}>
-                              {item.location || "Location TBD"}
-                            </Text>
-                          </View>
-                        </View>
-                        
-                        {/* Status Badge */}
-                        <View style={[
-                          styles.exploreStatusBadge,
-                          { backgroundColor: statusColors.bg }
-                        ]}>
-                          <Text style={[
-                            styles.exploreStatusText,
-                            { color: statusColors.text }
-                          ]}>
-                            {status.toUpperCase()}
+                        <View style={styles.eventMetaRow}>
+                          <FontAwesome name="calendar" size={14} color="#007AFF" />
+                          <Text style={styles.eventMetaText}>
+                            {formatDate(item.date)}
                           </Text>
                         </View>
+                        
+                        <View style={styles.eventMetaRow}>
+                          <FontAwesome name="map-marker" size={14} color="#007AFF" />
+                          <Text style={styles.eventMetaText} numberOfLines={1}>
+                            {item.location || "Location TBD"}
+                          </Text>
+                        </View>
+                        
+                        {item.isPaid && (
+                          <View style={styles.priceBadge}>
+                            <FontAwesome name="ticket" size={12} color="#FFF" />
+                            <Text style={styles.priceText}>
+                              ${item.price?.toFixed(2) || '0.00'}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                     </TouchableOpacity>
                   );
@@ -370,7 +393,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     margin: 16,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   searchIcon: {
     marginRight: 8,
@@ -454,68 +477,86 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 120,
   },
+  
+  // Enhanced event card
   exploreEventCard: {
-    flexDirection: 'row',
-    backgroundColor: '#1E1E1E',
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 16,
     overflow: 'hidden',
+    backgroundColor: '#1E1E1E',
     ...cardShadow,
+    elevation: 5,
   },
-  exploreEventImageContainer: {
-    width: 100,
-    height: 100,
-  },
-  exploreEventImage: {
+  eventImageBackground: {
+    height: 140,
     width: '100%',
-    height: '100%',
-  },
-  exploreEventImagePlaceholder: {
-    width: '100%',
-    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  exploreEventImageText: {
-    fontSize: 24,
+  eventImageStyle: {
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  eventImageLetter: {
+    fontSize: 48,
     fontWeight: 'bold',
     color: 'white',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
-  exploreEventContent: {
-    flex: 1,
-    padding: 12,
-    position: 'relative',
+  statusBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    ...Platform.select({
+      ios: { zIndex: 1 }
+    }),
   },
-  exploreEventTitle: {
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  eventDetailsContainer: {
+    padding: 16,
+    backgroundColor: '#1E1E1E',
+  },
+  eventTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 6,
+    marginBottom: 12,
   },
-  exploreEventInfo: {
-    flex: 1,
-  },
-  exploreInfoRow: {
+  eventMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  exploreEventDetails: {
+  eventMetaText: {
+    marginLeft: 8,
     fontSize: 14,
     color: '#A0A0A0',
-    marginLeft: 8,
   },
-  exploreStatusBadge: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
+  priceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.2)', // Blue with opacity
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 4,
   },
-  exploreStatusText: {
+  priceText: {
+    color: '#60A5FA', // Light blue
     fontSize: 12,
     fontWeight: '600',
+    marginLeft: 4,
   },
   
   // Loading and empty states

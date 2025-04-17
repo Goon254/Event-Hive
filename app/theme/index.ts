@@ -1,20 +1,21 @@
 /**
  * app/theme/index.ts
- * 
+ *
  * Centralized theme configuration for the ScanGo app.
  * This file defines colors, spacing, typography, and other design tokens
  * to ensure consistency across the app.
  */
 
 import { Platform } from 'react-native';
+import { COLORS, GRADIENTS } from './constants';
 
 // Define color palette
 const palette = {
   // Primary colors
   primary: {
-    light: '#007AFF',
-    dark: '#0A84FF',
-    gradient: ['#007AFF', '#4F46E5'],
+    light: COLORS.primary,
+    dark: COLORS.primary,
+    gradient: GRADIENTS.primary,
   },
   
   // Secondary colors
@@ -25,10 +26,10 @@ const palette = {
   
   // Accent colors
   accent: {
-    success: '#10B981',
-    warning: '#F59E0B',
-    error: '#EF4444',
-    info: '#3B82F6',
+    success: COLORS.success,
+    warning: COLORS.warning,
+    error: COLORS.error,
+    info: COLORS.primary,
   },
   
   // Neutral colors
@@ -167,45 +168,45 @@ const shadows = {
   xl: createShadow(8),
 };
 
-// Define theme for light mode
+// Define theme for light mode (now using dark theme colors for consistency)
 const lightTheme = {
   colors: {
-    primary: palette.primary.light,
+    primary: COLORS.primary,
     secondary: palette.secondary.light,
-    background: palette.neutral.white,
-    card: palette.neutral.gray100,
-    text: palette.neutral.gray900,
-    textSecondary: palette.neutral.gray600,
-    textInverted: palette.neutral.white,
-    border: palette.neutral.gray300,
-    notification: palette.accent.error,
+    background: COLORS.background,
+    card: COLORS.card,
+    text: COLORS.text,
+    textSecondary: COLORS.secondaryText,
+    textInverted: COLORS.background,
+    border: COLORS.border,
+    notification: COLORS.error,
     
     // Component specific colors
-    header: palette.primary.light,
-    headerText: palette.neutral.white,
-    tabBar: palette.neutral.white,
-    tabBarActive: palette.primary.light,
-    tabBarInactive: palette.neutral.gray400,
+    header: COLORS.header,
+    headerText: COLORS.text,
+    tabBar: COLORS.tabBar,
+    tabBarActive: COLORS.tabBarActive,
+    tabBarInactive: COLORS.tabBarInactive,
     
     // Card colors
-    cardBackground: palette.neutral.white,
-    cardBorder: palette.neutral.gray200,
+    cardBackground: COLORS.cardBackground,
+    cardBorder: COLORS.cardBorder,
     
     // Button colors
-    buttonPrimary: palette.primary.light,
-    buttonSecondary: palette.neutral.gray200,
-    buttonText: palette.neutral.white,
-    buttonTextSecondary: palette.neutral.gray800,
+    buttonPrimary: COLORS.buttonPrimary,
+    buttonSecondary: COLORS.buttonSecondary,
+    buttonText: COLORS.buttonText,
+    buttonTextSecondary: COLORS.text,
     
     // Status colors
-    success: palette.accent.success,
-    warning: palette.accent.warning,
-    error: palette.accent.error,
-    info: palette.accent.info,
+    success: COLORS.success,
+    warning: COLORS.warning,
+    error: COLORS.error,
+    info: COLORS.primary,
     
     // Gradient colors
-    gradientPrimary: palette.primary.gradient,
-    gradientOverlay: ['transparent', 'rgba(0,0,0,0.8)'],
+    gradientPrimary: GRADIENTS.primary,
+    gradientOverlay: GRADIENTS.overlay,
   },
   
   // Include other theme properties
@@ -215,45 +216,45 @@ const lightTheme = {
   shadows,
 };
 
-// Define theme for dark mode
+// Define theme for dark mode (same as light theme for consistency)
 const darkTheme = {
   colors: {
-    primary: palette.primary.dark,
+    primary: COLORS.primary,
     secondary: palette.secondary.dark,
-    background: palette.neutral.darkGray100,
-    card: palette.neutral.darkGray200,
-    text: palette.neutral.white,
-    textSecondary: palette.neutral.darkGray700,
-    textInverted: palette.neutral.darkGray100,
-    border: palette.neutral.darkGray300,
-    notification: palette.accent.error,
+    background: COLORS.background,
+    card: COLORS.card,
+    text: COLORS.text,
+    textSecondary: COLORS.secondaryText,
+    textInverted: COLORS.background,
+    border: COLORS.border,
+    notification: COLORS.error,
     
     // Component specific colors
-    header: palette.primary.dark,
-    headerText: palette.neutral.white,
-    tabBar: palette.neutral.darkGray100,
-    tabBarActive: palette.primary.dark,
-    tabBarInactive: palette.neutral.darkGray500,
+    header: COLORS.header,
+    headerText: COLORS.text,
+    tabBar: COLORS.tabBar,
+    tabBarActive: COLORS.tabBarActive,
+    tabBarInactive: COLORS.tabBarInactive,
     
     // Card colors
-    cardBackground: palette.neutral.darkGray200,
-    cardBorder: palette.neutral.darkGray300,
+    cardBackground: COLORS.cardBackground,
+    cardBorder: COLORS.cardBorder,
     
     // Button colors
-    buttonPrimary: palette.primary.dark,
-    buttonSecondary: palette.neutral.darkGray300,
-    buttonText: palette.neutral.white,
-    buttonTextSecondary: palette.neutral.darkGray800,
+    buttonPrimary: COLORS.buttonPrimary,
+    buttonSecondary: COLORS.buttonSecondary,
+    buttonText: COLORS.buttonText,
+    buttonTextSecondary: COLORS.text,
     
     // Status colors
-    success: palette.accent.success,
-    warning: palette.accent.warning,
-    error: palette.accent.error,
-    info: palette.accent.info,
+    success: COLORS.success,
+    warning: COLORS.warning,
+    error: COLORS.error,
+    info: COLORS.primary,
     
     // Gradient colors
-    gradientPrimary: palette.primary.gradient,
-    gradientOverlay: ['transparent', 'rgba(0,0,0,0.8)'],
+    gradientPrimary: GRADIENTS.primary,
+    gradientOverlay: GRADIENTS.overlay,
   },
   
   // Include other theme properties
@@ -279,4 +280,6 @@ export default {
   borderRadius,
   shadows,
   createShadow,
+  colors: COLORS,
+  gradients: GRADIENTS,
 };

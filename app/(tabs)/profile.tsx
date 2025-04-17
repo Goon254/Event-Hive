@@ -1,15 +1,23 @@
 // app/(tabs)/profile.tsx
 import React, { useEffect, useState } from 'react';
+import { COLORS } from '../theme/constants';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   View,
   StyleSheet,
   ScrollView,
   Alert,
-  StatusBar,
   ActivityIndicator,
   Text,
   Animated,
+  StatusBar,
+  TouchableOpacity,
+  Platform,
+  Image,
 } from 'react-native';
+import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
+import { createShadow } from '../utils/platformUtils';
+import ScreenLayout from '../components/common/ScreenLayout';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../AuthContext';
 import * as ImagePicker from 'expo-image-picker';
@@ -215,10 +223,16 @@ export default function ProfileScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading your profile...</Text>
-      </View>
+      <ScreenLayout
+        backgroundColor={COLORS.background}
+        statusBarColor={COLORS.background}
+        statusBarStyle="light-content"
+      >
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading your profile...</Text>
+        </View>
+      </ScreenLayout>
     );
   }
 
@@ -229,44 +243,136 @@ export default function ProfileScreen() {
   // If profile is not loaded yet but user is authenticated, show a placeholder
   if (!profile) {
     return (
-      <View style={[styles.container, styles.loadingContainer]}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading your profile...</Text>
-      </View>
+      <ScreenLayout
+        backgroundColor={COLORS.background}
+        statusBarColor={COLORS.background}
+        statusBarStyle="light-content"
+      >
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading your profile...</Text>
+        </View>
+      </ScreenLayout>
     );
   }
 
   return (
-    <View style={styles.container} testID="profile-screen">
-      <StatusBar barStyle="dark-content" />
+    <ScreenLayout
+      backgroundColor={COLORS.background}
+      statusBarColor={COLORS.background}
+      statusBarStyle="light-content"
+      testID="profile-screen"
+    >
+      {/* Animated Header */}
+      <Animated.View style={[
+        styles.header,
+        {
+          height: Platform.OS === 'ios' ? 130 : 110,
+        }
+      ]}>
+        <LinearGradient
+          colors={[COLORS.primaryGradientStart, COLORS.primaryGradientEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGradient}
+        >
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.welcomeText}>Profile</Text>
+              <Text style={styles.subtitleText}>
+                Manage your account
+              </Text>
+            </View>
+            
+            <View style={styles.headerButtons}>
+              <TouchableOpacity
+                style={styles.headerButton}
+                onPress={() => router.push('/screens/settings')}
+              >
+                <MaterialIcons name="settings" size={22} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </LinearGradient>
+      </Animated.View>
       
-      {/* Header */}
-      <ProfileHeader 
-        onSettingsPress={() => router.push('/screens/settings')} 
-      />
-      
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Card */}
-        <ProfileCard 
-          profile={profile}
-          isImageLoading={isImageUploading}
-          onEditProfilePress={() => router.push('/screens/personal-information')}
-          onEditImagePress={handleEditImage}
-        />
+        {/* Custom Profile Card with dark theme */}
+        <View style={styles.profileCard}>
+          <View style={styles.profileImageContainer}>
+            {profile.profileImageUrl ? (
+              <Image
+                source={{ uri: profile.profileImageUrl }}
+                style={styles.profileImage}
+              />
+            ) : (
+              <View style={styles.profileImagePlaceholder}>
+                <Text style={styles.profileImagePlaceholderText}>
+                  {profile.name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.editImageButton}
+              onPress={handleEditImage}
+            >
+              <MaterialIcons name="camera-alt" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          
+          <Text style={styles.profileName}>{profile.name}</Text>
+          <Text style={styles.profileEmail}>{profile.email}</Text>
+          
+          <TouchableOpacity
+            style={styles.editProfileButton}
+            onPress={() => router.push('/screens/personal-information')}
+          >
+            <Text style={styles.editProfileButtonText}>Edit Profile</Text>
+          </TouchableOpacity>
+        </View>
         
-        {/* Stats Summary */}
-        <StatsCard stats={profile.stats} />
+        {/* Custom Stats Card with dark theme */}
+        <View style={styles.statsCard}>
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{profile.stats.eventsAttended}</Text>
+            <Text style={styles.statLabel}>Events Attended</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{profile.stats.eventsCreated}</Text>
+            <Text style={styles.statLabel}>Events Created</Text>
+          </View>
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statValue}>{profile.stats.connections}</Text>
+            <Text style={styles.statLabel}>Connections</Text>
+          </View>
+        </View>
 
-        {/* Menu Items */}
-        <MenuList 
-          items={menuItems} 
-          fadeAnim={fadeAnim}
-          isLoading={isLoading}
-        />
+        {/* Custom Menu List with dark theme */}
+        <View style={styles.menuContainer}>
+          <Text style={styles.menuSectionTitle}>Account Settings</Text>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={item.title}
+              style={styles.menuItem}
+              onPress={item.onPress}
+            >
+              <View style={styles.menuItemIconContainer}>
+                <FontAwesome name={item.icon} size={20} color="#FFFFFF" />
+              </View>
+              <View style={styles.menuItemContent}>
+                <Text style={styles.menuItemTitle}>{item.title}</Text>
+                <Text style={styles.menuItemDescription}>{item.description}</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={COLORS.secondaryText} />
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {/* Logout Button */}
         <LogoutButton 
@@ -277,29 +383,206 @@ export default function ProfileScreen() {
         {/* App Version */}
         <VersionInfo version="1.0.0" />
       </ScrollView>
-    </View>
+    </ScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  // Enhanced Header - no borders or outlines
+  header: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30, // Adjusted to account for status bar spacer
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  headerGradient: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingBottom: 30, // Extra padding at bottom
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 24,
+  },
+  welcomeText: {
+    fontSize: 32, // Larger text
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
+  },
+  subtitleText: {
+    fontSize: 18, // Larger text
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 6,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 16, // Increased spacing
+  },
+  headerButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 48, // Slightly larger
+    height: 48, // Slightly larger
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
+    paddingTop: 100, // Add space for the header
     paddingBottom: 30,
   },
+  profileCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 16,
+    marginTop: 16,
+    alignItems: 'center',
+    ...createShadow(3),
+  },
+  profileImageContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  profileImagePlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileImagePlaceholderText: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  editImageButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: COLORS.primary,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.card,
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  profileEmail: {
+    fontSize: 16,
+    color: COLORS.secondaryText,
+    marginBottom: 16,
+  },
+  editProfileButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  editProfileButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  statsCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    ...createShadow(2),
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: COLORS.secondaryText,
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: COLORS.border,
+  },
+  menuContainer: {
+    marginTop: 24,
+    marginHorizontal: 16,
+  },
+  menuSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.secondaryText,
+    marginBottom: 16,
+    marginLeft: 8,
+  },
+  menuItem: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    ...createShadow(2),
+  },
+  menuItemIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  menuItemContent: {
+    flex: 1,
+  },
+  menuItemTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  menuItemDescription: {
+    fontSize: 14,
+    color: COLORS.secondaryText,
+  },
   loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#6B7280',
+    color: COLORS.secondaryText,
   },
 });

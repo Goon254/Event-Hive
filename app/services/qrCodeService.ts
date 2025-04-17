@@ -182,28 +182,81 @@ export class QRCodeService {
    */
   async validateQRCode(qrCodeURI: string, validatorId: string): Promise<ValidationResult> {
     try {
-      // Check if the QR code is in the correct format
-      if (!qrCodeURI.startsWith('scangoapp://event-checkin/')) {
+      // Handle both old and new QR code formats
+      if (qrCodeURI.startsWith('scangoapp://event-checkin/')) {
+        // New format - encoded JSON
+        const encodedData = qrCodeURI.replace('scangoapp://event-checkin/', '');
+        
+        // Decode data
+        try {
+          const dataString = atob(encodedData);
+          const qrData: QRCodeData = JSON.parse(dataString);
+          
+          // Continue with validation
+          return this.validateQRCodeData(qrData, validatorId);
+        } catch (error) {
+          console.error('Error decoding QR data:', error);
+          return {
+            isValid: false,
+            message: 'QR code data is corrupted'
+          };
+        }
+      }
+      // Handle legacy format (eventhive://event-checkin/eventId/userId)
+      else if (qrCodeURI.startsWith('eventhive://event-checkin/')) {
+        try {
+          // Extract eventId and userId from the URI
+          const parts = qrCodeURI.replace('eventhive://event-checkin/', '').split('/');
+          if (parts.length < 2) {
+            return {
+              isValid: false,
+              message: 'Invalid legacy QR code format'
+            };
+          }
+          
+          const eventId = parts[0];
+          const userId = parts[1];
+          
+          // Create QR data object
+          const qrData: QRCodeData = {
+            id: `${eventId}-${userId}`,
+            eventId,
+            userId,
+            timestamp: new Date().getTime()
+          };
+          
+          // Continue with validation
+          return this.validateQRCodeData(qrData, validatorId);
+        } catch (error) {
+          console.error('Error processing legacy QR code:', error);
+          return {
+            isValid: false,
+            message: 'Invalid legacy QR code'
+          };
+        }
+      } else {
         return {
           isValid: false,
           message: 'Invalid QR code format'
         };
       }
-      
-      // Extract encoded data
-      const encodedData = qrCodeURI.replace('scangoapp://event-checkin/', '');
-      
-      // Decode data
-      let qrData: QRCodeData;
-      try {
-        const dataString = atob(encodedData);
-        qrData = JSON.parse(dataString);
-      } catch (error) {
-        return {
-          isValid: false,
-          message: 'QR code data is corrupted'
-        };
-      }
+    } catch (error) {
+      console.error('Error validating QR code:', error);
+      return {
+        isValid: false,
+        message: 'An error occurred during validation'
+      };
+    }
+  }
+  
+  /**
+   * Validate QR code data regardless of format
+   * @param qrData QR code data
+   * @param validatorId ID of the person validating the QR code
+   * @returns Promise resolving to validation result
+   */
+  private async validateQRCodeData(qrData: QRCodeData, validatorId: string): Promise<ValidationResult> {
+    try {
       
       // Check network status
       const netInfo = await NetInfo.fetch();
@@ -233,18 +286,70 @@ export class QRCodeService {
    */
   private async validateQRCodeOnline(qrData: QRCodeData, validatorId: string): Promise<ValidationResult> {
     try {
-      // Get QR code document from Firestore
-      const docRef = doc(db, QR_CODE_COLLECTION, qrData.id);
-      const docSnap = await getDoc(docRef);
+      console.log('Validating QR code online:', qrData);
       
+      // First try to find the QR code in our collection
+      const docRef = doc(db, QR_CODE_COLLECTION, qrData.id);
+      let docSnap = await getDoc(docRef);
+      
+      // If not found, this might be a direct event check-in without a stored QR code
+      // In this case, we'll check the event attendees directly
       if (!docSnap.exists()) {
-        return {
-          isValid: false,
-          message: 'QR code not found'
-        };
+        console.log('QR code not found in collection, checking event attendees');
+        
+        // Check if the user is registered for this event
+        try {
+          const attendeeDocRef = doc(db, `events/${qrData.eventId}/attendees`, qrData.userId);
+          const attendeeDocSnap = await getDoc(attendeeDocRef);
+          
+          if (!attendeeDocSnap.exists()) {
+            // Try to find by userId field
+            const attendeesCollection = collection(db, `events/${qrData.eventId}/attendees`);
+            const q = query(attendeesCollection, where('userId', '==', qrData.userId));
+            const querySnapshot = await getDocs(q);
+            
+            if (querySnapshot.empty) {
+              return {
+                isValid: false,
+                message: 'Attendee not registered for this event',
+                data: qrData
+              };
+            }
+            
+            // Create a QR code document for this check-in
+            const newQRCodeDoc: QRCodeDocument = {
+              id: qrData.id,
+              eventId: qrData.eventId,
+              userId: qrData.userId,
+              timestamp: toFirestoreTimestamp(qrData.timestamp || new Date().getTime()),
+              metadata: qrData.metadata || null,
+              isCheckedIn: false,
+              validationCount: 0
+            };
+            
+            await setDoc(docRef, newQRCodeDoc);
+            docSnap = await getDoc(docRef);
+          }
+        } catch (error) {
+          console.error('Error checking event attendees:', error);
+          return {
+            isValid: false,
+            message: 'Error validating attendance',
+            data: qrData
+          };
+        }
       }
       
-      const qrCodeDoc = docSnap.data() as QRCodeDocument;
+      // At this point, we should have a valid QR code document
+      const qrCodeDoc = docSnap.exists() ? docSnap.data() as QRCodeDocument : null;
+      
+      if (!qrCodeDoc) {
+        return {
+          isValid: false,
+          message: 'QR code validation failed',
+          data: qrData
+        };
+      }
       
       // Check if QR code is already checked in
       if (qrCodeDoc.isCheckedIn) {
@@ -259,11 +364,11 @@ export class QRCodeService {
       if (qrCodeDoc.expiresAt) {
         const expiryDate = toDateObject(qrCodeDoc.expiresAt);
         if (expiryDate && expiryDate < new Date()) {
-        return {
-          isValid: false,
-          message: 'QR code has expired',
-          data: qrData
-        };
+          return {
+            isValid: false,
+            message: 'QR code has expired',
+            data: qrData
+          };
         }
       }
       
@@ -272,7 +377,7 @@ export class QRCodeService {
         isCheckedIn: true,
         checkedInAt: serverTimestamp(),
         checkedInBy: validatorId,
-        validationCount: qrCodeDoc.validationCount + 1,
+        validationCount: (qrCodeDoc.validationCount || 0) + 1,
         lastValidatedAt: serverTimestamp()
       });
       
