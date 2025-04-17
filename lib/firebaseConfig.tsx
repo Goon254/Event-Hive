@@ -3,7 +3,12 @@
 import { initializeApp, FirebaseApp } from "firebase/app";
 import { getAnalytics, Analytics } from "firebase/analytics";
 import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from "firebase/firestore";
+import {
+  initializeFirestore,
+  Firestore,
+  persistentLocalCache,
+  CACHE_SIZE_UNLIMITED
+} from "firebase/firestore";
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
 // Your web app's Firebase configuration
@@ -13,7 +18,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyBMUu0L9RiM5Q-y0Ks5ync7GLnRws_Un1s",
   authDomain: "event-hive-992c0.firebaseapp.com",
   projectId: "event-hive-992c0",
-  storageBucket: "event-hive-992c0.appspot.com", // Standard format for Firebase Storage
+  storageBucket: "event-hive-992c0.firebasestorage.app",
   messagingSenderId: "549671182290",
   appId: "1:549671182290:web:7eb4f50a24cccbdaaa320b",
   measurementId: "G-ERG2RHGGZH"
@@ -32,7 +37,17 @@ try {
   // Initialize services
   analytics = getAnalytics(app);
   auth = getAuth(app);
-  db = getFirestore(app);
+  
+  // Initialize Firestore with persistent cache configuration
+  db = initializeFirestore(app, {
+    // Use persistentLocalCache for offline support
+    // This replaces the deprecated enableIndexedDbPersistence method
+    localCache: persistentLocalCache({
+      // Set cache size to unlimited for better offline experience
+      cacheSizeBytes: CACHE_SIZE_UNLIMITED
+    })
+  });
+  
   storage = getStorage(app, firebaseConfig.storageBucket);
   
   console.log("Firebase initialized successfully");

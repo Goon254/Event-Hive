@@ -4,11 +4,9 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Alert, Platform } from 'react-native';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { EventForm, User } from '../types';
+import { Alert, Platform } from 'react-native';import { EventForm, User } from '../types';
 import eventService from '../../../services/eventServices';
-import { imageUploadService } from '../../../services/imageUploadService';
+import { enhancedImageService } from '../../../services/enhancedImageService';
 
 /**
  * Custom hook for handling event submission
@@ -50,13 +48,16 @@ export function useEventSubmission(
         setUploadProgress(progress);
       };
       
-      // Upload the image using the imageUploadService
-      const downloadURL = await imageUploadService.uploadEventImage(
-        user.id,
+      // Upload the image using the enhancedImageService
+      const result = await enhancedImageService.uploadEventImage(
         uri,
         undefined, // No event ID yet
-        onProgress
+        {
+          onProgress
+        }
       );
+      
+      const downloadURL = result.url;
       
       return downloadURL;
     } catch (error) {

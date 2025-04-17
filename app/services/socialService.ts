@@ -23,8 +23,8 @@ import {
 import { db, auth, storage } from '../../lib/firebaseConfig';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { sanitizeForFirestore } from './migrationService';
-import { imageUploadService } from './imageUploadService';
-import { 
+import { imageService } from './social/ImageService';
+import {
   SocialPost, 
   Connection, 
   ConnectionStatus, 
@@ -35,24 +35,12 @@ import {
   Comment
 } from '../models/social';
 import NetInfo from '@react-native-community/netinfo';
-import { enableIndexedDbPersistence, disableNetwork, enableNetwork } from 'firebase/firestore';
+import { disableNetwork, enableNetwork } from 'firebase/firestore';
 
-// Initialize offline persistence
-try {
-  enableIndexedDbPersistence(db)
-    .then(() => console.log('Offline persistence enabled'))
-    .catch(error => {
-      if (error.code === 'failed-precondition') {
-        console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
-      } else if (error.code === 'unimplemented') {
-        console.warn('The current browser does not support all of the features required to enable persistence');
-      } else {
-        console.error('Error enabling offline persistence:', error);
-      }
-    });
-} catch (error) {
-  console.error('Error initializing persistence:', error);
-}
+// Offline persistence is now configured in lib/firebaseConfig.tsx
+// using initializeFirestore with persistentLocalCache
+// This is the recommended approach that replaces enableIndexedDbPersistence
+console.log('Offline persistence enabled via FirestoreSettings.localCache configuration');
 
 // Monitor network status
 NetInfo.addEventListener(state => {
@@ -83,7 +71,7 @@ class SocialService {
           
           // Use the unified image upload service for multiple files
           if (stringMediaFiles.length > 0) {
-            const uploadResult = await imageUploadService.uploadPostImages(
+            const uploadResult = await imageService.uploadPostImages(
               currentUser.uid,
               stringMediaFiles,
               undefined, // No post ID yet

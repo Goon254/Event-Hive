@@ -65,25 +65,27 @@ const downloadURL = await uploadFile(
 
 ## Image Upload Service
 
-Domain-specific upload operations are handled in `app/services/imageUploadService.ts`:
+Domain-specific upload operations are handled in `app/services/enhancedImageService.ts`:
 
-- `uploadProfileImage(userId, imageUri, onProgress)` - Upload profile images
-- `uploadPostImage(userId, imageUri, postId, onProgress)` - Upload post images
-- `uploadPostImages(userId, imageUris, postId, onProgress, onFileProgress)` - Upload multiple post images
-- `uploadEventImage(userId, imageUri, eventId, onProgress)` - Upload event images
-- `uploadSpeakerImage(userId, imageUri, eventId, speakerId, onProgress)` - Upload speaker images
+- `uploadProfileImage(uri, options)` - Upload profile images
+- `uploadPostImage(uri, postId, options)` - Upload post images
+- `uploadEventImage(uri, eventId, options)` - Upload event images
+- `uploadEventSpeakerImage(uri, eventId, options)` - Upload speaker images
+- `uploadTestImage(uri, options)` - Upload test images
 
 Example usage:
 
 ```typescript
-import { imageUploadService } from '../services/imageUploadService';
+import { enhancedImageService } from '../services/enhancedImageService';
 
 // Upload a profile image
-const downloadURL = await imageUploadService.uploadProfileImage(
-  userId,
+const result = await enhancedImageService.uploadProfileImage(
   imageUri,
-  (progress) => console.log(`Upload progress: ${progress * 100}%`)
+  {
+    onProgress: (progress) => console.log(`Upload progress: ${progress * 100}%`)
+  }
 );
+const downloadURL = result.url;
 ```
 
 ## Component Hooks

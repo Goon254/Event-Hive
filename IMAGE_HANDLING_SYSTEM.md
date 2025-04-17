@@ -213,8 +213,8 @@ For debugging issues, check the console logs for detailed error information. The
 
 To migrate from the old image handling system to the enhanced system:
 
-1. Replace `imageUploadService` with `enhancedImageService`
-2. Replace direct Firebase Storage operations with the `useImageUpload` hook
+1. Use `enhancedImageService` for all image operations
+2. Use the `useImageUpload` hook for component integration
 3. Update path structures to match the new standardized paths
 4. Add error handling and progress tracking
 
@@ -222,12 +222,12 @@ Example migration:
 
 **Before:**
 ```tsx
-import { imageUploadService } from '../services/imageUploadService';
+import { enhancedImageService, ImageType } from '../services/enhancedImageService';
 
 const uploadProfileImage = async (imageUri) => {
   try {
-    const url = await imageUploadService.uploadProfileImage(userId, imageUri);
-    setProfileImageUrl(url);
+    const result = await enhancedImageService.uploadProfileImage(imageUri);
+    setProfileImageUrl(result.url);
   } catch (error) {
     console.error('Error uploading profile image:', error);
   }
