@@ -146,14 +146,20 @@ export default function Home() {
     extrapolate: 'clamp'
   });
 
+  const searchBarOpacity = scrollY.interpolate({
+    inputRange: [0, 100, 150],
+    outputRange: [1, 0.9, 0], // Fade out as it moves up
+    extrapolate: 'clamp'
+  });
+
   const searchBarTranslateY = scrollY.interpolate({
     inputRange: [0, 100],
-    outputRange: [0, -50],
+    outputRange: [0, -50], // Moves up as the user scrolls
     extrapolate: 'clamp'
   });
 
   // Calculate the top area height (header + search bar + status bar spacer)
-  const headerTopHeight = Platform.OS === 'ios' ? 190 : 170;
+  const headerTopHeight = Platform.OS === 'ios' ? 240 : 220;
 
   return (
     <ScreenLayout
@@ -209,22 +215,25 @@ export default function Home() {
       </RNAnimated.View>
       
       {/* Floating "Explore all events" Button */}
-      <RNAnimated.View style={[
-        styles.searchBarContainer,
-        { transform: [{ translateY: searchBarTranslateY }] }
-      ]}>
-        <TouchableOpacity
-          style={[styles.searchBar, { backgroundColor: theme.card }]}
-          activeOpacity={0.8}
-          onPress={() => router.push('/screens/Explore')}
-        >
-          <FontAwesome name="search" size={18} color={theme.secondaryText} />
-          <Text style={[styles.searchText, { color: theme.secondaryText }]}>
-            Explore all events
-          </Text>
-          <MaterialIcons name="arrow-forward" size={20} color={theme.secondaryText} />
-        </TouchableOpacity>
-      </RNAnimated.View>
+<RNAnimated.View style={[
+  styles.searchBarContainer,
+  { 
+    transform: [{ translateY: searchBarTranslateY }],
+    opacity: searchBarOpacity // Add opacity animation
+  }
+]}>
+  <TouchableOpacity
+    style={[styles.searchBar, { backgroundColor: theme.card }]}
+    activeOpacity={0.8}
+    onPress={() => router.push('/screens/Explore')}
+  >
+    <FontAwesome name="search" size={18} color={theme.secondaryText} />
+    <Text style={[styles.searchText, { color: theme.secondaryText }]}>
+      Explore all events
+    </Text>
+    <MaterialIcons name="arrow-forward" size={20} color={theme.secondaryText} />
+  </TouchableOpacity>
+</RNAnimated.View>
 
       {/* Main Content */}
       <RNAnimated.FlatList
@@ -238,7 +247,7 @@ export default function Home() {
         ListHeaderComponent={
           <>
             {/* Spacer for header and search bar - adjusted for status bar spacer */}
-            <View style={{ height: headerTopHeight + (Platform.OS === 'ios' ? 50 : 30) }} />
+            <View style={{ height: headerTopHeight + (Platform.OS === 'ios' ? 80 : 60) }} />
             
             {/* Categories section - now part of the scrolling content */}
             <View style={styles.categoriesSection}>
@@ -535,7 +544,7 @@ const styles = StyleSheet.create({
   // Floating Search Bar - modified to "Explore all events" button
   searchBarContainer: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 180 : 140, // Adjusted to account for status bar spacer
+    top: Platform.OS === 'ios' ? 230 : 190, // Adjusted to account for status bar spacer
     left: 0,
     right: 0,
     zIndex: 5,

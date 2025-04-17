@@ -287,3 +287,6 @@ export class FirebaseCommentRepository extends FirebaseRepository<Comment> imple
     }
   }
 }
+
+// Add default export
+export default FirebaseCommentRepository;

@@ -113,3 +113,11 @@ export interface PrivacySettings {
   autoLockEnabled?: boolean;
   passwordChangeRequired?: boolean;
 }
+
+// Create a ConnectionTypes class that can be exported as default
+export class ConnectionTypes {
+  static ConnectionStatus = ConnectionStatus;
+}
+
+// Add default export
+export default ConnectionTypes;

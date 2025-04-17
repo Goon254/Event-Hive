@@ -381,35 +381,9 @@ export default function Register() {
   const nextStep = async () => {
     if (validateStep()) {
       if (currentStep < 3) {
-        // Upload profile image if available and moving from step 2 to 3
-        if (currentStep === 2 && userData.profileImage && !userData.profileImageUrl) {
-          console.log('Checking and uploading profile image before proceeding to next step');
-          try {
-            // Check image size first - this is now redundant as the enhanced service handles this,
-            // but keeping it for backward compatibility
-            const isValidSize = await checkImageSize(userData.profileImage);
-            if (!isValidSize) {
-              Alert.alert(
-                'Large Image Detected',
-                'Your selected image is quite large and may cause upload issues. We recommend selecting a smaller image or using a compressed version.',
-                [
-                  { text: 'Continue Anyway', style: 'default' }
-                ]
-              );
-            }
-            
-            const imageUrl = await uploadProfileImage(userData.profileImage);
-            if (imageUrl) {
-              console.log('Profile image uploaded successfully, URL:', imageUrl);
-              setUserData(prev => ({ ...prev, profileImageUrl: imageUrl }));
-            } else {
-              console.warn('No image URL returned from upload');
-            }
-          } catch (uploadError) {
-            console.error('Error during profile image upload:', uploadError);
-            // Continue to next step even if image upload fails
-          }
-        }
+        // Don't upload the image when transitioning between steps
+        // We'll only upload once during final registration
+        // This prevents duplicate processing and UI freezing
         
         // Update progress bar animation
         Animated.timing(progress, {
@@ -457,28 +431,39 @@ export default function Register() {
   const handleRegister = async () => {
     if (validateStep()) {
       try {
-        // Upload profile image if it hasn't been uploaded yet
+        // Process image in the background to avoid UI freezing
+        // Note: We don't need to set loading state manually as it's handled by signUp function
         let profileImageUrl = userData.profileImageUrl;
+        let imageUploadPromise: Promise<string | null> = Promise.resolve(null);
+        
         if (userData.profileImage && !profileImageUrl) {
-          console.log('Uploading profile image during registration submission');
-          try {
-            // The enhanced image service handles size checking and compression
-            profileImageUrl = await uploadProfileImage(userData.profileImage);
-            console.log('Profile image uploaded during registration, URL:', profileImageUrl);
-          } catch (uploadError) {
-            console.error('Failed to upload profile image during registration:', uploadError);
-            // Continue registration without profile image
-            profileImageUrl = null;
-          }
+          console.log('Starting profile image upload in background');
+          
+          // Start the upload process but don't await it yet
+          // This allows us to continue with registration while image uploads
+          const profileImage = userData.profileImage; // Create a local non-null reference
+          imageUploadPromise = (async () => {
+            try {
+              // Check image size first
+              const isValidSize = await checkImageSize(profileImage);
+              if (!isValidSize) {
+                console.warn('Large image detected, continuing with upload anyway');
+              }
+              
+              return await uploadProfileImage(profileImage);
+            } catch (uploadError) {
+              console.error('Failed to upload profile image during registration:', uploadError);
+              return null;
+            }
+          })();
         }
         
         // Format phone number for consistent storage if provided
         const formattedPhoneNumber = userData.phoneNumber ?
           formatPhoneNumber(userData.phoneNumber) : null;
         
-        // First, register the user with Firebase Authentication
-        // Note: We're only passing email, password, and name as required by the signUp function
-        await signUp(userData.email, userData.password, userData.name, {
+        // Prepare user data
+        const userProfileData = {
           name: userData.name,
           email: userData.email,
           phoneNumber: formattedPhoneNumber,
@@ -487,9 +472,21 @@ export default function Register() {
           interests: userData.interests,
           userType: userData.userType,
           organizationName: userData.organizationName || null,
-          profileImageUrl: profileImageUrl,
+          profileImageUrl: null as string | null, // Will be updated after upload completes
           createdAt: new Date().toISOString()
-        });
+        };
+        
+        // Now wait for the image upload to complete
+        if (userData.profileImage && !profileImageUrl) {
+          profileImageUrl = await imageUploadPromise;
+          if (profileImageUrl) {
+            console.log('Profile image uploaded successfully, URL:', profileImageUrl);
+            userProfileData.profileImageUrl = profileImageUrl;
+          }
+        }
+        
+        // Register the user with Firebase Authentication
+        await signUp(userData.email, userData.password, userData.name, userProfileData);
         
         // The profile document will be created in AuthContext or we can implement it here if needed
         // For example, we could add code here to update the user profile after registration

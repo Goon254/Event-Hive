@@ -60,3 +60,6 @@ export interface IConnectionRepository extends IRepository<Connection> {
    */
   getConnectionStatus(userId: string, connectionId: string): Promise<ConnectionStatus | null>;
 }
+
+// Add default export
+export default IConnectionRepository;

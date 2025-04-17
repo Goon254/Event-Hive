@@ -109,3 +109,6 @@ export function useSearch(
     filteredContactMatches,
   };
 }
+
+// Add default export
+export default useSearch;

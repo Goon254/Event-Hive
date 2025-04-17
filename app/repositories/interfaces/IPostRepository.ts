@@ -58,3 +58,6 @@ export interface IPostRepository extends IRepository<SocialPost> {
    */
   generateShareableLink(postId: string): Promise<string>;
 }
+
+// Add default export
+export default IPostRepository;

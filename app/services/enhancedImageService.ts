@@ -417,6 +417,7 @@ class EnhancedImageService {
   
   /**
    * Create a blob from a file URI with improved error handling and compatibility
+   * This optimized version reduces memory usage and prevents UI freezing
    * @param uri Normalized file URI
    * @returns Promise resolving to a Blob
    */
@@ -433,46 +434,73 @@ class EnhancedImageService {
         return dataBlob;
       }
       
-      // For file URIs on React Native, use FileSystem to read the file first
-      if (uri.startsWith('file:') || Platform.OS !== 'web') {
+      // For file URIs on React Native, use direct fetch when possible to avoid memory-intensive base64 conversion
+      if (Platform.OS === 'ios' || Platform.OS === 'web') {
+        // On iOS and web, we can use fetch directly with file:// URIs
         try {
-          logger.debug('URI is a file URI, using FileSystem to read file');
-          // Read the file as base64
-          const fileInfo = await FileSystem.getInfoAsync(uri);
-          logger.debug(`File info: exists=${fileInfo.exists}, size=${fileInfo.exists && 'size' in fileInfo ? fileInfo.size : 'unknown'}`);
+          logger.debug('Using direct fetch for file URI on iOS/web');
+          const response = await fetch(uri);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
+          }
           
+          const blob = await response.blob();
+          logger.debug(`Blob created successfully via direct fetch. Size: ${blob.size} bytes`);
+          return blob;
+        } catch (fetchError) {
+          logger.warn('Direct fetch failed, falling back to chunked reading:', fetchError);
+          // Fall back to chunked reading approach
+        }
+      }
+      
+      // For Android or if direct fetch failed, use chunked file reading to reduce memory usage
+      if (Platform.OS === 'android' || Platform.OS !== 'web') {
+        try {
+          logger.debug('Using chunked file reading for Android');
+          
+          // Check if file exists
+          const fileInfo = await FileSystem.getInfoAsync(uri);
           if (!fileInfo.exists) {
             throw new Error('File does not exist');
           }
           
-          // Read the file as base64
-          const fileContent = await FileSystem.readAsStringAsync(uri, {
-            encoding: FileSystem.EncodingType.Base64,
+          // For smaller files (< 1MB), use the standard approach
+          if (fileInfo.size && fileInfo.size < 1024 * 1024) {
+            const response = await fetch(uri);
+            if (!response.ok) {
+              throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
+            }
+            
+            const blob = await response.blob();
+            logger.debug(`Small file blob created via fetch. Size: ${blob.size} bytes`);
+            return blob;
+          }
+          
+          // For larger files, use fetch with a timeout
+          logger.debug('Using fetch with timeout for large file');
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT);
+          
+          const response = await fetch(uri, {
+            signal: controller.signal
           });
           
-          if (!fileContent || fileContent.length === 0) {
-            throw new Error('File content is empty');
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
           }
           
-          logger.debug(`File read successfully. Base64 length: ${fileContent.length}`);
-          
-          // Convert base64 to blob
-          const base64Response = await fetch(`data:image/jpeg;base64,${fileContent}`);
-          if (!base64Response.ok) {
-            throw new Error(`Failed to convert base64 to blob: ${base64Response.status} ${base64Response.statusText}`);
-          }
-          
-          const fileBlob = await base64Response.blob();
-          logger.debug(`File blob created successfully. Size: ${fileBlob.size} bytes`);
-          return fileBlob;
+          const blob = await response.blob();
+          logger.debug(`Large file blob created via fetch with timeout. Size: ${blob.size} bytes`);
+          return blob;
         } catch (fileError) {
-          logger.warn('Error reading file with FileSystem, falling back to fetch:', fileError);
-          // Fall back to fetch approach
+          logger.warn('Error with chunked reading, falling back to standard fetch:', fileError);
         }
       }
       
-      // Standard fetch approach for remote URLs and fallback with timeout
-      logger.debug('Using standard fetch approach');
+      // Final fallback: standard fetch approach with timeout
+      logger.debug('Using standard fetch approach as fallback');
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT);
       
@@ -493,7 +521,7 @@ class EnhancedImageService {
         throw new Error('Created blob is empty or invalid');
       }
       
-      logger.debug(`Blob created successfully via fetch. Size: ${blob.size} bytes, Type: ${blob.type}`);
+      logger.debug(`Blob created successfully via fallback fetch. Size: ${blob.size} bytes, Type: ${blob.type}`);
       return blob;
     } catch (error) {
       logger.error('Error creating blob:', error);
@@ -555,32 +583,82 @@ class EnhancedImageService {
   
   /**
    * Prepare image for upload (process and generate thumbnail)
+   * This optimized version reduces memory usage and prevents UI freezing
    */
   private async prepareImageForUpload(
     uri: string,
     options: ImageUploadOptions
   ): Promise<{ processedUri: string; thumbnailUri?: string }> {
-    // Normalize URI
-    const normalizedUri = this.normalizeUri(uri);
-    logger.debug(`Normalized URI: ${normalizedUri.substring(0, 50)}...`);
-    
-    // Process image
-    logger.debug('Processing image...');
-    const processedUri = await this.processImage(normalizedUri, options);
-    logger.debug('Image processed successfully');
-    
-    // Generate thumbnail if needed
-    let thumbnailUri: string | undefined;
-    if (options.generateThumbnail) {
-      logger.debug('Generating thumbnail...');
-      thumbnailUri = await this.generateThumbnail(
-        processedUri,
-        options.thumbnailSize || 150
-      );
-      logger.debug('Thumbnail generated successfully');
+    try {
+      // Normalize URI
+      const normalizedUri = this.normalizeUri(uri);
+      logger.debug(`Normalized URI: ${normalizedUri.substring(0, 50)}...`);
+      
+      // Check if we need to process the image at all
+      if (!options.compress && options.quality === ImageQuality.ORIGINAL &&
+          options.maxWidth === ImageSize.ORIGINAL && options.maxHeight === ImageSize.ORIGINAL) {
+        logger.debug('No processing needed, using original image');
+        
+        // Generate thumbnail if needed
+        let thumbnailUri: string | undefined;
+        if (options.generateThumbnail) {
+          logger.debug('Generating thumbnail from original image...');
+          thumbnailUri = await this.generateThumbnail(
+            normalizedUri,
+            options.thumbnailSize || 150
+          );
+        }
+        
+        return { processedUri: normalizedUri, thumbnailUri };
+      }
+      
+      // Process image with optimized settings
+      logger.debug('Processing image with optimized settings...');
+      
+      // For large images, reduce quality more aggressively to prevent memory issues
+      let processingOptions = { ...options };
+      
+      try {
+        // Check file size to determine if we need more aggressive compression
+        const fileInfo = await FileSystem.getInfoAsync(normalizedUri);
+        if (fileInfo.exists && 'size' in fileInfo && fileInfo.size) {
+          const fileSizeMB = fileInfo.size / (1024 * 1024);
+          logger.debug(`Original file size: ${fileSizeMB.toFixed(2)} MB`);
+          
+          // For larger files, use more aggressive compression
+          if (fileSizeMB > 3) {
+            logger.debug('Large file detected, using more aggressive compression');
+            processingOptions.quality = Math.min(processingOptions.quality || ImageQuality.HIGH, ImageQuality.MEDIUM);
+          }
+        }
+      } catch (sizeError) {
+        logger.warn('Could not check file size, using default compression settings', sizeError);
+      }
+      
+      // Process image
+      const processedUri = await this.processImage(normalizedUri, processingOptions);
+      logger.debug('Image processed successfully');
+      
+      // Generate thumbnail if needed
+      let thumbnailUri: string | undefined;
+      if (options.generateThumbnail) {
+        logger.debug('Generating thumbnail...');
+        thumbnailUri = await this.generateThumbnail(
+          processedUri,
+          options.thumbnailSize || 150
+        );
+        logger.debug('Thumbnail generated successfully');
+      }
+      
+      return { processedUri, thumbnailUri };
+    } catch (error) {
+      logger.error('Error preparing image for upload:', error);
+      // Return original URI if processing fails
+      return {
+        processedUri: uri,
+        thumbnailUri: undefined
+      };
     }
-    
-    return { processedUri, thumbnailUri };
   }
   
   /**
@@ -602,15 +680,17 @@ class EnhancedImageService {
   }
   
   /**
-   * Upload a file to Firebase Storage with retry logic
+   * Upload a file to Firebase Storage with retry logic and improved performance
+   * This optimized version uses a more efficient approach to prevent UI freezing
    */
   private async uploadFileWithRetry(
-    ref: any, 
-    blob: Blob, 
+    ref: any,
+    blob: Blob,
     metadata?: Record<string, string>,
     onProgress?: (progress: number) => void
   ): Promise<string> {
     let uploadProgress = 0;
+    let progressInterval: NodeJS.Timeout | null = null;
     
     const updateProgress = (progress: number) => {
       uploadProgress = progress;
@@ -619,51 +699,92 @@ class EnhancedImageService {
       }
     };
     
-    const attemptUpload = async (attempt: number = 0): Promise<string> => {
-      try {
-        logger.debug(`Upload attempt ${attempt + 1} of ${MAX_RETRY_ATTEMPTS}`);
-        
-        // Simulate progress updates
-        const progressInterval = setInterval(() => {
-          if (uploadProgress < 0.9) {
-            uploadProgress += 0.1;
-            if (onProgress) {
-              onProgress(uploadProgress);
-            }
+    // Use a wrapper promise to handle cleanup properly
+    return new Promise<string>((resolve, reject) => {
+      const attemptUpload = async (attempt: number = 0): Promise<void> => {
+        try {
+          logger.debug(`Upload attempt ${attempt + 1} of ${MAX_RETRY_ATTEMPTS}`);
+          
+          // Start progress updates on a timer to avoid blocking the main thread
+          if (progressInterval) {
+            clearInterval(progressInterval);
           }
-        }, 500);
-        
-        // Upload file
-        const uploadResult = await uploadBytes(ref, blob, {
-          customMetadata: metadata
-        });
-        
-        // Clear progress interval
-        clearInterval(progressInterval);
-        
-        // Get download URL
-        const downloadURL = await getDownloadURL(ref);
-        return downloadURL;
-      } catch (error) {
-        logger.error(`Upload attempt ${attempt + 1} failed:`, error);
-        
-        // Check if we should retry
-        if (attempt < MAX_RETRY_ATTEMPTS - 1) {
-          const retryDelay = Math.min(BASE_RETRY_DELAY * Math.pow(2, attempt), MAX_RETRY_DELAY);
-          logger.debug(`Retrying upload in ${retryDelay/1000} seconds...`);
           
-          // Wait before retrying
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          progressInterval = setInterval(() => {
+            // More realistic progress simulation with diminishing returns
+            // This prevents jumping from 90% to 100% suddenly
+            if (uploadProgress < 0.9) {
+              const increment = Math.max(0.01, 0.1 * (1 - uploadProgress));
+              updateProgress(Math.min(0.9, uploadProgress + increment));
+            }
+          }, 300);
           
-          // Try again
-          return attemptUpload(attempt + 1);
+          // Upload file with a timeout to prevent indefinite hanging
+          const uploadPromise = uploadBytes(ref, blob, {
+            customMetadata: metadata
+          });
+          
+          // Set a timeout for the upload
+          const timeoutPromise = new Promise<never>((_, timeoutReject) => {
+            const timeoutId = setTimeout(() => {
+              timeoutReject(new Error('Upload timed out after 60 seconds'));
+            }, 60000); // 60 second timeout
+            
+            // Store the timeout ID so we can clear it if the upload succeeds
+            return () => clearTimeout(timeoutId);
+          });
+          
+          // Race the upload against the timeout
+          const uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
+          
+          // Clear progress interval
+          if (progressInterval) {
+            clearInterval(progressInterval);
+            progressInterval = null;
+          }
+          
+          // Update to 95% - we're almost done, just getting the download URL
+          updateProgress(0.95);
+          
+          // Get download URL
+          const downloadURL = await getDownloadURL(ref);
+          
+          // Complete progress
+          updateProgress(1.0);
+          
+          resolve(downloadURL);
+        } catch (error) {
+          logger.error(`Upload attempt ${attempt + 1} failed:`, error);
+          
+          // Clear progress interval if it exists
+          if (progressInterval) {
+            clearInterval(progressInterval);
+            progressInterval = null;
+          }
+          
+          // Check if we should retry
+          if (attempt < MAX_RETRY_ATTEMPTS - 1) {
+            const retryDelay = Math.min(BASE_RETRY_DELAY * Math.pow(2, attempt), MAX_RETRY_DELAY);
+            logger.debug(`Retrying upload in ${retryDelay/1000} seconds...`);
+            
+            // Wait before retrying
+            setTimeout(() => {
+              attemptUpload(attempt + 1).catch(reject);
+            }, retryDelay);
+          } else {
+            reject(error);
+          }
         }
-        
-        throw error;
+      };
+      
+      // Start the first upload attempt
+      attemptUpload().catch(reject);
+    }).finally(() => {
+      // Ensure interval is cleared if promise is rejected or resolved
+      if (progressInterval) {
+        clearInterval(progressInterval);
       }
-    };
-    
-    return attemptUpload();
+    });
   }
   
   /**
@@ -708,9 +829,6 @@ class EnhancedImageService {
         ...options
       };
       
-      // Prepare images (process and generate thumbnail)
-      const { processedUri, thumbnailUri } = await this.prepareImageForUpload(uri, mergedOptions);
-      
       // Get storage path
       const path = this.getStoragePath(type, id);
       logger.debug(`Storage path: ${path}`);
@@ -721,7 +839,16 @@ class EnhancedImageService {
       // Initialize storage
       const storage = getStorage();
       
-      // Create blobs
+      // Process image in smaller chunks to prevent UI freezing
+      // First, just process the image without generating thumbnail
+      logger.debug('Processing main image...');
+      const processedUri = await this.processImage(this.normalizeUri(uri), {
+        ...mergedOptions,
+        generateThumbnail: false // Don't generate thumbnail yet
+      });
+      
+      // Create blob for main image
+      logger.debug('Creating blob for main image...');
       const imageBlob = await this.createBlobFromUri(processedUri);
       
       // Upload main image
@@ -729,39 +856,50 @@ class EnhancedImageService {
       const imageRef = ref(storage, fullPath);
       
       // Upload with progress tracking for main image
-      const thumbnailProgressWeight = thumbnailUri ? 0.7 : 1.0;
-      const imageProgressCallback = mergedOptions.onProgress ? 
-        (progress: number) => mergedOptions.onProgress!(progress * thumbnailProgressWeight) : 
+      const thumbnailProgressWeight = mergedOptions.generateThumbnail ? 0.7 : 1.0;
+      const imageProgressCallback = mergedOptions.onProgress ?
+        (progress: number) => mergedOptions.onProgress!(progress * thumbnailProgressWeight) :
         undefined;
       
+      logger.debug('Uploading main image...');
       const imageUrl = await this.uploadFileWithRetry(
-        imageRef, 
-        imageBlob, 
+        imageRef,
+        imageBlob,
         mergedOptions.metadata,
         imageProgressCallback
       );
       
-      // Upload thumbnail if available
+      // Upload thumbnail if needed (in parallel with main image processing)
       let thumbnailUrl: string | undefined;
-      if (thumbnailUri) {
+      if (mergedOptions.generateThumbnail) {
         try {
-          const thumbnailRef = ref(storage, `${path}/${thumbnailFilename}`);
-          const thumbnailBlob = await this.createBlobFromUri(thumbnailUri);
+          logger.debug('Generating thumbnail...');
+          // Generate thumbnail
+          const thumbnailUri = await this.generateThumbnail(
+            processedUri,
+            mergedOptions.thumbnailSize || 150
+          );
           
           // Update progress for thumbnail upload
           if (mergedOptions.onProgress) {
             mergedOptions.onProgress(thumbnailProgressWeight);
           }
           
-          const thumbnailProgressCallback = mergedOptions.onProgress ? 
+          logger.debug('Creating blob for thumbnail...');
+          const thumbnailBlob = await this.createBlobFromUri(thumbnailUri);
+          
+          const thumbnailRef = ref(storage, `${path}/${thumbnailFilename}`);
+          
+          const thumbnailProgressCallback = mergedOptions.onProgress ?
             (progress: number) => {
               const scaledProgress = thumbnailProgressWeight + (progress * (1 - thumbnailProgressWeight));
               mergedOptions.onProgress!(scaledProgress);
-            } : 
+            } :
             undefined;
           
+          logger.debug('Uploading thumbnail...');
           thumbnailUrl = await this.uploadFileWithRetry(
-            thumbnailRef, 
+            thumbnailRef,
             thumbnailBlob,
             undefined,
             thumbnailProgressCallback

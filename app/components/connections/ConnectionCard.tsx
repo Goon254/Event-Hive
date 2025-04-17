@@ -17,18 +17,20 @@ interface ConnectionCardProps {
     allowRecommendations: boolean;
     encryptMessages: boolean;
   };
+  onMessagePress?: () => void;
 }
 
 /**
  * Connection card component
  * Displays a single connection with user info and action buttons
  */
-const ConnectionCard: React.FC<ConnectionCardProps> = ({ 
-  item, 
-  activeTab, 
-  handleConnect, 
-  unreadMessages, 
-  privacySettings 
+const ConnectionCard: React.FC<ConnectionCardProps> = ({
+  item,
+  activeTab,
+  handleConnect,
+  unreadMessages,
+  privacySettings,
+  onMessagePress
 }) => {
   const router = useRouter();
   const connectionId = item.connectionId || item.userId;
@@ -39,12 +41,15 @@ const ConnectionCard: React.FC<ConnectionCardProps> = ({
     
     // If message action, navigate to message screen
     if (action === 'message') {
-      // Navigate to an existing screen and pass the userId as a param
-      // Since there's no dedicated messages screen, we'll navigate to a related screen
-      router.push({
-        pathname: '/screens/personal-information',
-        params: { userId: connectionId }
-      });
+      if (onMessagePress) {
+        onMessagePress();
+      } else {
+        // Fallback to default behavior
+        router.push({
+          pathname: '/screens/personal-information',
+          params: { userId: connectionId }
+        });
+      }
     }
   };
   

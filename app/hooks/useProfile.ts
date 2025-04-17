@@ -122,3 +122,6 @@ export function useProfile(userId?: string) {
     updatePrivacySettings
   };
 }
+
+// Add default export
+export default useProfile;

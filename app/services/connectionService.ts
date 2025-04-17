@@ -137,6 +137,105 @@ export class ConnectionService {
   }
   
   /**
+   * Fetch connections with pagination
+   * @param userId User ID
+   * @param lastConnection Last connection for pagination
+   * @param pageSize Number of connections to fetch
+   * @returns Promise resolving to connections
+   */
+  async fetchConnectionsPage(
+    userId: string,
+    lastConnection: any,
+    pageSize: number = 10
+  ): Promise<EnhancedConnection[]> {
+    try {
+      // Fetch user's connection shards
+      const shardsSnapshot = await getDocs(
+        query(collection(db, 'connectionShards'), where('userId', '==', userId))
+      );
+      
+      const shards: ConnectionShard[] = [];
+      shardsSnapshot.forEach(doc => {
+        shards.push({ ...doc.data(), shardId: doc.id } as ConnectionShard);
+      });
+      
+      // Find the shard containing the last connection
+      const lastConnectionShardId = lastConnection.shardId;
+      const targetShard = shards.find(s => s.shardId === lastConnectionShardId);
+      
+      if (!targetShard) {
+        return [];
+      }
+      
+      // Find the index of the last connection in the shard
+      const lastConnectionIndex = targetShard.connections.indexOf(lastConnection.id);
+      
+      if (lastConnectionIndex === -1 || lastConnectionIndex >= targetShard.connections.length - 1) {
+        // If last connection is the last one in the shard, move to the next shard
+        const currentShardIndex = shards.findIndex(s => s.shardId === lastConnectionShardId);
+        
+        if (currentShardIndex === -1 || currentShardIndex >= shards.length - 1) {
+          // No more shards
+          return [];
+        }
+        
+        // Use the next shard
+        const nextShard = shards[currentShardIndex + 1];
+        const nextConnections = nextShard.connections.slice(0, pageSize);
+        
+        // Fetch connections
+        const connectionsSnapshot = await getDocs(
+          query(
+            collection(db, 'connections'),
+            where('id', 'in', nextConnections.length > 0 ? nextConnections : ['placeholder'])
+          )
+        );
+        
+        const connections: EnhancedConnection[] = [];
+        connectionsSnapshot.forEach(doc => {
+          connections.push({
+            ...doc.data(),
+            id: doc.id,
+            name: '',
+            shardId: nextShard.shardId,
+          } as EnhancedConnection);
+        });
+        
+        return connections;
+      } else {
+        // Get next connections from the current shard
+        const nextConnections = targetShard.connections.slice(
+          lastConnectionIndex + 1,
+          lastConnectionIndex + 1 + pageSize
+        );
+        
+        // Fetch connections
+        const connectionsSnapshot = await getDocs(
+          query(
+            collection(db, 'connections'),
+            where('id', 'in', nextConnections.length > 0 ? nextConnections : ['placeholder'])
+          )
+        );
+        
+        const connections: EnhancedConnection[] = [];
+        connectionsSnapshot.forEach(doc => {
+          connections.push({
+            ...doc.data(),
+            id: doc.id,
+            name: '',
+            shardId: targetShard.shardId,
+          } as EnhancedConnection);
+        });
+        
+        return connections;
+      }
+    } catch (error) {
+      console.error('Error fetching connections:', error);
+      throw error;
+    }
+  }
+  
+  /**
    * Fetch user profile for a connection
    * @param connection Connection object
    * @param currentUserId Current user ID
@@ -605,3 +704,6 @@ export function useConnections(user: any) {
     loadMoreConnections,
   };
 }
+
+// Add default export
+export default ConnectionService;

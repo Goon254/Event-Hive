@@ -12,13 +12,12 @@ import { connectionService } from '../services/connectionService';
 export function useConnections(user: any) {
   const [connections, setConnections] = useState<EnhancedConnection[]>([]);
   const [pendingConnections, setPendingConnections] = useState<EnhancedConnection[]>([]);
-  const [suggestedConnections, setSuggestedConnections] = useState<EnhancedConnection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [unreadMessages, setUnreadMessages] = useState<{[key: string]: number}>({});
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreConnections, setHasMoreConnections] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [lastVisibleConnection, setLastVisibleConnection] = useState<any>(null);
   
   // Fetch connections
   const fetchConnections = useCallback(async () => {
@@ -38,12 +37,16 @@ export function useConnections(user: any) {
       }
       
       // Update state
-      setConnections(enhancedConnections.filter(c => c.status === ConnectionStatus.ACCEPTED));
-      setPendingConnections(enhancedConnections.filter(c => c.status === ConnectionStatus.PENDING));
-      setSuggestedConnections([]); // Suggestions would be fetched separately
+      const acceptedConnections = enhancedConnections.filter(c => c.status === ConnectionStatus.ACCEPTED);
+      const pendingConns = enhancedConnections.filter(c => c.status === ConnectionStatus.PENDING);
       
-      // Generate recommendations
-      generateRecommendations();
+      setConnections(acceptedConnections);
+      setPendingConnections(pendingConns);
+      
+      // Set last visible connection for pagination
+      if (acceptedConnections.length > 0) {
+        setLastVisibleConnection(acceptedConnections[acceptedConnections.length - 1]);
+      }
       
     } catch (error) {
       console.error('Error fetching connections:', error);
@@ -53,43 +56,6 @@ export function useConnections(user: any) {
     }
   }, [user]);
   
-  // Generate connection recommendations
-  const generateRecommendations = useCallback(async () => {
-    if (!user) return;
-    
-    try {
-      // This would typically call an API to get recommendations
-      // For now, we'll just create some dummy recommendations
-      const dummyRecommendations: EnhancedConnection[] = [
-        {
-          id: 'rec_1',
-          userId: user.id,
-          connectionId: 'rec_user_1',
-          status: ConnectionStatus.PENDING,
-          name: 'Jane Smith',
-          role: 'Product Manager',
-          mutualConnections: 3,
-          recommendationScore: 0.85,
-          recommendationReason: 'Based on your interests',
-        },
-        {
-          id: 'rec_2',
-          userId: user.id,
-          connectionId: 'rec_user_2',
-          status: ConnectionStatus.PENDING,
-          name: 'John Doe',
-          role: 'Software Engineer',
-          mutualConnections: 5,
-          recommendationScore: 0.92,
-          recommendationReason: '5 mutual connections',
-        },
-      ];
-      
-      setSuggestedConnections(dummyRecommendations);
-    } catch (error) {
-      console.error('Error generating recommendations:', error);
-    }
-  }, [user]);
   
   // Initial fetch
   useEffect(() => {
@@ -114,13 +80,13 @@ export function useConnections(user: any) {
         await connectionService.acceptConnectionRequest(user.id, id);
         
         // Update local state
-        const connection = pendingConnections.find(c => 
+        const connection = pendingConnections.find(c =>
           c.userId === id || c.connectionId === id
         );
         
         if (connection) {
           // Move from pending to connections
-          setPendingConnections(prev => 
+          setPendingConnections(prev =>
             prev.filter(c => c.id !== connection.id)
           );
           setConnections(prev => [
@@ -138,8 +104,8 @@ export function useConnections(user: any) {
         await connectionService.declineConnectionRequest(user.id, id);
         
         // Update local state
-        setPendingConnections(prev => 
-          prev.filter(c => 
+        setPendingConnections(prev =>
+          prev.filter(c =>
             !(c.userId === id || c.connectionId === id)
           )
         );
@@ -147,80 +113,84 @@ export function useConnections(user: any) {
         // Send connection request
         await connectionService.sendConnectionRequest(user.id, id);
         
-        // Update local state
-        const connection = suggestedConnections.find(c => c.connectionId === id);
-        
-        if (connection) {
-          // Move from suggested to pending
-          setSuggestedConnections(prev => prev.filter(c => c.connectionId !== id));
-          setPendingConnections(prev => [
-            {
-              ...connection,
-              status: ConnectionStatus.PENDING,
-              connectionRequest: {
-                sentBy: user.id,
-                sentAt: Timestamp.now(),
-              },
-            },
-            ...prev,
-          ]);
-        }
+        // Add to pending connections
+        // Note: We're not managing suggested connections here anymore
+        // as they're handled by the useRecommendations hook
       }
       // 'message' action would be handled by navigation
       
     } catch (error) {
       console.error(`Error handling ${action} action:`, error);
     }
-  }, [user, pendingConnections, suggestedConnections]);
+  }, [user, pendingConnections]);
   
   // Load more connections
   const loadMoreConnections = useCallback(async () => {
-    if (!user || isLoadingMore || !hasMoreConnections) return;
+    if (!user || isLoadingMore || !hasMoreConnections || !lastVisibleConnection) return;
     
     try {
       setIsLoadingMore(true);
       
-      // Implement pagination logic here
-      // This would fetch the next page of connections from the server
+      // Fetch next page of connections
+      const nextPageConnections = await connectionService.fetchConnectionsPage(
+        user.id,
+        lastVisibleConnection,
+        10 // Page size
+      );
       
+      if (nextPageConnections.length === 0) {
+        setHasMoreConnections(false);
+        return;
+      }
+      
+      // Fetch user profiles for each connection
+      const enhancedConnections: EnhancedConnection[] = [];
+      
+      for (const connection of nextPageConnections) {
+        const enhancedConnection = await connectionService.fetchConnectionUserProfile(connection, user.id);
+        enhancedConnections.push(enhancedConnection);
+      }
+      
+      // Filter accepted connections
+      const acceptedConnections = enhancedConnections.filter(c => c.status === ConnectionStatus.ACCEPTED);
+      
+      // Update state
+      setConnections(prev => [...prev, ...acceptedConnections]);
       setCurrentPage(prev => prev + 1);
       
-      // If no more connections, set hasMoreConnections to false
-      // setHasMoreConnections(false);
+      // Update last visible connection
+      if (acceptedConnections.length > 0) {
+        setLastVisibleConnection(acceptedConnections[acceptedConnections.length - 1]);
+      } else {
+        setHasMoreConnections(false);
+      }
       
     } catch (error) {
       console.error('Error loading more connections:', error);
     } finally {
       setIsLoadingMore(false);
     }
-  }, [user, isLoadingMore, hasMoreConnections]);
+  }, [user, isLoadingMore, hasMoreConnections, lastVisibleConnection]);
   
-  // Update unread message count
+  // These functions are now handled by the chatService
   const updateUnreadMessageCount = useCallback((senderId: string, count: number) => {
-    setUnreadMessages(prev => ({
-      ...prev,
-      [senderId]: (prev[senderId] || 0) + count,
-    }));
+    // Implementation moved to chatService
+    console.log('Updating unread count for', senderId, count);
   }, []);
   
   // Clear unread message count
   const clearUnreadMessageCount = useCallback((senderId: string) => {
-    setUnreadMessages(prev => {
-      const newCounts = { ...prev };
-      delete newCounts[senderId];
-      return newCounts;
-    });
+    // Implementation moved to chatService
+    console.log('Clearing unread count for', senderId);
   }, []);
   
   return {
     connections,
     pendingConnections,
-    suggestedConnections,
     isLoading,
     refreshing,
     onRefresh,
     handleConnect,
-    unreadMessages,
     updateUnreadMessageCount,
     clearUnreadMessageCount,
     isLoadingMore,
@@ -228,3 +198,6 @@ export function useConnections(user: any) {
     loadMoreConnections,
   };
 }
+
+// Add default export
+export default useConnections;

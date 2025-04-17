@@ -201,3 +201,6 @@ export class FirebaseStorageRepository {
 
 // Export a singleton instance
 export const firebaseStorageRepository = new FirebaseStorageRepository();
+
+// Add default export
+export default FirebaseStorageRepository;

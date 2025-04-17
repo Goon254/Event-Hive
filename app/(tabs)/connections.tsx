@@ -1,5 +1,5 @@
 // app/(tabs)/connections.tsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { COLORS } from '../theme/constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -26,6 +26,8 @@ import { useEncryption } from '../services/encryptionService';
 import { useContactSync } from '../services/contactSyncService';
 import { useOAuth } from '../services/oauthService';
 import { usePrivacySettings } from '../hooks/usePrivacySettings';
+import { useRecommendations } from '../services/recommendationService';
+import { useChat } from '../services/chatService';
 
 // Components
 import Header from '../components/connections/Header';
@@ -54,16 +56,68 @@ export default function ConnectionsScreen() {
   const {
     connections,
     pendingConnections,
-    suggestedConnections,
     isLoading,
     refreshing,
     onRefresh,
     handleConnect,
-    unreadMessages,
     isLoadingMore,
     hasMoreConnections,
     loadMoreConnections
   } = useConnections(user as any);
+  
+  // Recommendations hook
+  const {
+    recommendations: suggestedConnections,
+    isLoading: isLoadingRecommendations,
+    loadMoreRecommendations,
+    error: recommendationsError,
+    fetchRecommendations
+  } = useRecommendations(user as any);
+  
+  // Chat hook for unread messages
+  const [unreadMessages, setUnreadMessages] = useState<{[key: string]: number}>({});
+  
+  // Load unread message counts
+  useEffect(() => {
+    if (!user) return;
+    
+    const loadUnreadCounts = async () => {
+      try {
+        // This would be replaced with actual API call in production
+        // Get chatService
+        const { chatService } = require('../services/chatService');
+        const totalUnread = await chatService.getTotalUnreadCount(user.id);
+        
+        // For demo purposes, distribute unread counts among connections
+        const unreadCounts: {[key: string]: number} = {};
+        
+        if (connections.length > 0 && totalUnread > 0) {
+          // Randomly assign unread counts to some connections
+          const connectionCount = Math.min(3, connections.length);
+          const connectionsWithUnread = connections
+            .slice(0, connectionCount)
+            .map(c => c.connectionId || c.userId);
+          
+          let remainingUnread = totalUnread;
+          
+          for (let i = 0; i < connectionsWithUnread.length; i++) {
+            const count = i === connectionsWithUnread.length - 1
+              ? remainingUnread
+              : Math.floor(remainingUnread / (connectionsWithUnread.length - i));
+            
+            unreadCounts[connectionsWithUnread[i]] = count;
+            remainingUnread -= count;
+          }
+        }
+        
+        setUnreadMessages(unreadCounts);
+      } catch (error) {
+        console.error('Error loading unread counts:', error);
+      }
+    };
+    
+    loadUnreadCounts();
+  }, [user, connections]);
   
   const { 
     searchQuery, 
@@ -99,19 +153,29 @@ export default function ConnectionsScreen() {
   const renderItem = ({ item }: { item: any }) => {
     if (activeTab === 'discover' && 'phoneNumber' in item) {
       return (
-        <ContactMatchCard 
-          item={item} 
-          onConnect={handleConnect} 
+        <ContactMatchCard
+          item={item}
+          onConnect={handleConnect}
         />
       );
     } else {
       return (
-        <ConnectionCard 
-          item={item} 
+        <ConnectionCard
+          item={item}
           activeTab={activeTab}
           handleConnect={handleConnect}
           unreadMessages={unreadMessages}
           privacySettings={privacySettings}
+          onMessagePress={() => {
+            router.push({
+              pathname: '/screens/ChatScreen',
+              params: {
+                userId: item.connectionId || item.userId,
+                name: item.name,
+                avatar: item.avatar || ''
+              }
+            });
+          }}
         />
       );
     }
@@ -245,8 +309,8 @@ export default function ConnectionsScreen() {
         </View>
       </View>
       
-      {isLoading ? (
-        <LoadingIndicator message="Loading connections..." />
+      {isLoading || isLoadingRecommendations ? (
+        <LoadingIndicator message={activeTab === 'suggested' ? "Loading suggestions..." : "Loading connections..."} />
       ) : (
         <Animated.FlatList
           data={getDataSource()}
@@ -255,13 +319,29 @@ export default function ConnectionsScreen() {
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <EmptyState 
-              activeTab={activeTab} 
-              setActiveTab={setActiveTab}
-              syncContacts={syncContacts}
-              oauthSignIn={oauthSignIn}
-              oauthLoading={oauthLoading}
-            />
+            <View>
+              {recommendationsError && activeTab === 'suggested' ? (
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>
+                    {recommendationsError}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={() => fetchRecommendations(true)}
+                  >
+                    <Text style={styles.retryButtonText}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <EmptyState
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  syncContacts={syncContacts}
+                  oauthSignIn={oauthSignIn}
+                  oauthLoading={oauthLoading}
+                />
+              )}
+            </View>
           }
           refreshControl={
             <RefreshControl
@@ -276,16 +356,33 @@ export default function ConnectionsScreen() {
             { useNativeDriver: true }
           )}
           scrollEventThrottle={16}
-          onEndReached={hasMoreConnections ? loadMoreConnections : undefined}
+          onEndReached={() => {
+            if (activeTab === 'connections' && hasMoreConnections) {
+              loadMoreConnections();
+            } else if (activeTab === 'suggested' && !recommendationsError) {
+              loadMoreRecommendations();
+            }
+          }}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={isLoadingMore ? <LoadingIndicator small message="Loading more..." /> : null}
+          ListFooterComponent={
+            isLoadingMore ?
+              <LoadingIndicator small message="Loading more..." /> :
+              null
+          }
           testID="connections-list"
         />
       )}
       
-      <FloatingActionButton 
-        onPress={() => router.push('/screens/scan-business-card')}
-        icon="qr-code-scanner"
+      <FloatingActionButton
+        onPress={() => {
+          if (activeTab === 'connections') {
+            router.push('/screens/scan-business-card');
+          } else {
+            // Navigate to chat screen if in connections tab
+            router.push('/screens/ChatScreen');
+          }
+        }}
+        icon={activeTab === 'connections' ? "qr-code-scanner" : "chat"}
       />
       
       {encryptionEnabled && (
@@ -433,5 +530,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 100, // Add space for the header
     paddingBottom: 100,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    marginTop: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: COLORS.error,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

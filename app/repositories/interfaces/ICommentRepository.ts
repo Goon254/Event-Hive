@@ -52,3 +52,6 @@ export interface ICommentRepository extends IRepository<Comment> {
    */
   likeComment(postId: string, commentId: string, userId: string): Promise<void>;
 }
+
+// Add default export
+export default ICommentRepository;

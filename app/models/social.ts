@@ -129,3 +129,13 @@ export interface SocialNotification {
   read: boolean;
   createdAt: Timestamp;
 }
+
+// Create a SocialModels class that can be exported as default
+export class SocialModels {
+  static ContentType = ContentType;
+  static PrivacyLevel = PrivacyLevel;
+  static ConnectionStatus = ConnectionStatus;
+}
+
+// Add default export
+export default SocialModels;

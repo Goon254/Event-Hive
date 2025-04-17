@@ -123,3 +123,6 @@ export function usePrivacySettings(user: any) {
     updatePrivacySetting,
   };
 }
+
+// Add default export
+export default usePrivacySettings;

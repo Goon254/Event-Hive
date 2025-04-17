@@ -73,3 +73,6 @@ export class RepositoryFactory {
     this.notificationRepository = null;
   }
 }
+
+// Add default export
+export default RepositoryFactory;

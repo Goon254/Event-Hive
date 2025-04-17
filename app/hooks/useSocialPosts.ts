@@ -184,3 +184,6 @@ export function useSocialPosts() {
     deletePost
   };
 }
+
+// Add default export
+export default useSocialPosts;

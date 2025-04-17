@@ -231,3 +231,6 @@ export function useImageUpload(): UseImageUploadResult {
     setImageUri
   };
 }
+
+// Add default export
+export default useImageUpload;

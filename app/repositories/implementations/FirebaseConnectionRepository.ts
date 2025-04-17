@@ -404,3 +404,6 @@ export class FirebaseConnectionRepository extends FirebaseRepository<Connection>
     }
   }
 }
+
+// Add default export
+export default FirebaseConnectionRepository;

@@ -483,3 +483,6 @@ export class FirebasePostRepository extends FirebaseRepository<SocialPost> imple
     }
   }
 }
+
+// Add default export
+export default FirebasePostRepository;

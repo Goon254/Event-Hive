@@ -41,3 +41,6 @@ export interface IRepository<T, ID = string> {
    */
   getAll(options?: any): Promise<T[]>;
 }
+
+// Add default export
+export default IRepository;

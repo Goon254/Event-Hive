@@ -218,3 +218,6 @@ export abstract class FirebaseRepository<T extends { id: string }, ID = string> 
     return doc(db, this.collectionName, id);
   }
 }
+
+// Add default export
+export default FirebaseRepository;

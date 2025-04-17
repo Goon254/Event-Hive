@@ -246,3 +246,6 @@ export class FirebaseNotificationRepository extends FirebaseRepository<SocialNot
     }
   }
 }
+
+// Add default export
+export default FirebaseNotificationRepository;

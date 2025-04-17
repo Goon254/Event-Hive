@@ -57,3 +57,6 @@ export interface INotificationRepository extends IRepository<SocialNotification>
     limit?: number
   ): () => void;
 }
+
+// Add default export
+export default INotificationRepository;

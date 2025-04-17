@@ -575,3 +575,6 @@ export function useAuth() {
   }
   return context;
 }
+
+// Add default export
+export default AuthProvider;
