@@ -39,6 +39,12 @@ export function useEventSubmission(
         return "";
       }
       
+      // Check if the URI is already a Firebase Storage URL
+      if (uri.startsWith('https://firebasestorage.googleapis.com/')) {
+        console.log("Image is already uploaded to Firebase Storage, skipping upload");
+        return uri;
+      }
+      
       if (!user || !user.id) {
         throw new Error('User ID is required for event image upload');
       }

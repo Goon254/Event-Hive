@@ -53,17 +53,7 @@ export function SpeakersSection({
   showSpeakerModal,
   setCurrentSpeaker,
 }: SpeakersSectionProps) {
-  // Local state for new speaker
-  const [newSpeaker, setNewSpeaker] = useState<Speaker>({
-    id: '',
-    name: '',
-    role: '',
-    bio: '',
-    imageUri: null
-  });
-  
-  // Local state for editing speaker
-  const [editingSpeakerId, setEditingSpeakerId] = useState<string | null>(null);
+  // No longer need local state for speaker form as we're using the modal exclusively
   
   /**
    * Open speaker modal for adding a new speaker
@@ -83,12 +73,7 @@ export function SpeakersSection({
     showSpeakerModal();
   };
   
-  /**
-   * No longer needed as speaker editing is handled by the modal
-   */
-  const updateSpeaker = () => {
-    // This is now handled in the parent component
-  };
+  // All speaker management is now handled by the modal
   
   /**
    * Remove a speaker
@@ -110,17 +95,7 @@ export function SpeakersSection({
               speakers: updatedSpeakers
             });
             
-            // If we were editing this speaker, reset the editing state
-            if (editingSpeakerId === id) {
-              setNewSpeaker({
-                id: '',
-                name: '',
-                role: '',
-                bio: '',
-                imageUri: null
-              });
-              setEditingSpeakerId(null);
-            }
+            // No need to reset editing state as we're using the modal exclusively
           },
           style: 'destructive'
         }
@@ -128,19 +103,7 @@ export function SpeakersSection({
     );
   };
   
-  /**
-   * Cancel editing a speaker
-   */
-  const cancelEditingSpeaker = () => {
-    setNewSpeaker({
-      id: '',
-      name: '',
-      role: '',
-      bio: '',
-      imageUri: null
-    });
-    setEditingSpeakerId(null);
-  };
+  // No longer needed as we're using the modal exclusively
   
   /**
    * Handle speaker image selection - now handled directly by EnhancedImageUpload
@@ -210,81 +173,14 @@ export function SpeakersSection({
           </Text>
           <TouchableOpacity
             style={styles.addSpeakerButton}
-            onPress={() => {
-              // If we're editing, finish editing first
-              if (editingSpeakerId) {
-                updateSpeaker();
-              } else {
-                // Otherwise just add a new speaker
-                addSpeaker();
-              }
-            }}
-            disabled={isSubmitting || !newSpeaker.name}
+            onPress={addSpeaker}
+            disabled={isSubmitting}
           >
-            <MaterialIcons name={editingSpeakerId ? "check" : "add"} size={18} color="#FFFFFF" />
+            <MaterialIcons name="add" size={18} color="#FFFFFF" />
             <Text style={styles.addSpeakerText}>
-              {editingSpeakerId ? "Update" : "Add Speaker"}
+              Add Speaker
             </Text>
           </TouchableOpacity>
-        </View>
-        
-        {/* Speaker Form */}
-        <View style={styles.formGroup}>
-          <FormField
-            label="Name"
-            value={newSpeaker.name}
-            onChangeText={(text) => setNewSpeaker({...newSpeaker, name: text})}
-            placeholder="Speaker's full name"
-            required={true}
-            disabled={isSubmitting}
-          />
-          
-          <FormField
-            label="Role"
-            value={newSpeaker.role}
-            onChangeText={(text) => setNewSpeaker({...newSpeaker, role: text})}
-            placeholder="e.g., Keynote Speaker, Panelist, Performer"
-            disabled={isSubmitting}
-          />
-          
-          <FormField
-            label="Bio"
-            value={newSpeaker.bio}
-            onChangeText={(text) => setNewSpeaker({...newSpeaker, bio: text})}
-            placeholder="Brief biography or description"
-            multiline={true}
-            numberOfLines={4}
-            disabled={isSubmitting}
-          />
-          
-          {/* Speaker Image Upload */}
-          <View style={styles.formGroup}>
-            <Text style={styles.label}>Speaker Image (Optional)</Text>
-            <View style={styles.speakerImageUpload}>
-              <EnhancedImageUpload
-                onImageSelected={(uri) => setNewSpeaker({...newSpeaker, imageUri: uri})}
-                initialImage={newSpeaker.imageUri}
-                width={100}
-                height={100}
-                imageType={ImageType.EVENT_SPEAKER}
-                id={formData.id}
-                isSubmitting={isSubmitting}
-                placeholderText="Add Photo"
-              />
-            </View>
-          </View>
-          
-          {editingSpeakerId && (
-            <TouchableOpacity
-              style={{ alignSelf: 'flex-end', marginTop: 8 }}
-              onPress={cancelEditingSpeaker}
-              disabled={isSubmitting}
-            >
-              <Text style={{ color: '#6B7280', textDecorationLine: 'underline' }}>
-                Cancel Editing
-              </Text>
-            </TouchableOpacity>
-          )}
         </View>
         
         {/* Speakers List */}

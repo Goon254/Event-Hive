@@ -22,12 +22,15 @@ export default function TabsLayout() {
         screenOptions={{
           tabBarActiveTintColor: COLORS.tabBarActive,
           tabBarInactiveTintColor: COLORS.tabBarInactive,
+          // Prevent tab bar from moving with keyboard
+          tabBarHideOnKeyboard: true,
           tabBarStyle: {
             height: totalTabBarHeight,
             paddingTop: tabBarPaddingTop,
             paddingBottom: tabBarPaddingBottom,
             backgroundColor: 'rgba(255, 255, 255, 0.95)', // Translucent white
             borderTopWidth: 0, // Remove top border
+            position: 'absolute', // Keep tab bar fixed at bottom
             ...Platform.select({
               ios: {
                 shadowColor: '#000',

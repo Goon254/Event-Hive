@@ -912,7 +912,17 @@ export default function EventDetailsScreen() {
       <Animated.View
         style={[
           styles.header,
-          { height: headerHeight, transform: [{ translateY: headerTranslateY }] }
+          {
+            height: HEADER_MAX_HEIGHT,
+            transform: [
+              { translateY: headerTranslateY },
+              { scale: scrollY.interpolate({
+                inputRange: [0, HEADER_SCROLL_DISTANCE],
+                outputRange: [1, HEADER_MIN_HEIGHT / HEADER_MAX_HEIGHT],
+                extrapolate: 'clamp',
+              })}
+            ]
+          }
         ]}
       >
         <Animated.View style={[styles.headerBackground, { opacity: imageOpacity }]}>
@@ -1116,84 +1126,91 @@ export default function EventDetailsScreen() {
           <Text style={[styles.description, { color: Colors[colorScheme].text }]}>{event.description || 'No description available.'}</Text>
         </View>
         
-       {/* Speakers/Performers Section */}
-        {speakers.length > 0 && (
+        {/* Tags Section */}
+        {event.tags && event.tags.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionTitleRow}>
-              <Text style={[styles.sectionTitle, { color: Colors[colorScheme].text }]}>Speakers & Performers</Text>
+              <MaterialIcons name="local-offer" size={20} color={Colors[colorScheme].tint} />
+              <Text style={[styles.sectionTitle, { color: Colors[colorScheme].text, marginLeft: 8 }]}>Tags</Text>
+            </View>
+            <View style={styles.tagsContainer}>
+              {event.tags.map((tag, index) => (
+                <View key={`tag-${index}`} style={[styles.tagBadge, { backgroundColor: colorScheme === 'dark' ? Colors.dark.cardBackground : '#F3F4F6' }]}>
+                  <Text style={[styles.tagText, { color: Colors[colorScheme].tint }]}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+        
+       {/* Speakers/Performers Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={[styles.sectionTitle, { color: Colors[colorScheme].text }]}>Speakers & Performers</Text>
+            {speakers.length > 3 && (
               <TouchableOpacity onPress={() => setShowSpeakers(!showSpeakers)}>
                 <Text style={[styles.seeAllText, { color: Colors[colorScheme].tint }]}>
                   {showSpeakers ? 'Show Less' : 'See All'}
                 </Text>
               </TouchableOpacity>
-            </View>
-            {showSpeakers ? (
-              <View
-                style={[
-                  styles.speakersContainer,
-                  styles.speakersGridContainer
-                ]}
-              >
-                {speakers.map((speaker, index) => (
-                  <View
-                    key={`speaker-${index}`}
-                    style={[
-                      styles.speakerCard,
-                      styles.speakerCardGrid,
-                      { backgroundColor: Colors[colorScheme].background }
-                    ]}
-                  >
-                    {speaker.imageUri ? (
-                      <Image
-                        source={{ uri: speaker.imageUri }}
-                        style={styles.speakerImage}
-                      />
-                    ) : (
-                      <View style={styles.speakerImagePlaceholder}>
-                        <Text style={styles.speakerInitial}>
-                          {speaker.name.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={styles.speakerInfo}>
-                      <Text style={[styles.speakerName, { color: Colors[colorScheme].text }]}>{speaker.name}</Text>
-                      <Text style={[styles.speakerRole, { color: Colors[colorScheme].secondaryText }]}>{speaker.role}</Text>
-                      {speaker.bio && (
-                        <Text style={[styles.speakerBio, { color: Colors[colorScheme].secondaryText }]} numberOfLines={3}>{speaker.bio}</Text>
-                      )}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.speakersContainer}>
-                {speakers.slice(0, 3).map((speaker, index) => (
-                  <View
-                    key={`speaker-${index}`}
-                    style={[styles.speakerCard, { backgroundColor: Colors[colorScheme].background }]}
-                  >
-                    {speaker.imageUri ? (
-                      <Image
-                        source={{ uri: speaker.imageUri }}
-                        style={styles.speakerImage}
-                      />
-                    ) : (
-                      <View style={styles.speakerImagePlaceholder}>
-                        <Text style={styles.speakerInitial}>
-                          {speaker.name.charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={styles.speakerInfo}>
-                      <Text style={[styles.speakerName, { color: Colors[colorScheme].text }]}>{speaker.name}</Text>
-                      <Text style={[styles.speakerRole, { color: Colors[colorScheme].secondaryText }]}>{speaker.role}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
             )}
           </View>
-        )}
+          
+          {speakers.length > 0 ? (
+            <View style={styles.speakersWrapper}>
+              {(showSpeakers ? speakers : speakers.slice(0, 3)).map((speaker, index) => (
+                <View
+                  key={`speaker-${index}`}
+                  style={[
+                    styles.enhancedSpeakerCard,
+                    { backgroundColor: Colors[colorScheme].background }
+                  ]}
+                >
+                  <View style={styles.speakerHeader}>
+                    {speaker.imageUri ? (
+                      <Image
+                        source={{ uri: speaker.imageUri }}
+                        style={styles.enhancedSpeakerImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <LinearGradient
+                        colors={[Colors[colorScheme].tint, Colors.light.tint === Colors[colorScheme].tint ? '#2980b9' : '#1D4ED8']}
+                        style={styles.speakerImagePlaceholder}
+                      >
+                        <Text style={styles.speakerInitial}>
+                          {speaker.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </LinearGradient>
+                    )}
+                    <View style={styles.speakerTitleContainer}>
+                      <Text style={[styles.enhancedSpeakerName, { color: Colors[colorScheme].text }]}>{speaker.name}</Text>
+                      <View style={styles.speakerRoleContainer}>
+                        <Text style={[styles.enhancedSpeakerRole, { color: Colors[colorScheme].tint }]}>{speaker.role}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  
+                  {speaker.bio && (
+                    <View style={styles.speakerBioContainer}>
+                      <Text style={[styles.speakerBioLabel, { color: Colors[colorScheme].secondaryText }]}>Bio</Text>
+                      <Text style={[styles.enhancedSpeakerBio, { color: Colors[colorScheme].text }]}>
+                        {speaker.bio}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={[styles.emptyStateContainer, { backgroundColor: Colors[colorScheme].background }]}>
+              <FontAwesome name="microphone" size={40} color="#D1D5DB" />
+              <Text style={[styles.emptyStateText, { color: Colors[colorScheme].secondaryText }]}>
+                No speakers or performers listed for this event
+              </Text>
+            </View>
+          )}
+        </View>
 
         {/* Location Details Section */}
         {!event.isVirtual && (
@@ -1273,13 +1290,10 @@ export default function EventDetailsScreen() {
                 {loadingNearbyPlaces ? (
                   <ActivityIndicator size="small" color={Colors[colorScheme].tint} style={styles.nearbyPlacesLoading} />
                 ) : nearbyPlaces.length > 0 ? (
-                  <FlatList
-                    data={nearbyPlaces.slice(0, 3)}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    keyExtractor={(item, index) => `place-${index}`}
-                    renderItem={({item: place, index}) => (
+                  <View style={styles.nearbyPlacesRow}>
+                    {nearbyPlaces.slice(0, 3).map((place, index) => (
                       <TouchableOpacity
+                        key={`place-${index}`}
                         style={[styles.nearbyPlaceCard, { backgroundColor: Colors[colorScheme].background }]}
                         onPress={() => {
                           const url = `https://www.google.com/maps/search/?api=1&query=${place.location.latitude},${place.location.longitude}&query_place_id=${place.id}`;
@@ -1302,9 +1316,8 @@ export default function EventDetailsScreen() {
                           </View>
                         )}
                       </TouchableOpacity>
-                    )}
-                    contentContainerStyle={styles.nearbyPlacesListContent}
-                  />
+                    ))}
+                  </View>
                 ) : (
                   <Text style={[styles.noNearbyPlacesText, { color: Colors[colorScheme].secondaryText }]}>No nearby places found</Text>
                 )}
@@ -1879,64 +1892,83 @@ const styles = StyleSheet.create({
   },
   
   // Speakers
-  speakersContainer: {
-    paddingVertical: 8,
-    flexDirection: 'row',
+  // Enhanced Speakers Section
+  speakersWrapper: {
+    marginTop: 8,
   },
-  speakersGridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  speakerCard: {
-    borderRadius: 12,
-    padding: 16,
-    marginRight: 12,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: width / 1.5,
+  enhancedSpeakerCard: {
+    borderRadius: 16,
+    marginBottom: 16,
+    padding: 0,
+    overflow: 'hidden',
     ...cardShadow,
   },
-  speakerCardGrid: {
-    width: '48%',
-    marginRight: 0,
+  speakerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
-  speakerImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 12,
+  enhancedSpeakerImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    marginRight: 16,
   },
   speakerImagePlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#60A5FA',
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   speakerInitial: {
-    fontSize: 20,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
-  speakerInfo: {
+  speakerTitleContainer: {
     flex: 1,
   },
-  speakerName: {
-    fontSize: 16,
+  enhancedSpeakerName: {
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  speakerRole: {
-    fontSize: 14,
+  speakerRoleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  speakerBio: {
+  enhancedSpeakerRole: {
     fontSize: 14,
-    marginTop: 8,
-    lineHeight: 20,
+    fontWeight: '600',
+  },
+  speakerBioContainer: {
+    padding: 16,
+    paddingTop: 12,
+  },
+  speakerBioLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  enhancedSpeakerBio: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  emptyStateContainer: {
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...cardShadow,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 12,
   },
   
   // Location
@@ -2016,11 +2048,13 @@ const styles = StyleSheet.create({
     borderColor: '#3B82F6',
     borderWidth: 1,
   },
-  nearbyPlacesListContent: {
+  nearbyPlacesRow: {
+    flexDirection: 'row',
     paddingRight: 16,
+    justifyContent: 'space-between',
   },
   nearbyPlaceCard: {
-    width: 140,
+    width: '32%',
     borderRadius: 8,
     marginRight: 8,
     padding: 8,
@@ -2392,6 +2426,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     marginLeft: 8,
+  },
+  
+  // Tags styles
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+  },
+  tagBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+  },
+  tagText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 

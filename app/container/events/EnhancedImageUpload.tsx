@@ -111,6 +111,13 @@ export default function EnhancedImageUpload({
    */
   const uploadImage = async (uri: string) => {
     try {
+      // Check if the URI is already a Firebase Storage URL
+      if (uri.startsWith('https://firebasestorage.googleapis.com/')) {
+        console.log("Image is already uploaded to Firebase Storage, skipping upload");
+        onImageSelected(uri);
+        return;
+      }
+      
       setIsUploading(true);
       setUploadProgress(0);
       

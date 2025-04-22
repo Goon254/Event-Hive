@@ -109,9 +109,12 @@ export default function EventsScreen() {
       // Log the response structure to help with debugging
       console.log('Events data structure:', JSON.stringify(eventsData).substring(0, 200) + '...');
       
-      // Handle different possible response structures
+      // Handle the PaginatedResponse structure from eventService
       if (eventsData) {
-        if ('events' in eventsData && Array.isArray(eventsData.events)) {
+        if ('items' in eventsData && Array.isArray(eventsData.items)) {
+          console.log(`Fetched ${eventsData.items.length} events from 'items' property`);
+          setEvents(eventsData.items);
+        } else if ('events' in eventsData && Array.isArray(eventsData.events)) {
           console.log(`Fetched ${eventsData.events.length} events from 'events' property`);
           setEvents(eventsData.events);
         } else if ('data' in eventsData && Array.isArray(eventsData.data)) {
@@ -147,14 +150,15 @@ export default function EventsScreen() {
           
           // Check if we got any events back
           if (attending &&
-              typeof attending === 'object' &&
-              ('events' in attending || 'data' in attending)) {
+              typeof attending === 'object') {
             // Handle different possible response structures
-            const eventsArray = 'events' in attending && Array.isArray(attending.events)
-              ? attending.events
-              : 'data' in attending && Array.isArray(attending.data)
-                ? attending.data
-                : [];
+            const eventsArray = 'items' in attending && Array.isArray(attending.items)
+              ? attending.items
+              : 'events' in attending && Array.isArray(attending.events)
+                ? attending.events
+                : 'data' in attending && Array.isArray(attending.data)
+                  ? attending.data
+                  : [];
                 
             if (eventsArray.length > 0) {
               // Extract event IDs from the events array

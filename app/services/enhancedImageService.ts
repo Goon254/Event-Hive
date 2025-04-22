@@ -299,8 +299,14 @@ class EnhancedImageService {
       }
       
       // Check if we need to process the image
-      if (!options.compress && options.quality === ImageQuality.ORIGINAL && 
+      if (!options.compress && options.quality === ImageQuality.ORIGINAL &&
           options.maxWidth === ImageSize.ORIGINAL && options.maxHeight === ImageSize.ORIGINAL) {
+        return uri;
+      }
+      
+      // Check if the URI is a remote URL (Firebase Storage or other)
+      if (uri.startsWith('http://') || uri.startsWith('https://')) {
+        logger.debug('URI is a remote URL, skipping local processing');
         return uri;
       }
       
@@ -374,6 +380,13 @@ class EnhancedImageService {
    */
   async generateThumbnail(uri: string, size: number = 150): Promise<string> {
     try {
+      // Check if the URI is a remote URL (Firebase Storage or other)
+      if (uri.startsWith('http://') || uri.startsWith('https://')) {
+        logger.debug('URI is a remote URL, cannot generate thumbnail locally');
+        // Return the original URL for remote images
+        return uri;
+      }
+      
       const thumbnail = await ImageManipulator.manipulateAsync(
         uri,
         [{ resize: { width: size, height: size } }],
@@ -593,6 +606,14 @@ class EnhancedImageService {
       // Normalize URI
       const normalizedUri = this.normalizeUri(uri);
       logger.debug(`Normalized URI: ${normalizedUri.substring(0, 50)}...`);
+      
+      // Check if the URI is a remote URL (Firebase Storage or other)
+      if (normalizedUri.startsWith('http://') || normalizedUri.startsWith('https://')) {
+        logger.debug('URI is a remote URL, skipping local processing');
+        
+        // For remote URLs, we can't generate thumbnails locally
+        return { processedUri: normalizedUri };
+      }
       
       // Check if we need to process the image at all
       if (!options.compress && options.quality === ImageQuality.ORIGINAL &&
@@ -1278,6 +1299,13 @@ private async deleteFolder(folderRef: any): Promise<void> {
  */
 async getImageFileSize(uri: string): Promise<number> {
   try {
+    // Check if the URI is a remote URL
+    if (uri.startsWith('http://') || uri.startsWith('https://')) {
+      logger.debug('URI is a remote URL, cannot get file size locally');
+      // Return a default size for remote URLs
+      return 0;
+    }
+    
     const fileInfo = await FileSystem.getInfoAsync(uri);
     
     if (!fileInfo.exists) {
@@ -1302,6 +1330,13 @@ async getImageFileSize(uri: string): Promise<number> {
  */
 async isImageTooLarge(uri: string): Promise<boolean> {
   try {
+    // For remote URLs, we can't check the size locally
+    if (uri.startsWith('http://') || uri.startsWith('https://')) {
+      logger.debug('URI is a remote URL, cannot check size locally');
+      // Assume remote URLs are not too large since they've already been processed
+      return false;
+    }
+    
     const fileSize = await this.getImageFileSize(uri);
     return fileSize > MAX_FILE_SIZE;
   } catch (error) {
@@ -1319,6 +1354,7 @@ async isImageTooLarge(uri: string): Promise<boolean> {
 async getImageDimensions(uri: string): Promise<{ width: number; height: number }> {
   try {
     // Use Image.getSize to get dimensions (available in React Native)
+    // This works for both local and remote URLs
     return new Promise((resolve, reject) => {
       Image.getSize(
         uri,
@@ -1326,13 +1362,16 @@ async getImageDimensions(uri: string): Promise<{ width: number; height: number }
           resolve({ width, height });
         },
         (error) => {
-          reject(new Error(`Failed to get image dimensions: ${error}`));
+          // If there's an error getting dimensions, return default values
+          logger.warn(`Failed to get image dimensions: ${error}. Using default values.`);
+          resolve({ width: 500, height: 500 });
         }
       );
     });
   } catch (error) {
     logger.error('Error getting image dimensions:', error);
-    throw new Error(`Failed to get image dimensions: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    // Return default dimensions if we can't get the actual dimensions
+    return { width: 500, height: 500 };
   }
 }
 
@@ -1419,6 +1458,18 @@ async validateImageBeforeUpload(
   try {
     const errors: string[] = [];
     const warnings: string[] = [];
+    
+    // Check if the URI is a remote URL
+    if (uri.startsWith('http://') || uri.startsWith('https://')) {
+      logger.debug('URI is a remote URL, skipping local validation');
+      // For remote URLs, assume they're already valid
+      return {
+        valid: true,
+        errors: [],
+        warnings: ['Remote URL, skipped local validation'],
+        dimensions: { width: 500, height: 500 } // Default dimensions
+      };
+    }
     
     // Check if file exists
     const fileInfo = await FileSystem.getInfoAsync(uri);
