@@ -1,203 +1,285 @@
-import React, { memo } from 'react';
+// components/home/FeaturedEvent.tsx
+import React from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   TouchableOpacity,
-  Image,
-  Animated,
-  Dimensions
+  Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons, MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { FontAwesome } from '@expo/vector-icons';
-import { Event } from '../../services/eventServices';
-import { formatDate, formatTime } from '../../utils/dateUtils';
-import { getEventColor, createShadow } from './utils/uiHelpers';
+import { createShadow } from '../../utils/platformUtils';
+import { format } from 'date-fns';
 
-interface FeaturedEventProps {
-  event: Event;
-  daysUntil: string;
-  fadeAnim: Animated.Value;
-  translateY: Animated.Value;
-}
+const { width } = Dimensions.get('window');
 
-/**
- * FeaturedEvent component - displays the featured event at the top of the home screen
- * Styled to match the app design in the screenshot
- */
-const FeaturedEvent = ({
-  event,
-  daysUntil,
-  fadeAnim,
-  translateY
-}: FeaturedEventProps) => {
-  if (!event) return null;
-  
+// Updated FeaturedEvent to match feed styling
+const FeaturedEvent = ({ event, daysUntil, fadeAnim, translateY, theme }) => {
+  // Format date for display
+  const formatEventDate = (date) => {
+    if (!date) return 'Date TBD';
+    const eventDate = new Date(date);
+    return format(eventDate, 'EEEE, MMMM d • h:mm a');
+  };
+
+  // Format countdown text
+  const getCountdownText = () => {
+    if (daysUntil === 0) return 'Today!';
+    if (daysUntil === 1) return 'Tomorrow!';
+    if (daysUntil < 0) return 'Past event';
+    return `In ${daysUntil} days`;
+  };
+
   return (
-    <Animated.View
-      style={{
-        opacity: fadeAnim,
-        transform: [{ translateY }]
-      }}
+    <TouchableOpacity
+      style={styles.container}
+      activeOpacity={0.95}
+      onPress={() => router.push({
+        pathname: '/screens/EventDetail',
+        params: { eventId: event.id },
+      })}
     >
-      <TouchableOpacity
-        style={styles.featuredContainer}
-        onPress={() => router.push(`/screens/eventdetails?id=${event.id}`)}
-        activeOpacity={0.8}
-        accessible={true}
-        accessibilityLabel={`Featured event: ${event.title} on ${formatDate(event.date)}`}
-        accessibilityRole="button"
-        accessibilityHint="Opens featured event details"
-        testID={`featured-event-${event.id}`}
-      >
-        {/* Background - Either image or color with letter */}
-        <View style={styles.backgroundContainer}>
-          {event.imageUrl ? (
-            <Image 
-              source={{ uri: event.imageUrl }} 
-              style={styles.backgroundImage}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={[styles.backgroundFill, { backgroundColor: getEventColor(event.title) }]}>
-              <Text style={styles.eventLetter}>{event.title.charAt(0).toUpperCase()}</Text>
+      {/* Featured Event Image */}
+      <View style={styles.imageContainer}>
+        {event.imageUrl ? (
+          <Image 
+            source={{ uri: event.imageUrl }} 
+            style={styles.image}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={styles.imagePlaceholder}>
+            <LinearGradient
+              colors={[theme.primaryGradientStart, theme.primaryGradientEnd]}
+              style={styles.placeholderGradient}
+            >
+              <FontAwesome name="star" size={48} color="#FFFFFF" />
+            </LinearGradient>
+          </View>
+        )}
+        
+        {/* Gradient overlay */}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.7)']}
+          style={styles.imageOverlay}
+        />
+        
+        {/* Featured badge */}
+        <View style={styles.featuredBadge}>
+          <MaterialIcons name="star" size={16} color="#FFFFFF" />
+          <Text style={styles.featuredText}>Featured</Text>
+        </View>
+        
+        {/* Countdown badge */}
+        <View style={styles.countdownBadge}>
+          <Text style={styles.countdownText}>{getCountdownText()}</Text>
+        </View>
+      </View>
+      
+      {/* Event details */}
+      <View style={styles.detailsContainer}>
+        <Text style={styles.title} numberOfLines={2}>
+          {event.title}
+        </Text>
+        
+        <View style={styles.dateTimeContainer}>
+          <MaterialIcons name="event" size={18} color={theme.secondaryText} />
+          <Text style={styles.dateTimeText}>
+            {formatEventDate(event.date)}
+          </Text>
+        </View>
+        
+        <View style={styles.locationContainer}>
+          <Ionicons name="location-outline" size={18} color={theme.secondaryText} />
+          <Text style={styles.locationText} numberOfLines={1}>
+            {event.location || 'Location TBD'}
+          </Text>
+        </View>
+        
+        <View style={styles.statsRow}>
+          {event.category && (
+            <View style={styles.categoryContainer}>
+              <Text style={styles.categoryText}>{event.category}</Text>
             </View>
           )}
-        </View>
-
-        {/* Featured Badge */}
-        <View style={styles.featuredBadgeContainer}>
-          <Text style={styles.featuredBadgeText}>FEATURED</Text>
-        </View>
-
-        {/* Event Content - Overlaid on the image */}
-        <View style={styles.contentContainer}>
-          <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
           
-          <View style={styles.eventDetails}>
-            <View style={styles.detailRow}>
-              <FontAwesome name="calendar" size={16} color="#FFF" style={styles.icon} />
-              <Text style={styles.detailText}>{formatDate(event.date)}</Text>
-            </View>
-            
-            <View style={styles.detailRow}>
-              <FontAwesome name="clock-o" size={16} color="#FFF" style={styles.icon} />
-              <Text style={styles.detailText}>
-                {event.time ? formatTime(event.time) : formatTime(event.date)}
-              </Text>
-            </View>
-          </View>
-          
-          <View style={styles.countdownContainer}>
-            <Text style={styles.countdownText}>
-              {daysUntil ? `${daysUntil} until event` : 'Coming soon'}
+          <View style={styles.attendeesContainer}>
+            <MaterialIcons name="people" size={18} color={theme.secondaryText} />
+            <Text style={styles.attendeesText}>
+              {event.attendees || 0} attending
             </Text>
           </View>
         </View>
-      </TouchableOpacity>
-    </Animated.View>
+        
+        {/* CTA Button */}
+        <TouchableOpacity
+          style={styles.ctaButton}
+          onPress={() => router.push({
+            pathname: '/screens/RSVP',
+            params: { eventId: event.id },
+          })}
+        >
+          <LinearGradient
+            colors={[theme.primaryGradientStart, theme.primaryGradientEnd]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.ctaGradient}
+          >
+            <Text style={styles.ctaText}>
+              RSVP Now
+            </Text>
+            <MaterialIcons name="arrow-forward" size={18} color="#FFFFFF" />
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
-  featuredContainer: {
-    width: '98%',
-    height: 230, // Increased height to match second screenshot
+  container: {
     borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
+    ...createShadow(2),
+  },
+  imageContainer: {
+    width: '100%',
+    height: 200,
     position: 'relative',
-    marginBottom: 16,
   },
-  backgroundContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  backgroundImage: {
+  image: {
     width: '100%',
     height: '100%',
   },
-  backgroundFill: {
+  imagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderGradient: {
     width: '100%',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f44336', // Default red color, will be overridden
   },
-  eventLetter: {
-    fontSize: 80,
-    fontWeight: 'bold',
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  featuredBadgeContainer: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 4,
-  },
-  featuredBadgeText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 14,
-    letterSpacing: 0.5,
-  },
-  contentContainer: {
+  imageOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    height: '50%',
+  },
+  featuredBadge: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  featuredText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+    marginLeft: 4,
+  },
+  countdownBadge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  countdownText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  detailsContainer: {
     padding: 16,
   },
-  eventTitle: {
-    fontSize: 32,
+  title: {
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    color: '#1F2937',
+    marginBottom: 12,
   },
-  eventDetails: {
+  dateTimeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dateTimeText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 8,
+  },
+  locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
   },
-  detailRow: {
+  locationText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginLeft: 8,
+    flex: 1,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  categoryContainer: {
+    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
+  categoryText: {
+    color: '#4F46E5',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  attendeesContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
   },
-  icon: {
-    marginRight: 6,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  detailText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '500',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  countdownContainer: {
-    backgroundColor: 'rgba(128, 128, 128, 0.6)',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 24,
-    alignSelf: 'flex-start',
-  },
-  countdownText: {
-    color: '#FFFFFF',
-    fontWeight: '500',
+  attendeesText: {
     fontSize: 14,
-  }
+    color: '#6B7280',
+    marginLeft: 6,
+  },
+  ctaButton: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    ...createShadow(1),
+  },
+  ctaGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  ctaText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginRight: 8,
+  },
 });
 
-export default memo(FeaturedEvent);
+export default FeaturedEvent;

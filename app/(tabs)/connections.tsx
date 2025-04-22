@@ -1,7 +1,6 @@
 // app/(tabs)/connections.tsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { COLORS } from '../theme/constants';
-import { LinearGradient } from 'expo-linear-gradient';
 import {
   View,
   StyleSheet,
@@ -10,11 +9,12 @@ import {
   Text,
   Platform,
   TouchableOpacity,
-  TextInput
+  TextInput,
+  Dimensions
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { createShadow } from '../utils/platformUtils';
-import ScreenLayout from '../components/common/ScreenLayout';
+import ScreenWrapper from '../components/common/ScreenWrapper';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../AuthContext';
 
@@ -27,18 +27,14 @@ import { useContactSync } from '../services/contactSyncService';
 import { useOAuth } from '../services/oauthService';
 import { usePrivacySettings } from '../hooks/usePrivacySettings';
 import { useRecommendations } from '../services/recommendationService';
-import { useChat } from '../services/chatService';
 
 // Components
-import Header from '../components/connections/Header';
-import SearchBar from '../components/common/SearchBar';
-import ConnectionTabs from '../components/connections/ConnectionTabs';
-import ConnectionCard from '../components/connections/ConnectionCard';
-import ContactMatchCard from '../components/connections/ContactMatchCard';
-import EmptyState from '../components/connections/EmptyState';
 import LoadingIndicator from '../components/common/LoadingIndicator';
 import FloatingActionButton from '../components/common/FloatingActionButton';
 import EncryptionIndicator from '../components/connections/EncryptionIndicator';
+import ConnectionCard from '../components/connections/ConnectionCard';
+import ContactMatchCard from '../components/connections/ContactMatchCard';
+import EmptyState from '../components/connections/EmptyState';
 
 /**
  * Connections Screen
@@ -48,11 +44,14 @@ export default function ConnectionsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   
+  // Screen dimensions for responsive layout
+  const { height, width } = Dimensions.get('window');
+  
   // UI state
   const [activeTab, setActiveTab] = useState<'connections' | 'pending' | 'suggested' | 'discover'>('connections');
   const scrollY = useRef(new Animated.Value(0)).current;
   
-  // Custom hooks
+  // Custom hooks with memoized initialization
   const {
     connections,
     pendingConnections,
@@ -63,7 +62,7 @@ export default function ConnectionsScreen() {
     isLoadingMore,
     hasMoreConnections,
     loadMoreConnections
-  } = useConnections(user as any);
+  } = useConnections(user);
   
   // Recommendations hook
   const {
@@ -72,53 +71,67 @@ export default function ConnectionsScreen() {
     loadMoreRecommendations,
     error: recommendationsError,
     fetchRecommendations
-  } = useRecommendations(user as any);
+  } = useRecommendations(user);
   
-  // Chat hook for unread messages
+  // Only fetch recommendations when the suggested tab is active
+  useEffect(() => {
+    if (activeTab === 'suggested' && user) {
+      fetchRecommendations(false);
+    }
+  }, [activeTab, user, fetchRecommendations]);
+  
+  // Load unread message counts - more efficiently
   const [unreadMessages, setUnreadMessages] = useState<{[key: string]: number}>({});
   
-  // Load unread message counts
+  // Memoized function to load unread counts
+  const loadUnreadCounts = useCallback(async () => {
+    if (!user || connections.length === 0) return;
+    
+    try {
+      // This would be replaced with actual API call in production
+      const { chatService } = require('../services/chatService');
+      const totalUnread = await chatService.getTotalUnreadCount(user.id);
+      
+      if (totalUnread === 0) {
+        setUnreadMessages({});
+        return;
+      }
+      
+      // For demo purposes, distribute unread counts among connections
+      const unreadCounts: {[key: string]: number} = {};
+      
+      // Randomly assign unread counts to some connections
+      const connectionCount = Math.min(3, connections.length);
+      const connectionsWithUnread = connections
+        .slice(0, connectionCount)
+        .map(c => c.connectionId || c.userId);
+      
+      let remainingUnread = totalUnread;
+      
+      for (let i = 0; i < connectionsWithUnread.length; i++) {
+        const count = i === connectionsWithUnread.length - 1
+          ? remainingUnread
+          : Math.floor(remainingUnread / (connectionsWithUnread.length - i));
+        
+        unreadCounts[connectionsWithUnread[i]] = count;
+        remainingUnread -= count;
+      }
+      
+      setUnreadMessages(unreadCounts);
+    } catch (error) {
+      console.error('Error loading unread counts:', error);
+    }
+  }, [user?.id, connections]);
+  
+  // Load unread counts with debounce to avoid excessive calls
   useEffect(() => {
     if (!user) return;
     
-    const loadUnreadCounts = async () => {
-      try {
-        // This would be replaced with actual API call in production
-        // Get chatService
-        const { chatService } = require('../services/chatService');
-        const totalUnread = await chatService.getTotalUnreadCount(user.id);
-        
-        // For demo purposes, distribute unread counts among connections
-        const unreadCounts: {[key: string]: number} = {};
-        
-        if (connections.length > 0 && totalUnread > 0) {
-          // Randomly assign unread counts to some connections
-          const connectionCount = Math.min(3, connections.length);
-          const connectionsWithUnread = connections
-            .slice(0, connectionCount)
-            .map(c => c.connectionId || c.userId);
-          
-          let remainingUnread = totalUnread;
-          
-          for (let i = 0; i < connectionsWithUnread.length; i++) {
-            const count = i === connectionsWithUnread.length - 1
-              ? remainingUnread
-              : Math.floor(remainingUnread / (connectionsWithUnread.length - i));
-            
-            unreadCounts[connectionsWithUnread[i]] = count;
-            remainingUnread -= count;
-          }
-        }
-        
-        setUnreadMessages(unreadCounts);
-      } catch (error) {
-        console.error('Error loading unread counts:', error);
-      }
-    };
-    
-    loadUnreadCounts();
-  }, [user, connections]);
+    const timer = setTimeout(loadUnreadCounts, 300);
+    return () => clearTimeout(timer);
+  }, [loadUnreadCounts, user]);
   
+  // Search hook - memoized filtering
   const { 
     searchQuery, 
     setSearchQuery, 
@@ -127,14 +140,15 @@ export default function ConnectionsScreen() {
     filteredSuggestedConnections
   } = useSearch(connections, pendingConnections, suggestedConnections);
   
+  // Other hooks - lazy initialization
   const { isConnected: _isConnected } = useWebSocket(user?.id || null);
-  const { encryptionEnabled, setEncryptionEnabled } = useEncryption(user as any);
-  const { contactMatches, syncContacts, filteredContactMatches } = useContactSync(user as any, searchQuery);
-  const { oauthSignIn, oauthLoading } = useOAuth(user as any);
-  const { privacySettings, updatePrivacySetting } = usePrivacySettings(user as any);
+  const { encryptionEnabled, setEncryptionEnabled } = useEncryption(user);
+  const { contactMatches, syncContacts, filteredContactMatches } = useContactSync(user, searchQuery);
+  const { oauthSignIn, oauthLoading } = useOAuth(user);
+  const { privacySettings, updatePrivacySetting } = usePrivacySettings(user);
   
-  // Get data source based on active tab
-  const getDataSource = () => {
+  // Memoized data source based on active tab
+  const dataSource = useMemo(() => {
     switch (activeTab) {
       case 'connections':
         return filteredConnections;
@@ -147,101 +161,137 @@ export default function ConnectionsScreen() {
       default:
         return filteredConnections;
     }
-  };
+  }, [
+    activeTab, 
+    filteredConnections, 
+    filteredPendingConnections, 
+    filteredSuggestedConnections,
+    filteredContactMatches
+  ]);
   
-  // Render item based on active tab
-  const renderItem = ({ item }: { item: any }) => {
+  // Navigation handler - memoized to prevent recreating on each render
+  const handleMessagePress = useCallback((item: any) => {
+    router.push({
+      pathname: '/screens/ChatScreen',
+      params: {
+        userId: item.connectionId || item.userId,
+        name: item.name,
+        avatar: item.avatar || ''
+      }
+    });
+  }, [router]);
+  
+  // Memoized render function with card styling
+  const renderItem = useCallback(({ item }: { item: any }) => {
     if (activeTab === 'discover' && 'phoneNumber' in item) {
       return (
-        <ContactMatchCard
-          item={item}
-          onConnect={handleConnect}
-        />
+        <View style={styles.cardContainer}>
+          <ContactMatchCard
+            item={item}
+            onConnect={handleConnect}
+          />
+        </View>
       );
     } else {
       return (
-        <ConnectionCard
-          item={item}
-          activeTab={activeTab}
-          handleConnect={handleConnect}
-          unreadMessages={unreadMessages}
-          privacySettings={privacySettings}
-          onMessagePress={() => {
-            router.push({
-              pathname: '/screens/ChatScreen',
-              params: {
-                userId: item.connectionId || item.userId,
-                name: item.name,
-                avatar: item.avatar || ''
-              }
-            });
-          }}
-        />
+        <View style={styles.cardContainer}>
+          <ConnectionCard
+            item={item}
+            activeTab={activeTab}
+            handleConnect={handleConnect}
+            unreadMessages={unreadMessages}
+            privacySettings={privacySettings}
+            onMessagePress={() => handleMessagePress(item)}
+          />
+        </View>
       );
     }
-  };
+  }, [activeTab, handleConnect, unreadMessages, privacySettings, handleMessagePress]);
+  
+  // Memoized handler for EndReached to prevent recreating on each render
+  const handleEndReached = useCallback(() => {
+    if (activeTab === 'connections' && hasMoreConnections && !isLoadingMore) {
+      loadMoreConnections();
+    } else if (activeTab === 'suggested' && !recommendationsError && !isLoadingRecommendations) {
+      loadMoreRecommendations();
+    }
+  }, [
+    activeTab, 
+    hasMoreConnections, 
+    isLoadingMore, 
+    loadMoreConnections, 
+    recommendationsError, 
+    isLoadingRecommendations,
+    loadMoreRecommendations
+  ]);
+  
+  // Toggle encryption - memoized
+  const handleEncryptionToggle = useCallback(() => {
+    const newValue = !encryptionEnabled;
+    setEncryptionEnabled(newValue);
+    updatePrivacySetting('encryptMessages', newValue);
+  }, [encryptionEnabled, setEncryptionEnabled, updatePrivacySetting]);
+  
+  // FAB handler - memoized
+  const handleFabPress = useCallback(() => {
+    if (activeTab === 'connections') {
+      router.push('/screens/scan-business-card');
+    } else {
+      router.push('/screens/ChatScreen');
+    }
+  }, [activeTab, router]);
+  
+  // Tab selection handler - memoized
+  const handleTabPress = useCallback((tab: 'connections' | 'pending' | 'suggested' | 'discover') => {
+    setActiveTab(tab);
+  }, []);
+  
+  // Loading state based on active tab
+  const isCurrentTabLoading = useMemo(() => {
+    if (activeTab === 'suggested') {
+      return isLoadingRecommendations;
+    }
+    return isLoading;
+  }, [activeTab, isLoading, isLoadingRecommendations]);
+  
+  // Create header right content
+  const headerRightContent = (
+    <TouchableOpacity
+      style={styles.headerButton}
+      onPress={() => router.push('/screens/settings')}
+    >
+      <MaterialIcons name="settings" size={22} color="#FFF" />
+    </TouchableOpacity>
+  );
+  
+  // Create search bar content
+  const searchBarContent = (
+    <View style={styles.searchBar}>
+      <MaterialIcons name="search" size={22} color={COLORS.secondaryText} />
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Search connections..."
+        placeholderTextColor={COLORS.secondaryText}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
+    </View>
+  );
   
   return (
-    <ScreenLayout
+    <ScreenWrapper
       backgroundColor={COLORS.background}
-      statusBarColor={COLORS.background}
       statusBarStyle="light-content"
-      testID="connections-screen"
+      header={{
+        title: 'Connections',
+        subtitle: 'Grow your network',
+        rightContent: headerRightContent,
+        gradientColors: [COLORS.primaryGradientStart, COLORS.primaryGradientEnd]
+      }}
+      withSearchBar={true}
+      searchBarContent={searchBarContent}
     >
-      
-      {/* Animated Header */}
-      <Animated.View style={[
-        styles.header,
-        {
-          height: Platform.OS === 'ios' ? 130 : 110,
-        }
-      ]}>
-        <LinearGradient
-          colors={[COLORS.primaryGradientStart, COLORS.primaryGradientEnd]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.headerGradient}
-        >
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={styles.welcomeText}>Connections</Text>
-              <Text style={styles.subtitleText}>
-                Grow your network
-              </Text>
-            </View>
-            
-            <View style={styles.headerButtons}>
-              {pendingConnections.length > 0 && (
-                <View style={styles.pendingBadge}>
-                  <Text style={styles.pendingBadgeText}>{pendingConnections.length}</Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={() => router.push('/screens/settings')}
-              >
-                <MaterialIcons name="settings" size={22} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </LinearGradient>
-      </Animated.View>
-      
-      <View style={{ marginTop: 100 }}>
-        {/* Custom dark themed search bar */}
-        <View style={styles.searchBarContainer}>
-          <View style={styles.searchBar}>
-            <MaterialIcons name="search" size={22} color={COLORS.secondaryText} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search connections..."
-              placeholderTextColor={COLORS.secondaryText}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
-        </View>
-        
+      <View style={styles.container}>
         {/* Custom dark themed tabs */}
         <View style={styles.tabsContainer}>
           <TouchableOpacity
@@ -249,7 +299,7 @@ export default function ConnectionsScreen() {
               styles.tab,
               activeTab === 'connections' && styles.activeTab
             ]}
-            onPress={() => setActiveTab('connections')}
+            onPress={() => handleTabPress('connections')}
           >
             <Text style={[
               styles.tabText,
@@ -263,7 +313,7 @@ export default function ConnectionsScreen() {
               styles.tab,
               activeTab === 'pending' && styles.activeTab
             ]}
-            onPress={() => setActiveTab('pending')}
+            onPress={() => handleTabPress('pending')}
           >
             <View style={styles.tabContent}>
               <Text style={[
@@ -284,7 +334,7 @@ export default function ConnectionsScreen() {
               styles.tab,
               activeTab === 'suggested' && styles.activeTab
             ]}
-            onPress={() => setActiveTab('suggested')}
+            onPress={() => handleTabPress('suggested')}
           >
             <Text style={[
               styles.tabText,
@@ -298,7 +348,7 @@ export default function ConnectionsScreen() {
               styles.tab,
               activeTab === 'discover' && styles.activeTab
             ]}
-            onPress={() => setActiveTab('discover')}
+            onPress={() => handleTabPress('discover')}
           >
             <Text style={[
               styles.tabText,
@@ -307,114 +357,107 @@ export default function ConnectionsScreen() {
             {activeTab === 'discover' && <View style={styles.activeTabIndicator} />}
           </TouchableOpacity>
         </View>
-      </View>
-      
-      {isLoading || isLoadingRecommendations ? (
-        <LoadingIndicator message={activeTab === 'suggested' ? "Loading suggestions..." : "Loading connections..."} />
-      ) : (
-        <Animated.FlatList
-          data={getDataSource()}
-          renderItem={renderItem}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View>
-              {recommendationsError && activeTab === 'suggested' ? (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>
-                    {recommendationsError}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.retryButton}
-                    onPress={() => fetchRecommendations(true)}
-                  >
-                    <Text style={styles.retryButtonText}>Retry</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <EmptyState
-                  activeTab={activeTab}
-                  setActiveTab={setActiveTab}
-                  syncContacts={syncContacts}
-                  oauthSignIn={oauthSignIn}
-                  oauthLoading={oauthLoading}
+
+        <View style={styles.contentContainer}>
+          {isCurrentTabLoading ? (
+            <LoadingIndicator message={activeTab === 'suggested' ? "Loading suggestions..." : "Loading connections..."} />
+          ) : (
+            <Animated.FlatList
+              data={dataSource}
+              renderItem={renderItem}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.listContainer}
+              showsVerticalScrollIndicator={false}
+              initialNumToRender={10}
+              maxToRenderPerBatch={10}
+              windowSize={10}
+              removeClippedSubviews={true}
+              ListEmptyComponent={
+                recommendationsError && activeTab === 'suggested' ? (
+                  <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>
+                      {recommendationsError}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.retryButton}
+                      onPress={() => fetchRecommendations(true)}
+                    >
+                      <Text style={styles.retryButtonText}>Retry</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <EmptyState
+                    activeTab={activeTab}
+                    setActiveTab={setActiveTab}
+                    syncContacts={syncContacts}
+                    oauthSignIn={oauthSignIn}
+                    oauthLoading={oauthLoading}
+                  />
+                )
+              }
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={COLORS.primaryGradientStart}
+                  colors={[COLORS.primaryGradientStart]}
                 />
+              }
+              onScroll={Animated.event(
+                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                { useNativeDriver: true }
               )}
-            </View>
-          }
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={COLORS.primaryGradientStart}
-              colors={[COLORS.primaryGradientStart]}
+              scrollEventThrottle={16}
+              onEndReached={handleEndReached}
+              onEndReachedThreshold={0.5}
+              ListFooterComponent={
+                isLoadingMore ?
+                  <LoadingIndicator small message="Loading more..." /> :
+                  null
+              }
+              testID="connections-list"
             />
-          }
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true }
           )}
-          scrollEventThrottle={16}
-          onEndReached={() => {
-            if (activeTab === 'connections' && hasMoreConnections) {
-              loadMoreConnections();
-            } else if (activeTab === 'suggested' && !recommendationsError) {
-              loadMoreRecommendations();
-            }
-          }}
-          onEndReachedThreshold={0.5}
-          ListFooterComponent={
-            isLoadingMore ?
-              <LoadingIndicator small message="Loading more..." /> :
-              null
-          }
-          testID="connections-list"
+        </View>
+        
+        <FloatingActionButton
+          onPress={handleFabPress}
+          icon={activeTab === 'connections' ? "qr-code-scanner" : "chat"}
         />
-      )}
-      
-      <FloatingActionButton
-        onPress={() => {
-          if (activeTab === 'connections') {
-            router.push('/screens/scan-business-card');
-          } else {
-            // Navigate to chat screen if in connections tab
-            router.push('/screens/ChatScreen');
-          }
-        }}
-        icon={activeTab === 'connections' ? "qr-code-scanner" : "chat"}
-      />
-      
-      {encryptionEnabled && (
-        <EncryptionIndicator 
-          enabled={encryptionEnabled} 
-          onToggle={() => {
-            setEncryptionEnabled(!encryptionEnabled);
-            updatePrivacySetting('encryptMessages', !encryptionEnabled);
-          }} 
-        />
-      )}
-    </ScreenLayout>
+        
+        {encryptionEnabled && (
+          <EncryptionIndicator 
+            enabled={encryptionEnabled} 
+            onToggle={handleEncryptionToggle}
+          />
+        )}
+      </View>
+    </ScreenWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  searchBarContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 16,
+  container: {
+    flex: 1,
+  },
+  cardContainer: {
+    marginBottom: 16, // Add spacing between cards
+  },
+  contentContainer: {
+    flex: 1,
   },
   searchBar: {
     backgroundColor: COLORS.card,
-    borderRadius: 12,
+    borderRadius: 25,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    ...createShadow(2),
+    ...createShadow(10),
   },
   searchInput: {
     flex: 1,
-    marginLeft: 12,
+    paddingLeft: 12, // Changed from marginLeft to paddingLeft for consistent alignment
     fontSize: 16,
     color: COLORS.text,
   },
@@ -423,10 +466,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
     marginBottom: 16,
+    gap: 2, // Added small gap between tabs
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 16, // Increased from 12 to 16 for better touch targets
     alignItems: 'center',
     position: 'relative',
   },
@@ -436,6 +480,7 @@ const styles = StyleSheet.create({
   tabContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6, // Added gap between text and badge
   },
   tabText: {
     fontSize: 14,
@@ -470,66 +515,19 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  // Enhanced Header - no borders or outlines
-  header: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 30, // Adjusted to account for status bar spacer
-    left: 0,
-    right: 0,
-    zIndex: 10,
-  },
-  headerGradient: {
-    flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    paddingBottom: 30, // Extra padding at bottom
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 24,
-  },
-  welcomeText: {
-    fontSize: 32, // Larger text
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
-  },
-  subtitleText: {
-    fontSize: 18, // Larger text
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginTop: 6,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 16, // Increased spacing
-  },
   headerButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    width: 48, // Slightly larger
-    height: 48, // Slightly larger
+    width: 48,
+    height: 48,
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  pendingBadge: {
-    backgroundColor: COLORS.error,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pendingBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
   listContainer: {
     paddingHorizontal: 16,
-    paddingTop: 100, // Add space for the header
+    paddingTop: 16,
     paddingBottom: 100,
+    gap: 16, // Added gap between list items for better spacing
   },
   errorContainer: {
     alignItems: 'center',

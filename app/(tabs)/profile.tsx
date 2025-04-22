@@ -18,6 +18,7 @@ import {
 import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import { createShadow } from '../utils/platformUtils';
 import ScreenLayout from '../components/common/ScreenLayout';
+import ScreenWrapper from '../components/common/ScreenWrapper';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../AuthContext';
 import * as ImagePicker from 'expo-image-picker';
@@ -84,13 +85,6 @@ export default function ProfileScreen() {
       duration: 500,
       useNativeDriver: true,
     }).start();
-
-    // Set status bar for better visibility
-    StatusBar.setBarStyle('dark-content');
-    
-    return () => {
-      StatusBar.setBarStyle('default');
-    };
   }, []);
 
   useEffect(() => {
@@ -221,18 +215,32 @@ export default function ProfileScreen() {
     },
   ];
 
+  // Create header right content
+  const headerRightContent = (
+    <TouchableOpacity
+      style={styles.headerButton}
+      onPress={() => router.push('/screens/settings')}
+    >
+      <MaterialIcons name="settings" size={22} color="#FFF" />
+    </TouchableOpacity>
+  );
+
   if (isLoading) {
     return (
-      <ScreenLayout
+      <ScreenWrapper
         backgroundColor={COLORS.background}
-        statusBarColor={COLORS.background}
         statusBarStyle="light-content"
+        header={{
+          title: 'Profile',
+          subtitle: 'Manage your account',
+          gradientColors: [COLORS.primaryGradientStart, COLORS.primaryGradientEnd]
+        }}
       >
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading your profile...</Text>
         </View>
-      </ScreenLayout>
+      </ScreenWrapper>
     );
   }
 
@@ -243,59 +251,34 @@ export default function ProfileScreen() {
   // If profile is not loaded yet but user is authenticated, show a placeholder
   if (!profile) {
     return (
-      <ScreenLayout
+      <ScreenWrapper
         backgroundColor={COLORS.background}
-        statusBarColor={COLORS.background}
         statusBarStyle="light-content"
+        header={{
+          title: 'Profile',
+          subtitle: 'Manage your account',
+          gradientColors: [COLORS.primaryGradientStart, COLORS.primaryGradientEnd]
+        }}
       >
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.primary} />
           <Text style={styles.loadingText}>Loading your profile...</Text>
         </View>
-      </ScreenLayout>
+      </ScreenWrapper>
     );
   }
 
   return (
-    <ScreenLayout
+    <ScreenWrapper
       backgroundColor={COLORS.background}
-      statusBarColor={COLORS.background}
       statusBarStyle="light-content"
-      testID="profile-screen"
+      header={{
+        title: 'Profile',
+        subtitle: 'Manage your account',
+        rightContent: headerRightContent,
+        gradientColors: [COLORS.primaryGradientStart, COLORS.primaryGradientEnd]
+      }}
     >
-      {/* Animated Header */}
-      <Animated.View style={[
-        styles.header,
-        {
-          height: Platform.OS === 'ios' ? 130 : 110,
-        }
-      ]}>
-        <LinearGradient
-          colors={[COLORS.primaryGradientStart, COLORS.primaryGradientEnd]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.headerGradient}
-        >
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={styles.welcomeText}>Profile</Text>
-              <Text style={styles.subtitleText}>
-                Manage your account
-              </Text>
-            </View>
-            
-            <View style={styles.headerButtons}>
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={() => router.push('/screens/settings')}
-              >
-                <MaterialIcons name="settings" size={22} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </LinearGradient>
-      </Animated.View>
-      
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -383,50 +366,16 @@ export default function ProfileScreen() {
         {/* App Version */}
         <VersionInfo version="1.0.0" />
       </ScrollView>
-    </ScreenLayout>
+    </ScreenWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  // Enhanced Header - no borders or outlines
-  header: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 30, // Adjusted to account for status bar spacer
-    left: 0,
-    right: 0,
-    zIndex: 10,
-  },
-  headerGradient: {
-    flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    paddingBottom: 30, // Extra padding at bottom
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 24,
-  },
-  welcomeText: {
-    fontSize: 32, // Larger text
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
-  },
-  subtitleText: {
-    fontSize: 18, // Larger text
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginTop: 6,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 16, // Increased spacing
-  },
+  // Header Button
   headerButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    width: 48, // Slightly larger
-    height: 48, // Slightly larger
+    width: 48,
+    height: 48,
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
@@ -436,7 +385,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingTop: 100, // Add space for the header
+    paddingTop: 20,
     paddingBottom: 30,
   },
   profileCard: {

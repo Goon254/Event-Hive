@@ -73,21 +73,80 @@ export function getDefaultFontFamily(): string {
 }
 
 /**
- * Creates platform-specific safe top padding
+ * Creates platform-specific safe area padding utilities
+ * These functions should be used with the values from useSafeAreaInsets()
+ * @param insets Safe area insets from useSafeAreaInsets()
  * @param additionalPadding Additional padding to add (optional)
  * @returns Platform-specific padding style object
  */
-export function safeTopPadding(additionalPadding: number = 0) {
-  if (Platform.OS === 'ios') {
-    // For iOS, we need to account for the status bar
-    // This is a simplified version - in a real app you might use SafeAreaView or constants
-    return {
-      paddingTop: 44 + additionalPadding, // Default iOS status bar height is 44
-    };
-  } else {
-    // For Android, we use a simpler approach
-    return {
-      paddingTop: 24 + additionalPadding, // Default Android status bar height
-    };
-  }
+
+export interface SafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export function safeTopPadding(insets: SafeAreaInsets, additionalPadding: number = 0) {
+  return {
+    paddingTop: insets.top + additionalPadding,
+  };
+}
+
+export function safeBottomPadding(insets: SafeAreaInsets, additionalPadding: number = 0) {
+  return {
+    paddingBottom: insets.bottom + additionalPadding,
+  };
+}
+
+export function safeHorizontalPadding(insets: SafeAreaInsets, additionalPadding: number = 0) {
+  return {
+    paddingLeft: insets.left + additionalPadding,
+    paddingRight: insets.right + additionalPadding,
+  };
+}
+
+export function safeAreaPadding(insets: SafeAreaInsets, additionalPadding: number = 0) {
+  return {
+    paddingTop: insets.top + additionalPadding,
+    paddingRight: insets.right + additionalPadding,
+    paddingBottom: insets.bottom + additionalPadding,
+    paddingLeft: insets.left + additionalPadding,
+  };
+}
+
+/**
+ * Creates platform-specific safe area margin utilities
+ * These functions should be used with the values from useSafeAreaInsets()
+ * @param insets Safe area insets from useSafeAreaInsets()
+ * @param additionalMargin Additional margin to add (optional)
+ * @returns Platform-specific margin style object
+ */
+
+export function safeTopMargin(insets: SafeAreaInsets, additionalMargin: number = 0) {
+  return {
+    marginTop: insets.top + additionalMargin,
+  };
+}
+
+export function safeBottomMargin(insets: SafeAreaInsets, additionalMargin: number = 0) {
+  return {
+    marginBottom: insets.bottom + additionalMargin,
+  };
+}
+
+export function safeHorizontalMargin(insets: SafeAreaInsets, additionalMargin: number = 0) {
+  return {
+    marginLeft: insets.left + additionalMargin,
+    marginRight: insets.right + additionalMargin,
+  };
+}
+
+export function safeAreaMargin(insets: SafeAreaInsets, additionalMargin: number = 0) {
+  return {
+    marginTop: insets.top + additionalMargin,
+    marginRight: insets.right + additionalMargin,
+    marginBottom: insets.bottom + additionalMargin,
+    marginLeft: insets.left + additionalMargin,
+  };
 }

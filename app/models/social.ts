@@ -44,6 +44,8 @@ export interface SocialPost {
     latitude?: number;
     longitude?: number;
   };
+  likeError?: boolean; // Flag to indicate if there was an error when liking the post
+  userLikes?: string[]; // Array of user IDs who liked the post
 }
 
 // Interaction interface

@@ -1,4 +1,4 @@
-//app/(tabs)/Explore.tsx
+//app/(tabs)/explore.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -15,21 +15,64 @@ import {
   Animated,
   Easing,
   ScrollView,
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
-import { useAuth } from '../AuthContext';
-import eventService, { Event as EventType } from '../services/eventServices';
-import { createShadow, safeTopPadding } from '../utils/platformUtils';
+import { FontAwesome, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAuth } from '../AuthContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import eventService, { Event as EventType, PaginatedResponse } from '../services/eventServices';
+import { createShadow, safeTopPadding } from '../utils/platformUtils';
 import { auth } from '../../lib/firebaseConfig';
+
+// Get screen dimensions
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Types for filtering
 type FilterType = 'all' | 'upcoming' | 'ongoing' | 'completed' | 'attending';
 
+// Updated theme to match feed styling
+const THEME = {
+  // Base colors
+  background: '#F9FAFB',
+  card: '#FFFFFF',
+  
+  // Gradients
+  primaryGradientStart: '#2563EB',
+  primaryGradientEnd: '#4F46E5',
+  
+  // Text colors
+  text: '#1F2937',
+  secondaryText: '#6B7280',
+  accentText: '#4F46E5',
+  
+  // UI elements
+  border: '#E5E7EB',
+  divider: '#F3F4F6',
+  
+  // Status colors
+  upcoming: '#3B82F6',
+  ongoing: '#10B981',
+  completed: '#6B7280',
+  attending: '#8B5CF6',
+};
+
+// Firestore timestamp type guard
+type FirestoreTimestamp = {
+  seconds: number;
+  nanoseconds: number;
+  toDate: () => Date;
+};
+
+function isFirestoreTimestamp(obj: any): obj is FirestoreTimestamp {
+  return obj && typeof obj.toDate === 'function' && 'seconds' in obj;
+}
+
 export default function EventsScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
   const [events, setEvents] = useState<EventType[]>([]);
@@ -41,6 +84,21 @@ export default function EventsScreen() {
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  // Header animations with safe area insets
+  const headerHeight = Platform.OS === 'ios' ? 130 + insets.top : 110;
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [0, 200],
+    outputRange: [0, -10],
+    extrapolate: 'clamp',
+  });
+  
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 200],
+    outputRange: [1, 0.95],
+    extrapolate: 'clamp',
+  });
 
   // Fetch events from service
   const fetchEvents = async () => {
@@ -48,9 +106,28 @@ export default function EventsScreen() {
       setIsLoading(true);
       const eventsData = await eventService.getEvents();
       
-      // Set events from the events array in the response
-      setEvents(eventsData.events);
+      // Log the response structure to help with debugging
+      console.log('Events data structure:', JSON.stringify(eventsData).substring(0, 200) + '...');
       
+      // Handle different possible response structures
+      if (eventsData) {
+        if ('events' in eventsData && Array.isArray(eventsData.events)) {
+          console.log(`Fetched ${eventsData.events.length} events from 'events' property`);
+          setEvents(eventsData.events);
+        } else if ('data' in eventsData && Array.isArray(eventsData.data)) {
+          console.log(`Fetched ${eventsData.data.length} events from 'data' property`);
+          setEvents(eventsData.data);
+        } else if (Array.isArray(eventsData)) {
+          console.log(`Fetched ${eventsData.length} events from array response`);
+          setEvents(eventsData);
+        } else {
+          console.warn('Unexpected events data structure:', eventsData);
+          setEvents([]);
+        }
+      } else {
+        console.warn('No events data returned from API');
+        setEvents([]);
+      }
       // If user is logged in, fetch events they're attending
       if (user) {
         try {
@@ -69,9 +146,22 @@ export default function EventsScreen() {
           const attending = await eventService.getUserAttendingEvents(user.id);
           
           // Check if we got any events back
-          if (attending && attending.events && attending.events.length > 0) {
-            // Extract event IDs from the events array
-            setAttendingEvents(attending.events.map(event => event.id));
+          if (attending &&
+              typeof attending === 'object' &&
+              ('events' in attending || 'data' in attending)) {
+            // Handle different possible response structures
+            const eventsArray = 'events' in attending && Array.isArray(attending.events)
+              ? attending.events
+              : 'data' in attending && Array.isArray(attending.data)
+                ? attending.data
+                : [];
+                
+            if (eventsArray.length > 0) {
+              // Extract event IDs from the events array
+              setAttendingEvents(eventsArray.map((event: EventType) => event.id));
+            } else {
+              console.log('Events array is empty');
+            }
           } else {
             console.log('No attending events found or empty result returned');
           }
@@ -112,38 +202,37 @@ export default function EventsScreen() {
   };
 
   // Determine event status based on date and time
-  const getEventStatus = (event: EventType) => {
-    if (!event || !event.date) return 'unknown';
+  const getEventStatus = (event: EventType): 'upcoming' | 'ongoing' | 'completed' | 'unknown' => {
+    // Safety check for invalid event objects
+    if (!event || !event.date) {
+      return 'unknown';
+    }
     
     const now = new Date();
-    
-    // Safely handle different date formats
     let eventDate: Date;
     let eventTime: Date;
-    
+
     try {
-      // Handle event date
+      // Handle event date with type guards
       if (event.date instanceof Date) {
         eventDate = event.date;
-      } else if (event.date.toDate && typeof event.date.toDate === 'function') {
+      } else if (isFirestoreTimestamp(event.date)) {
         eventDate = event.date.toDate();
-      } else if (typeof event.date === 'object' && 'seconds' in event.date) {
-        eventDate = new Date((event.date as any).seconds * 1000);
+      } else if (typeof event.date === 'string') {
+        eventDate = new Date(event.date);
       } else {
-        eventDate = new Date(event.date as any);
+        console.warn('Unsupported date format:', event.date);
+        return 'unknown';
       }
-      
-      // Handle event time
+
+      // Handle event time with type guards
       if (event.time instanceof Date) {
         eventTime = event.time;
-      } else if (event.time && event.time.toDate && typeof event.time.toDate === 'function') {
+      } else if (isFirestoreTimestamp(event.time)) {
         eventTime = event.time.toDate();
-      } else if (event.time && typeof event.time === 'object' && 'seconds' in event.time) {
-        eventTime = new Date((event.time as any).seconds * 1000);
-      } else if (event.time) {
-        eventTime = new Date(event.time as any);
+      } else if (typeof event.time === 'string') {
+        eventTime = new Date(event.time);
       } else {
-        // Default to noon if time is not available
         eventTime = new Date(eventDate);
         eventTime.setHours(12, 0, 0, 0);
       }
@@ -174,12 +263,28 @@ export default function EventsScreen() {
     }
   };
 
+  // Get color for event status
+  const getStatusColor = (status: string): string => {
+    switch(status) {
+      case 'upcoming':
+        return THEME.upcoming;
+      case 'ongoing':
+        return THEME.ongoing;
+      case 'completed':
+        return THEME.completed;
+      default:
+        return THEME.secondaryText;
+    }
+  };
+
   // Filter events based on selected filter and search query
   useEffect(() => {
     if (!events.length) {
       setFilteredEvents([]);
       return;
     }
+    
+    console.log(`Filtering ${events.length} events with filter: ${selectedFilter}, search: "${searchQuery}"`);
     
     let result = [...events];
     
@@ -188,9 +293,11 @@ export default function EventsScreen() {
       if (selectedFilter === 'attending') {
         // Filter events the user is attending
         result = result.filter(event => attendingEvents.includes(event.id));
+        console.log(`After attending filter: ${result.length} events`);
       } else {
         // Filter by status
         result = result.filter(event => getEventStatus(event) === selectedFilter);
+        console.log(`After ${selectedFilter} filter: ${result.length} events`);
       }
     }
     
@@ -198,11 +305,11 @@ export default function EventsScreen() {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(event =>
-        event.title.toLowerCase().includes(query) ||
+        (event.title && event.title.toLowerCase().includes(query)) ||
         (event.location && event.location.toLowerCase().includes(query)) ||
-        (event.locationDetails && event.locationDetails.city && 
-         event.locationDetails.city.toLowerCase().includes(query))
+        (event.locationDetails?.city?.toLowerCase().includes(query))
       );
+      console.log(`After search filter: ${result.length} events`);
     }
     
     setFilteredEvents(result);
@@ -210,10 +317,11 @@ export default function EventsScreen() {
 
   // Initial fetch
   useEffect(() => {
+    console.log('Initiating event fetch, user ID:', user?.id);
     fetchEvents();
   }, [user?.id]);
 
-  const formatDate = (date: Date | any) => {
+  const formatDate = (date: Date | FirestoreTimestamp | string | null | undefined): string => {
     if (!date) return 'No date';
     
     try {
@@ -221,10 +329,10 @@ export default function EventsScreen() {
       
       if (date instanceof Date) {
         eventDate = date;
-      } else if (date.toDate && typeof date.toDate === 'function') {
+      } else if (isFirestoreTimestamp(date)) {
         eventDate = date.toDate();
       } else if (typeof date === 'object' && 'seconds' in date) {
-        eventDate = new Date((date as any).seconds * 1000);
+        eventDate = new Date((date as FirestoreTimestamp).seconds * 1000);
       } else {
         eventDate = new Date(date);
       }
@@ -240,7 +348,7 @@ export default function EventsScreen() {
     }
   };
 
-  const formatTime = (time: Date | any) => {
+  const formatTime = (time: Date | FirestoreTimestamp | string | null | undefined): string => {
     if (!time) return '';
     
     try {
@@ -248,10 +356,10 @@ export default function EventsScreen() {
       
       if (time instanceof Date) {
         eventTime = time;
-      } else if (time.toDate && typeof time.toDate === 'function') {
+      } else if (isFirestoreTimestamp(time)) {
         eventTime = time.toDate();
       } else if (typeof time === 'object' && 'seconds' in time) {
-        eventTime = new Date((time as any).seconds * 1000);
+        eventTime = new Date((time as FirestoreTimestamp).seconds * 1000);
       } else {
         eventTime = new Date(time);
       }
@@ -266,9 +374,20 @@ export default function EventsScreen() {
     }
   };
 
-  const renderEventCard = ({ item, index }: { item: EventType; index: number }) => {
+  interface EventCardProps {
+    item: EventType;
+    index: number;
+  }
+  
+  const EventCard = React.memo(({ item, index }: EventCardProps) => {
+    // Validate the event item has required properties
+    if (!item || !item.id) {
+      console.warn('Invalid event item:', item);
+      return null;
+    }
+    
     const status = getEventStatus(item);
-    const isAttending = attendingEvents.includes(item.id);
+    const isAttending = item.id && attendingEvents.includes(item.id);
     
     // Calculate staggered animation delay based on index
     const itemFadeAnim = useRef(new Animated.Value(0)).current;
@@ -291,7 +410,7 @@ export default function EventsScreen() {
           useNativeDriver: true,
         })
       ]).start();
-    }, []);
+    }, [index, itemFadeAnim, itemTranslateY]);
     
     return (
       <Animated.View
@@ -316,23 +435,19 @@ export default function EventsScreen() {
                 />
               </View>
             ) : (
-              <View style={[styles.eventImagePlaceholder, { backgroundColor: getColorForEvent(item.title) }]}>
-                <Text style={styles.eventImageText}>{item.title.charAt(0).toUpperCase()}</Text>
+              <View style={[styles.eventImagePlaceholder, { backgroundColor: getColorForEvent(item.title || 'E') }]}>
+                <Text style={styles.eventImageText}>{(item.title || 'E').charAt(0).toUpperCase()}</Text>
               </View>
             )}
             
             {/* Status badge */}
             <View style={[
               styles.statusBadge,
-              status === 'upcoming' && styles.upcomingBadge,
-              status === 'ongoing' && styles.ongoingBadge,
-              status === 'completed' && styles.completedBadge,
+              { backgroundColor: getStatusColor(status) + '20' } // 20% opacity
             ]}>
               <Text style={[
                 styles.statusText,
-                status === 'upcoming' && styles.upcomingText,
-                status === 'ongoing' && styles.ongoingText,
-                status === 'completed' && styles.completedText,
+                { color: getStatusColor(status) }
               ]}>
                 {status.toUpperCase()}
               </Text>
@@ -347,18 +462,18 @@ export default function EventsScreen() {
           </View>
         
           <View style={styles.eventContent}>
-            <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
+            <Text style={styles.eventTitle} numberOfLines={1}>{item.title || 'Untitled Event'}</Text>
             
             <View style={styles.eventInfo}>
               <View style={styles.infoRow}>
-                <FontAwesome name="calendar" size={14} color="#6B7280" />
+                <MaterialIcons name="event" size={16} color={THEME.secondaryText} />
                 <Text style={styles.eventDetails}>
-                  {formatDate(item.date)} • {formatTime(item.time)}
+                  {formatDate(item.date)} {item.time ? `• ${formatTime(item.time)}` : ''}
                 </Text>
               </View>
               
               <View style={styles.infoRow}>
-                <FontAwesome name="map-marker" size={14} color="#6B7280" />
+                <Ionicons name="location-outline" size={16} color={THEME.secondaryText} />
                 <Text style={styles.eventDetails} numberOfLines={1}>
                   {item.location || 'Location TBD'}
                 </Text>
@@ -366,9 +481,9 @@ export default function EventsScreen() {
               
               {item.isPaid && (
                 <View style={styles.infoRow}>
-                  <FontAwesome name="ticket" size={14} color="#6B7280" />
+                  <FontAwesome name="ticket" size={16} color={THEME.secondaryText} />
                   <Text style={styles.eventDetails}>
-                    ${item.price?.toFixed(2) || '0.00'}
+                    ${(item.price ?? 0).toFixed(2)}
                   </Text>
                 </View>
               )}
@@ -377,7 +492,7 @@ export default function EventsScreen() {
             {/* Added attendee count indicator */}
             {item.attendees && item.attendees.length > 0 && (
               <View style={styles.attendeeCount}>
-                <FontAwesome name="users" size={12} color="#6B7280" />
+                <Ionicons name="people-outline" size={14} color={THEME.secondaryText} />
                 <Text style={styles.attendeeCountText}>{item.attendees.length} attending</Text>
               </View>
             )}
@@ -385,10 +500,18 @@ export default function EventsScreen() {
         </TouchableOpacity>
       </Animated.View>
     );
+  });
+
+  const renderEventCard = ({ item, index }: { item: EventType; index: number }): React.ReactElement | null => {
+    if (!item) {
+      console.warn('Attempted to render null or undefined event item');
+      return null;
+    }
+    return <EventCard item={item} index={index} />;
   };
   
   // Function to generate consistent colors based on text
-  const getColorForEvent = (text: string) => {
+  const getColorForEvent = (text: string): string => {
     const colors = [
       '#4F46E5', '#7C3AED', '#EC4899', '#F59E0B', '#10B981', 
       '#3B82F6', '#8B5CF6', '#EF4444', '#F97316', '#06B6D4'
@@ -408,45 +531,70 @@ export default function EventsScreen() {
   if (isLoading && !isRefreshing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={THEME.primaryGradientStart} />
+        <Text style={styles.loadingText}>Loading events...</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      {/* Animated Header with gradient */}
       <Animated.View 
         style={[
           styles.header,
           {
-            opacity: fadeAnim,
-            transform: [{ translateY: translateY }]
+            transform: [{ translateY: headerTranslateY }],
+            opacity: headerOpacity,
           }
         ]}
       >
-        <Text style={styles.headerTitle}>Explore Events</Text>
+        <LinearGradient
+          colors={[THEME.primaryGradientStart, THEME.primaryGradientEnd]}
+          style={styles.headerGradient}
+        >
+          <View style={[styles.headerContent, { paddingTop: insets.top }]}>
+            <Text style={styles.headerTitle}>Explore Events</Text>
+            <View style={styles.headerButtons}>
+              <TouchableOpacity
+                style={styles.headerButton}
+                onPress={() => router.push('/screens/map')}
+              >
+                <MaterialIcons name="map" size={22} color="#FFF" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.headerButton}
+                onPress={() => router.push('/screens/notifications')}
+              >
+                <Ionicons name="notifications" size={22} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </LinearGradient>
       </Animated.View>
       
-      <Animated.View 
+      <Animated.View
         style={[
           styles.searchContainer,
           {
             opacity: fadeAnim,
-            transform: [{ translateY: translateY }]
+            transform: [{ translateY: translateY }],
+            marginTop: Platform.OS === 'ios' ? 140 : 120
           }
         ]}
       >
-        <FontAwesome name="search" size={18} color="#6B7280" style={styles.searchIcon} />
+        <Ionicons name="search" size={18} color={THEME.secondaryText} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search events by title or location"
           value={searchQuery}
           onChangeText={setSearchQuery}
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={THEME.secondaryText}
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <FontAwesome name="times-circle" size={18} color="#6B7280" />
+            <Ionicons name="close-circle" size={18} color={THEME.secondaryText} />
           </TouchableOpacity>
         )}
       </Animated.View>
@@ -467,6 +615,7 @@ export default function EventsScreen() {
               style={[
                 styles.filterButton,
                 selectedFilter === filter && styles.filterButtonActive,
+                selectedFilter === filter && { backgroundColor: getStatusColor(filter as string) + '20' }
               ]}
               onPress={() => setSelectedFilter(filter as FilterType)}
             >
@@ -474,6 +623,7 @@ export default function EventsScreen() {
                 style={[
                   styles.filterButtonText,
                   selectedFilter === filter && styles.filterButtonTextActive,
+                  selectedFilter === filter && { color: getStatusColor(filter as string) }
                 ]}
               >
                 {filter.charAt(0).toUpperCase() + filter.slice(1)}
@@ -483,16 +633,25 @@ export default function EventsScreen() {
         </ScrollView>
       </Animated.View>
 
-      <FlatList
+      {/* Create an animated version of FlatList to support native scroll events */}
+      {/* This fixes the "Components based on VirtualizedList must be wrapped with Animated.createAnimatedComponent" error */}
+      <Animated.FlatList
         data={filteredEvents}
         renderItem={renderEventCard}
-        keyExtractor={item => item.id}
+        keyExtractor={item => item.id || Math.random().toString()}
         contentContainerStyle={styles.eventList}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl 
             refreshing={isRefreshing} 
             onRefresh={handleRefresh}
-            colors={['#007AFF']} 
+            colors={[THEME.primaryGradientStart]} 
+            tintColor={THEME.accentText}
+            progressViewOffset={Platform.OS === 'ios' ? 140 : 120}
           />
         }
         ListEmptyComponent={
@@ -513,17 +672,34 @@ export default function EventsScreen() {
             {selectedFilter !== 'all' && searchQuery.length === 0 && (
               <Text style={styles.emptySubtext}>Try changing your filter</Text>
             )}
+            
+            {selectedFilter === 'all' && searchQuery.length === 0 && (
+              <TouchableOpacity
+                style={styles.refreshButton}
+                onPress={handleRefresh}
+              >
+                <Text style={styles.refreshButtonText}>Refresh</Text>
+              </TouchableOpacity>
+            )}
           </Animated.View>
         }
       />
       
       {user && (
         <TouchableOpacity
-          style={styles.createButton}
+          style={[
+            styles.createButton,
+            { bottom: Platform.OS === 'ios' ? 32 + insets.bottom : 24 }
+          ]}
           onPress={() => router.push('/screens/Create')}
           activeOpacity={0.8}
         >
-          <FontAwesome name="plus" size={20} color="#FFFFFF" />
+          <LinearGradient
+            colors={[THEME.primaryGradientStart, THEME.primaryGradientEnd]}
+            style={styles.createButtonGradient}
+          >
+            <MaterialIcons name="add" size={24} color="#FFFFFF" />
+          </LinearGradient>
         </TouchableOpacity>
       )}
     </View>
@@ -531,45 +707,83 @@ export default function EventsScreen() {
 }
 
 // Create platform-specific shadows
-const cardShadow = createShadow(3);
-const searchShadow = createShadow(2);
-const buttonShadow = createShadow(5);
+const cardShadow = createShadow(2);
+const searchShadow = createShadow(1);
+const buttonShadow = createShadow(3);
 
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: '#F9FAFB',
+    backgroundColor: THEME.background,
   },
+  // Header styling
   header: {
-    ...safeTopPadding(16), // Use platform-specific safe top padding
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    height: Platform.OS === 'ios' ? 130 : 110,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    overflow: 'hidden',
+    ...createShadow(2),
+  },
+  headerGradient: {
+    flex: 1,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingBottom: 20,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: Platform.OS === 'ios' ? '700' : 'bold', // More natural font weight per platform
-    color: '#1F2937',
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Loading state
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: THEME.background,
   },
+  loadingText: {
+    fontSize: 16,
+    color: THEME.text,
+    marginTop: 16,
+  },
+  // Search bar
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: THEME.card,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: Platform.OS === 'ios' ? 10 : 8, // Slightly different radius per platform
+    borderRadius: 20,
     marginHorizontal: 16,
-    marginTop: 16,
+    marginTop: Platform.OS === 'ios' ? 140 : 120,
     marginBottom: 12,
-    ...searchShadow, // Platform-specific shadow
+    borderWidth: 1,
+    borderColor: THEME.border,
+    ...searchShadow,
   },
   searchIcon: {
     marginRight: 10,
@@ -577,9 +791,10 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#374151',
+    color: THEME.text,
     marginRight: 8,
   },
+  // Filter buttons
   filterContainer: {
     paddingVertical: 8,
   },
@@ -591,34 +806,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: THEME.divider,
     marginRight: 8,
   },
   filterButtonActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: THEME.primaryGradientStart + '20', // 20% opacity
   },
   filterButtonText: {
     fontSize: 14,
-    color: '#4B5563',
+    color: THEME.secondaryText,
   },
   filterButtonTextActive: {
-    color: '#FFFFFF',
+    color: THEME.accentText,
     fontWeight: '600',
   },
+  // Event list
   eventList: {
     padding: 16,
+    paddingTop: 8,
     paddingBottom: 80, // Extra space for FAB
   },
+  // Event card
   eventCard: {
-    backgroundColor: '#fff',
-    borderRadius: Platform.OS === 'ios' ? 12 : 8, // Platform-specific radius
+    backgroundColor: THEME.card,
+    borderRadius: 16,
     marginBottom: 16,
-    ...cardShadow, // Platform-specific shadow
     overflow: 'hidden',
+    ...cardShadow,
   },
   eventImageContainer: {
     position: 'relative',
-    height: 120,
+    height: 160,
   },
   imageWrapper: {
     width: '100%',
@@ -654,46 +872,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    backgroundColor: '#F3F4F6',
-    // Add zIndex for iOS to ensure proper rendering of absolute positioned elements
+    backgroundColor: THEME.divider,
     ...Platform.select({
       ios: { zIndex: 1 }
     }),
   },
-  upcomingBadge: {
-    backgroundColor: '#EFF6FF',
-  },
-  ongoingBadge: {
-    backgroundColor: '#ECFDF5',
-  },
-  completedBadge: {
-    backgroundColor: '#FEF2F2',
-  },
   statusText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#4B5563',
-  },
-  upcomingText: {
-    color: '#1D4ED8',
-  },
-  ongoingText: {
-    color: '#047857',
-  },
-  completedText: {
-    color: '#B91C1C',
+    color: THEME.text,
   },
   attendingBadge: {
     position: 'absolute',
     top: 12,
     left: 12,
-    backgroundColor: '#10B981',
+    backgroundColor: THEME.attending,
     borderRadius: 20,
     width: 28,
     height: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    // Add zIndex for iOS
     ...Platform.select({
       ios: { zIndex: 1 }
     }),
@@ -703,12 +901,12 @@ const styles = StyleSheet.create({
   },
   eventTitle: {
     fontSize: 18,
-    fontWeight: Platform.OS === 'ios' ? '700' : 'bold',
+    fontWeight: '700',
     marginBottom: 10,
-    color: '#1F2937',
+    color: THEME.text,
   },
   eventInfo: {
-    gap: 6,
+    gap: 8,
   },
   infoRow: {
     flexDirection: 'row',
@@ -717,52 +915,73 @@ const styles = StyleSheet.create({
   },
   eventDetails: {
     fontSize: 14,
-    color: '#6B7280',
+    color: THEME.secondaryText,
   },
   attendeeCount: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
+    marginTop: 12,
+    backgroundColor: THEME.divider,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 16,
     alignSelf: 'flex-start',
   },
   attendeeCountText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: THEME.secondaryText,
     marginLeft: 4,
   },
+  // Empty state
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
     marginTop: 40,
+    backgroundColor: THEME.card,
+    borderRadius: 16,
+    ...createShadow(1),
   },
   emptyText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#6B7280',
+    color: THEME.text,
     marginTop: 16,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: THEME.secondaryText,
     marginTop: 8,
   },
+  refreshButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: THEME.primaryGradientStart,
+    borderRadius: 20,
+  },
+  refreshButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  // Create button (FAB)
   createButton: {
     position: 'absolute',
     right: 24,
-    bottom: Platform.OS === 'ios' ? 32 : 24, // Platform-specific positioning
-    backgroundColor: '#007AFF',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    bottom: Platform.OS === 'ios' ? 32 : 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    ...buttonShadow, // Platform-specific shadow
-    elevation: 6, // Increased elevation for better appearance on Android
+    overflow: 'hidden',
+    ...buttonShadow,
+  },
+  createButtonGradient: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

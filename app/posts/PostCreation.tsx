@@ -12,11 +12,10 @@ import {
   Modal,
   ScrollView,
   Alert,
-  ProgressBarAndroid
 } from 'react-native';
-import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { PrivacyLevel, ContentType } from '../models/social';
+import { PrivacyLevel } from '../models/social';
 import { useAuth } from '../AuthContext';
 import { useSocialPosts } from '../hooks/useSocialPosts';
 import { createShadow } from '../utils/platformUtils';
@@ -24,79 +23,80 @@ import { createShadow } from '../utils/platformUtils';
 interface PostCreationProps {
   onClose: () => void;
   onPostCreated: (newPost: any) => void;
+  paddingTop?: number;
 }
 
-export default function PostCreation({ onClose, onPostCreated }: PostCreationProps) {
+export default function PostCreation({
+  onClose,
+  onPostCreated,
+  paddingTop = Platform.OS === 'ios' ? 130 : 110
+}: PostCreationProps) {
   const { user } = useAuth();
   const [postText, setPostText] = useState('');
-  const [postImage, setPostImage] = useState<string | null>(null);
+  const [postImages, setPostImages] = useState<string[]>([]);
   const [postPrivacy, setPostPrivacy] = useState<PrivacyLevel>(PrivacyLevel.PUBLIC);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
-  
-  // Use the social posts hook for post creation and image uploads
+
   const {
     createPost,
-    isLoading,
     isUploading,
     uploadProgress
   } = useSocialPosts();
 
-  // Pick an image from gallery
   const pickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need camera roll permission to upload images.');
+        Alert.alert('Permission Denied', 'Camera roll permission is required.');
         return;
       }
-      
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
       });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setPostImage(result.assets[0].uri);
+
+      if (!result.canceled && result.assets?.length > 0) {
+        setPostImages([...postImages, result.assets[0].uri]);
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      console.error('Image selection error:', error);
     }
   };
 
-  // Take a photo with camera
   const takePhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      
       if (status !== 'granted') {
-        Alert.alert('Permission Denied', 'We need camera permission to take photos.');
+        Alert.alert('Permission Denied', 'Camera permission is required.');
         return;
       }
-      
+
       const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
       });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setPostImage(result.assets[0].uri);
+
+      if (!result.canceled && result.assets?.length > 0) {
+        setPostImages([...postImages, result.assets[0].uri]);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
+      console.error('Camera error:', error);
     }
   };
 
-  // Get privacy level text
+  const removeImage = (index: number) => {
+    const updatedImages = [...postImages];
+    updatedImages.splice(index, 1);
+    setPostImages(updatedImages);
+  };
+
   const getPrivacyText = (privacy: PrivacyLevel): string => {
     switch (privacy) {
-      case PrivacyLevel.PUBLIC:
-        return 'Public';
       case PrivacyLevel.CONNECTIONS:
         return 'Connections Only';
       case PrivacyLevel.PRIVATE:
@@ -106,11 +106,8 @@ export default function PostCreation({ onClose, onPostCreated }: PostCreationPro
     }
   };
 
-  // Get privacy icon
   const getPrivacyIcon = (privacy: PrivacyLevel): "public" | "people" | "lock" => {
     switch (privacy) {
-      case PrivacyLevel.PUBLIC:
-        return 'public';
       case PrivacyLevel.CONNECTIONS:
         return 'people';
       case PrivacyLevel.PRIVATE:
@@ -120,134 +117,34 @@ export default function PostCreation({ onClose, onPostCreated }: PostCreationPro
     }
   };
 
-  // Submit the post
   const submitPost = async () => {
-    if (!postText.trim() && !postImage) {
-      Alert.alert('Error', 'Please enter some text or add an image');
+    if (!postText.trim() && postImages.length === 0) {
+      Alert.alert('Empty Post', 'Add text or at least one image to post.');
       return;
     }
-    
+
     try {
-      // Prepare media files array
-      let mediaFiles: string[] = [];
-      if (postImage) {
-        mediaFiles.push(postImage);
-      }
-      
-      // Create the post using the hook
-      const newPost = await createPost(
-        postText.trim(),
-        mediaFiles,
-        postPrivacy
-      );
-      
-      // Notify parent and close
+      const newPost = await createPost(postText.trim(), postImages, postPrivacy);
       onPostCreated(newPost);
       onClose();
-      
     } catch (error) {
-      console.error('Error creating post:', error);
-      
-      // Show more specific error message if available
-      const errorMessage = error instanceof Error
-        ? error.message
-        : 'Failed to create post. Please try again.';
-        
-      Alert.alert('Error', errorMessage);
+      console.error('Post submission error:', error);
+      Alert.alert('Error', 'Could not submit post.');
     }
   };
 
-  // Render the privacy selector modal
-  const renderPrivacyModal = () => (
-    <Modal
-      visible={showPrivacyModal}
-      transparent={true}
-      animationType="fade"
-      onRequestClose={() => setShowPrivacyModal(false)}
-    >
-      <TouchableOpacity
-        style={styles.modalOverlay}
-        activeOpacity={1}
-        onPress={() => setShowPrivacyModal(false)}
-      >
-        <View style={styles.privacyModal}>
-          <Text style={styles.privacyModalTitle}>Who can see your post?</Text>
-          
-          <TouchableOpacity
-            style={styles.privacyOption}
-            onPress={() => {
-              setPostPrivacy(PrivacyLevel.PUBLIC);
-              setShowPrivacyModal(false);
-            }}
-          >
-            <MaterialIcons name="public" size={24} color="#4B5563" />
-            <View style={styles.privacyOptionTextContainer}>
-              <Text style={styles.privacyOptionTitle}>Public</Text>
-              <Text style={styles.privacyOptionDescription}>
-                Anyone can see this post
-              </Text>
-            </View>
-            {postPrivacy === PrivacyLevel.PUBLIC && (
-              <MaterialIcons name="check" size={24} color="#007AFF" />
-            )}
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={styles.privacyOption}
-            onPress={() => {
-              setPostPrivacy(PrivacyLevel.CONNECTIONS);
-              setShowPrivacyModal(false);
-            }}
-          >
-            <MaterialIcons name="people" size={24} color="#4B5563" />
-            <View style={styles.privacyOptionTextContainer}>
-              <Text style={styles.privacyOptionTitle}>Connections Only</Text>
-              <Text style={styles.privacyOptionDescription}>
-                Only your connections can see this post
-              </Text>
-            </View>
-            {postPrivacy === PrivacyLevel.CONNECTIONS && (
-              <MaterialIcons name="check" size={24} color="#007AFF" />
-            )}
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={styles.privacyOption}
-            onPress={() => {
-              setPostPrivacy(PrivacyLevel.PRIVATE);
-              setShowPrivacyModal(false);
-            }}
-          >
-            <MaterialIcons name="lock" size={24} color="#4B5563" />
-            <View style={styles.privacyOptionTextContainer}>
-              <Text style={styles.privacyOptionTitle}>Private</Text>
-              <Text style={styles.privacyOptionDescription}>
-                Only you can see this post
-              </Text>
-            </View>
-            {postPrivacy === PrivacyLevel.PRIVATE && (
-              <MaterialIcons name="check" size={24} color="#007AFF" />
-            )}
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-    </Modal>
-  );
-
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop }]}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose}>
           <MaterialIcons name="close" size={24} color="#6B7280" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Create Post</Text>
         <TouchableOpacity
-          style={[
-            styles.postButton,
-            (!postText.trim() && !postImage) && styles.postButtonDisabled
-          ]}
+          style={[styles.postButton, (!postText.trim() && postImages.length === 0) && styles.postButtonDisabled]}
           onPress={submitPost}
-          disabled={isUploading || (!postText.trim() && !postImage)}
+          disabled={isUploading || (!postText.trim() && postImages.length === 0)}
         >
           {isUploading ? (
             <View style={styles.uploadingContainer}>
@@ -259,19 +156,17 @@ export default function PostCreation({ onClose, onPostCreated }: PostCreationPro
           )}
         </TouchableOpacity>
       </View>
-      
+
+      {/* Content */}
       <ScrollView style={styles.content}>
         <View style={styles.userInfo}>
           {user?.avatar ? (
             <Image source={{ uri: user.avatar }} style={styles.avatar} />
           ) : (
             <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarInitial}>
-                {user?.name?.charAt(0).toUpperCase() || 'A'}
-              </Text>
+              <Text style={styles.avatarInitial}>{user?.name?.charAt(0).toUpperCase() || 'U'}</Text>
             </View>
           )}
-          
           <View style={styles.userNameContainer}>
             <Text style={styles.userName}>{user?.name || 'Anonymous'}</Text>
             <TouchableOpacity
@@ -284,7 +179,7 @@ export default function PostCreation({ onClose, onPostCreated }: PostCreationPro
             </TouchableOpacity>
           </View>
         </View>
-        
+
         <TextInput
           style={styles.postInput}
           placeholder="What's on your mind?"
@@ -293,47 +188,80 @@ export default function PostCreation({ onClose, onPostCreated }: PostCreationPro
           onChangeText={setPostText}
           autoFocus
         />
-        
-        {postImage && (
-          <View style={styles.imagePreviewContainer}>
-            <Image source={{ uri: postImage }} style={styles.imagePreview} />
-            <TouchableOpacity
-              style={styles.removeImageButton}
-              onPress={() => setPostImage(null)}
-            >
-              <MaterialIcons name="close" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+
+        {postImages.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.imagesScrollView}
+          >
+            {postImages.map((image, index) => (
+              <View key={index} style={styles.imagePreviewContainer}>
+                <Image source={{ uri: image }} style={styles.imagePreview} />
+                <TouchableOpacity
+                  style={styles.removeImageButton}
+                  onPress={() => removeImage(index)}
+                >
+                  <MaterialIcons name="close" size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </ScrollView>
         )}
       </ScrollView>
-      
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>Add to your post</Text>
-        <View style={styles.mediaOptions}>
-          <TouchableOpacity style={styles.mediaButton} onPress={pickImage}>
-            <MaterialIcons name="photo-library" size={24} color="#10B981" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.mediaButton} onPress={takePhoto}>
-            <MaterialIcons name="photo-camera" size={24} color="#3B82F6" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.mediaButton}>
-            <MaterialIcons name="videocam" size={24} color="#F59E0B" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.mediaButton}>
-            <MaterialIcons name="event" size={24} color="#EC4899" />
-          </TouchableOpacity>
-        </View>
+
+      {/* Media Selection Buttons */}
+      <View style={styles.mediaSelectionContainer}>
+        <TouchableOpacity style={styles.mediaButton} onPress={pickImage}>
+          <MaterialIcons name="photo-library" size={24} color="#4B5563" />
+          <Text style={styles.mediaButtonText}>Gallery</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.mediaButton} onPress={takePhoto}>
+          <MaterialIcons name="camera-alt" size={24} color="#4B5563" />
+          <Text style={styles.mediaButtonText}>Camera</Text>
+        </TouchableOpacity>
       </View>
-      
-      {renderPrivacyModal()}
+
+      {/* Privacy Modal */}
+      <Modal visible={showPrivacyModal} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowPrivacyModal(false)}
+        >
+          <View style={styles.privacyModal}>
+            {[
+              { level: PrivacyLevel.PUBLIC, icon: 'public', desc: 'Anyone can see this post' },
+              { level: PrivacyLevel.CONNECTIONS, icon: 'people', desc: 'Only your connections can see this post' },
+              { level: PrivacyLevel.PRIVATE, icon: 'lock', desc: 'Only you can see this post' },
+            ].map(({ level, icon, desc }) => (
+              <TouchableOpacity
+                key={level}
+                style={styles.privacyOption}
+                onPress={() => {
+                  setPostPrivacy(level);
+                  setShowPrivacyModal(false);
+                }}
+              >
+                <MaterialIcons name={icon as any} size={24} color="#4B5563" />
+                <View style={styles.privacyOptionTextContainer}>
+                  <Text style={styles.privacyOptionTitle}>{getPrivacyText(level)}</Text>
+                  <Text style={styles.privacyOptionDescription}>{desc}</Text>
+                </View>
+                {postPrivacy === level && (
+                  <MaterialIcons name="check" size={24} color="#007AFF" />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
-// Create platform-specific shadows
+// 💅 STYLES
 const cardShadow = createShadow(2);
 
 const styles = StyleSheet.create({
@@ -348,14 +276,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
-    ...Platform.select({
-      ios: {
-        paddingTop: 60
-      },
-      android: {
-        paddingTop: 16
-      }
-    })
   },
   headerTitle: {
     fontSize: 18,
@@ -433,12 +353,13 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   imagePreviewContainer: {
-    marginTop: 16,
     position: 'relative',
+    marginRight: 12,
+    width: 200,
   },
   imagePreview: {
-    width: '100%',
-    height: 300,
+    width: 200,
+    height: 200,
     borderRadius: 12,
   },
   removeImageButton: {
@@ -452,31 +373,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  footer: {
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#4B5563',
-  },
-  mediaOptions: {
-    flexDirection: 'row',
-  },
-  mediaButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -489,13 +385,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     ...cardShadow,
-  },
-  privacyModalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 16,
-    textAlign: 'center',
   },
   privacyOption: {
     flexDirection: 'row',
@@ -527,5 +416,32 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  mediaSelectionContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  mediaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  mediaButtonText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#4B5563',
+    fontWeight: '500',
+  },
+  imagesScrollView: {
+    marginTop: 16,
+    flexDirection: 'row',
   },
 });

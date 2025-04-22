@@ -1,6 +1,7 @@
 // app/screens/QRCodeScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Share, ActivityIndicator, StatusBar, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Share, ActivityIndicator, StatusBar, Platform } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
@@ -14,6 +15,7 @@ export default function QRCodeScreen() {
   const { eventId } = useLocalSearchParams();
   const router = useRouter();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [event, setEvent] = useState<EventType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [qrCodeData, setQrCodeData] = useState<{ data: QRCodeData; uri: string } | null>(null);
@@ -76,7 +78,7 @@ export default function QRCodeScreen() {
   // Using the standardized dateUtils functions instead of local implementations
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.container}>
         <View style={styles.header}>
@@ -155,6 +157,9 @@ export default function QRCodeScreen() {
           </View>
         )}
       </View>
+      
+      {/* Add bottom safe area padding */}
+      <View style={{ height: insets.bottom, backgroundColor: '#FFFFFF' }} />
     </SafeAreaView>
   );
 }

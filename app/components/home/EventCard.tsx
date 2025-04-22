@@ -1,346 +1,331 @@
-import React, { memo } from 'react';
+// components/home/EventCard.tsx
+import React from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   TouchableOpacity,
-  Image,
-  Animated,
   Dimensions,
-  Platform,
-  ImageBackground
 } from 'react-native';
-import { router } from 'expo-router';
-import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Event } from '../../services/eventServices';
-import { useColorScheme } from '@/components/useColorScheme';
-import { formatDate, formatTime } from '../../utils/dateUtils';
-import { getEventColor, createShadow } from './utils/uiHelpers';
-import { useFeatureFlags } from '../../utils/featureFlags';
+import { Ionicons, MaterialIcons, FontAwesome } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import { createShadow } from '../../utils/platformUtils';
+import { format } from 'date-fns';
 
-interface EventCardProps {
-  item: Event;
-  index: number;
-  isAttending?: boolean;
-  status: string;
-  fadeValue?: Animated.Value;
-  translateValue?: Animated.Value;
-  fullWidth?: boolean;
+const { width } = Dimensions.get('window');
+const CARD_WIDTH = width * 0.75;
+
+// Import the Event type from event services
+import { Event as EventType } from '../../services/eventServices';
+
+// Define interfaces for type safety
+interface EventItem {
+  id: string;
+  title: string;
+  date?: string | Date;
+  location?: string;
+  imageUrl?: string;
+  category?: string;
+  attendees?: string[] | number;
 }
 
-/**
- * Enhanced EventCard component - displays an event with prominent image
- * Optimized with React.memo to prevent unnecessary re-renders
- */
-const EventCard = ({
-  item,
-  index,
-  isAttending = false,
-  status,
-  fadeValue = new Animated.Value(1),
-  translateValue = new Animated.Value(0),
-  fullWidth = false
-}: EventCardProps) => {
-  const colorScheme = useColorScheme();
-  const { isEnabled } = useFeatureFlags();
-  const showPrivacyControls = isEnabled('NEW_EVENT_PRIVACY');
+// This should match the FilterType from useEventData
+type FilterType = 'all' | 'upcoming' | 'ongoing' | 'completed';
+
+interface EventStatus {
+  label: string;
+  color?: string;
+}
+
+interface EventTheme {
+  primaryGradientStart: string;
+  secondaryText: string;
+  accentText: string;
+  text?: string;
+  card?: string;
+}
+
+interface EventCardProps {
+  event: EventType;
+  theme: EventTheme;
+  onPress?: () => void;
+  style?: any;
+  animationDelay?: number;
+  getEventStatus?: (event: EventType) => FilterType | EventStatus;
+  isUserAttending?: (eventId: string) => boolean;
+}
+
+// Updated EventCard to match feed styling
+const EventCard: React.FC<EventCardProps> = ({
+  event,
+  theme,
+  onPress,
+  style,
+  animationDelay,
+  getEventStatus,
+  isUserAttending
+}) => {
+  // Determine if user is attending this event
+  const isAttending = isUserAttending ? isUserAttending(event.id) : false;
   
-  // Calculate responsive card width
-  const { width: screenWidth } = Dimensions.get('window');
-  const cardWidth = fullWidth ? (screenWidth - 32) : (screenWidth * 0.8);
-  
-  // Generate status colors based on status
-  const getStatusColor = () => {
-    switch(status.toLowerCase()) {
-      case 'upcoming':
-        return '#3B82F6'; // Blue
-      case 'ongoing': 
-        return '#10B981'; // Green
-      case 'completed':
-        return '#6B7280'; // Gray
-      default:
-        return '#8B5CF6'; // Purple
+  // Get event status if function is provided and convert to EventStatus if needed
+  const getStatus = (): EventStatus | undefined => {
+    if (!getEventStatus) return undefined;
+    
+    const result = getEventStatus(event);
+    
+    // If result is already an EventStatus object
+    if (typeof result === 'object' && result !== null && 'label' in result) {
+      return result as EventStatus;
     }
+    
+    // If result is a FilterType string, convert it to EventStatus
+    if (typeof result === 'string') {
+      const statusMap: Record<FilterType, EventStatus> = {
+        'all': { label: 'All', color: '#6B7280' },
+        'upcoming': { label: 'Upcoming', color: '#3B82F6' },
+        'ongoing': { label: 'Live Now', color: '#10B981' },
+        'completed': { label: 'Completed', color: '#6B7280' }
+      };
+      return statusMap[result as FilterType] || { label: result, color: theme.accentText };
+    }
+    
+    return undefined;
   };
   
-  // Render badge for privacy level
-  const renderPrivacyIndicator = () => {
-    if (!showPrivacyControls) return null;
-    
-    // Map privacy levels to icons with proper typing for FontAwesome
-    const privacyIcons: Record<string, { icon: keyof typeof FontAwesome.glyphMap, label: string }> = {
-      'private': { icon: 'lock', label: 'Private' },
-      'connections': { icon: 'users', label: 'Connections' },
-      'public': { icon: 'globe', label: 'Public' }
+  const status = getStatus();
+  // Format date for display
+  const formatEventDate = (date?: string | Date): string => {
+    if (!date) return 'TBD';
+    const eventDate = new Date(date);
+    return format(eventDate, 'EEE, MMM d • h:mm a');
+  };
+
+  // Generate category color
+  const getCategoryColor = (category?: string): string => {
+    const colors: Record<string, string> = {
+      music: '#3B82F6',
+      sports: '#10B981',
+      art: '#8B5CF6',
+      food: '#F59E0B',
+      technology: '#6366F1',
+      community: '#EC4899',
+      default: theme.primaryGradientStart
     };
     
-    const privacy = item.privacyLevel || 'public';
-    const { icon, label } = privacyIcons[privacy];
-    
-    return (
-      <View style={styles.privacyBadge}>
-        <FontAwesome name={icon} size={12} color="#FFF" />
-        <Text style={styles.badgeText}>{label}</Text>
-      </View>
-    );
+    if (!category) return colors.default;
+    const lowercaseCategory = category.toLowerCase();
+    return colors[lowercaseCategory] || colors.default;
   };
-  
-  // Determine if event is paid
-  const isPaid = item.isPaid && (item.price || 0) > 0;
 
   return (
-    <Animated.View
-      style={{
-        opacity: fadeValue,
-        transform: [{ translateY: translateValue }],
-        width: cardWidth,
-        marginHorizontal: fullWidth ? 16 : 8
-      }}
+    <TouchableOpacity
+      style={[
+        styles.card,
+        {
+          backgroundColor: theme.card || '#FFFFFF'
+        },
+        style
+      ]}
+      activeOpacity={0.9}
+      onPress={onPress || (() => router.push({
+        pathname: '/screens/eventdetails',
+        params: { id: event.id.toString() }
+      }))}
     >
-      <TouchableOpacity
-        style={[styles.eventCard, { width: cardWidth }]}
-        onPress={() => router.push(`/screens/eventdetails?id=${item.id}`)}
-        activeOpacity={0.8}
-        accessible={true}
-        accessibilityLabel={`${item.title} event on ${formatDate(item.date)}`}
-        accessibilityRole="button"
-        accessibilityHint="Opens event details"
-        testID={`event-card-${item.id}`}
-      >
-        {/* Background Image */}
-        <ImageBackground
-          source={item.imageUrl ? { uri: item.imageUrl } : undefined}
-          style={[styles.imageBackground, { 
-            backgroundColor: item.imageUrl ? undefined : getEventColor(item.title) 
-          }]}
-          imageStyle={styles.imageStyle}
-        >
-          {/* Display letter if no image */}
-          {!item.imageUrl && (
-            <Text style={styles.placeholderText}>
-              {item.title.charAt(0).toUpperCase()}
+      {/* Event Image with Gradient Overlay */}
+      <View style={styles.imageContainer}>
+        {event.imageUrl ? (
+          <Image
+            source={{ uri: event.imageUrl }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.imagePlaceholder, { backgroundColor: getCategoryColor(event.category) }]}>
+            <FontAwesome name="calendar" size={36} color="#FFFFFF" />
+          </View>
+        )}
+        
+        {/* Status Badge */}
+        {status && (
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: status.color || theme.accentText }
+          ]}>
+            <Text style={styles.statusText}>{status.label}</Text>
+          </View>
+        )}
+        
+        {/* Attendance Badge */}
+        {isAttending && (
+          <View style={styles.attendingBadge}>
+            <MaterialIcons name="check-circle" size={16} color="#FFFFFF" />
+            <Text style={styles.attendingText}>Attending</Text>
+          </View>
+        )}
+      </View>
+      
+      {/* Event Details */}
+      <View style={styles.detailsContainer}>
+        {/* Date and Time */}
+        <View style={styles.dateContainer}>
+          <MaterialIcons name="event" size={16} color={theme.secondaryText} />
+          <Text style={[styles.dateText, { color: theme.secondaryText }]}>
+            {formatEventDate(event.date)}
+          </Text>
+        </View>
+        
+        {/* Event Title */}
+        <Text style={[styles.title, { color: theme.text || '#1F2937' }]} numberOfLines={2}>
+          {event.title}
+        </Text>
+        
+        {/* Location */}
+        {event.location && (
+          <View style={styles.locationContainer}>
+            <Ionicons name="location-outline" size={16} color={theme.secondaryText} />
+            <Text style={[styles.locationText, { color: theme.secondaryText }]} numberOfLines={1}>
+              {event.location}
             </Text>
+          </View>
+        )}
+        
+        {/* Category and Attendees */}
+        <View style={styles.bottomRow}>
+          {event.category && (
+            <View style={[
+              styles.categoryTag,
+              { backgroundColor: getCategoryColor(event.category) + '20' } // Adding transparency
+            ]}>
+              <Text style={[
+                styles.categoryText,
+                { color: getCategoryColor(event.category) }
+              ]}>
+                {event.category}
+              </Text>
+            </View>
           )}
           
-          {/* Overlay gradient for better text readability */}
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.85)']}
-            style={styles.gradient}
-          >
-            {/* Top badges and status */}
-            <View style={styles.topBadgesContainer}>
-              {/* Status badge */}
-              <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
-                <Text style={styles.statusText}>{status.toUpperCase()}</Text>
-              </View>
-              
-              {/* Price badge */}
-              {isPaid && (
-                <View style={styles.priceBadge}>
-                  <FontAwesome name="ticket" size={12} color="#FFF" />
-                  <Text style={styles.badgeText}>
-                    ${item.price?.toFixed(2)}
-                  </Text>
-                </View>
-              )}
-              
-              {/* Attending badge */}
-              {isAttending && (
-                <View style={styles.attendingBadge}>
-                  <MaterialIcons name="check-circle" size={16} color="#FFF" />
-                </View>
-              )}
-            </View>
-            
-            {/* Event info at bottom */}
-            <View style={styles.eventInfo}>
-              {/* Title */}
-              <Text style={styles.title} numberOfLines={2}>
-                {item.title}
+          {event.attendees !== undefined && (
+            <View style={styles.attendeesContainer}>
+              <MaterialIcons name="people" size={16} color={theme.secondaryText} />
+              <Text style={[styles.attendeesText, { color: theme.secondaryText }]}>
+                {Array.isArray(event.attendees) ? event.attendees.length : event.attendees}
               </Text>
-              
-              {/* Details row */}
-              <View style={styles.detailsContainer}>
-                <View style={styles.detailItem}>
-                  <FontAwesome name="calendar" size={14} color="#FFF" />
-                  <Text style={styles.detailText}>
-                    {formatDate(item.date)}
-                    {item.time && ` • ${formatTime(item.time)}`}
-                  </Text>
-                </View>
-                
-                <View style={styles.detailItem}>
-                  <FontAwesome name="map-marker" size={14} color="#FFF" />
-                  <Text style={styles.detailText} numberOfLines={1}>
-                    {item.location || 'Location TBD'}
-                  </Text>
-                </View>
-              </View>
-              
-              {/* Bottom badges - privacy, etc */}
-              <View style={styles.bottomBadgesContainer}>
-                {renderPrivacyIndicator()}
-                
-                {/* Publishing status badge */}
-                {showPrivacyControls && item.publishStatus && item.publishStatus !== 'published' && (
-                  <View style={[
-                    styles.publishBadge, 
-                    { backgroundColor: item.publishStatus === 'draft' ? '#6B7280' : '#8B5CF6' }
-                  ]}>
-                    <MaterialIcons 
-                      name={item.publishStatus === 'draft' ? 'edit' : 'schedule'} 
-                      size={12} 
-                      color="#FFF" 
-                    />
-                    <Text style={styles.badgeText}>
-                      {item.publishStatus === 'draft' ? 'Draft' : 'Scheduled'}
-                    </Text>
-                  </View>
-                )}
-              </View>
             </View>
-          </LinearGradient>
-        </ImageBackground>
-      </TouchableOpacity>
-    </Animated.View>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
   );
 };
 
-// Platform-specific shadows
-const cardShadow = createShadow(2);
-
 const styles = StyleSheet.create({
-  eventCard: {
-    height: 230,
+  card: {
+    width: CARD_WIDTH,
+    backgroundColor: '#FFFFFF', // This could be theme.card if available
     borderRadius: 16,
     overflow: 'hidden',
-    ...cardShadow,
-    elevation: 8,
-    marginVertical: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.5,
+    marginRight: 16,
+    ...createShadow(2),
   },
-  imageBackground: {
+  imageContainer: {
+    width: '100%',
+    height: 150,
+    position: 'relative',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  imagePlaceholder: {
     width: '100%',
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  imageStyle: {
-    borderRadius: 16,
-    resizeMode: 'cover',
-  },
-  placeholderText: {
-    fontSize: 80,
-    fontWeight: 'bold',
-    color: 'rgba(255, 255, 255, 0.9)',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
-  },
-  gradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    top: 0,
-    borderRadius: 16,
-    justifyContent: 'space-between',
-    padding: 12,
-  },
-  topBadgesContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
   statusBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: 12,
-    marginRight: 8,
   },
   statusText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  priceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 8,
+    fontWeight: 'bold',
   },
   attendingBadge: {
-    backgroundColor: '#10B981',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.9)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  eventInfo: {
-    width: '100%',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  attendingText: {
     color: '#FFFFFF',
-    marginBottom: 10,
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 4,
   },
   detailsContainer: {
-    marginBottom: 10,
+    padding: 16,
   },
-  detailItem: {
+  dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  detailText: {
-    color: '#FFFFFF',
-    marginLeft: 8,
+  dateText: {
+    fontSize: 13,
+    marginLeft: 4,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  locationText: {
     fontSize: 14,
-    fontWeight: '500',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0.5, height: 0.5 },
-    textShadowRadius: 1,
+    marginLeft: 4,
+    flex: 1,
   },
-  bottomBadgesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  privacyBadge: {
+  bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 8,
+    justifyContent: 'space-between',
   },
-  publishBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
+  categoryTag: {
+    paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  badgeText: {
+  categoryText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#FFFFFF',
+  },
+  attendeesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  attendeesText: {
+    fontSize: 13,
     marginLeft: 4,
   },
 });
 
-// Use React.memo to prevent unnecessary re-renders
-export default memo(EventCard);
+export default EventCard;

@@ -1,27 +1,29 @@
-import React, { memo } from 'react';
+import React, { useState, useRef, memo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
-  ScrollView,
   FlatList,
-  Image,
-  ImageBackground,
+  TextInput,
   Modal,
   Animated,
   Dimensions,
-  Platform
+  Platform,
+  ScrollView,
 } from 'react-native';
-import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { FontAwesome, MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { Event } from '../../services/eventServices';
 import { FilterType } from './hooks/useEventData';
 import { EVENT_CATEGORIES } from './CategoryButtons';
-import { getEventColor, getStatusColor, createShadow } from './utils/uiHelpers';
+import { getEventColor, getStatusColor } from './utils/uiHelpers';
 import { formatDate } from '../../utils/dateUtils';
+
+// Get screen dimensions
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface ExploreModalProps {
   visible: boolean;
@@ -37,11 +39,11 @@ interface ExploreModalProps {
   onCategoryChange: (category: string | null) => void;
   translateY: Animated.Value;
   loading: boolean;
+  futuristicTheme: any;
 }
 
 /**
- * ExploreModal component - visually enhanced version
- * Displays a modal for exploring and filtering events with a modern image-focused design
+ * Enhanced Explore Modal with futuristic glass morphism design
  */
 const ExploreModal = ({
   visible,
@@ -56,540 +58,731 @@ const ExploreModal = ({
   onFilterChange,
   onCategoryChange,
   translateY,
-  loading
+  loading,
+  futuristicTheme
 }: ExploreModalProps) => {
-  if (!visible) return null;
+  // Animation values
+  const filterScrollAnim = useRef(new Animated.Value(0)).current;
+  const searchAnim = useRef(new Animated.Value(0)).current;
   
-  // Generate status colors based on status
-  const getStatusBgColor = (status: string) => {
-    switch(status.toLowerCase()) {
-      case 'upcoming':
-        return '#3B82F6'; // Blue
-      case 'ongoing': 
-        return '#10B981'; // Green
-      case 'completed':
-        return '#6B7280'; // Gray
-      default:
-        return '#8B5CF6'; // Purple
+  // Start animations when modal becomes visible
+  React.useEffect(() => {
+    if (visible) {
+      Animated.timing(searchAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+        delay: 300,
+      }).start();
+      
+      Animated.timing(filterScrollAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+        delay: 500,
+      }).start();
+    } else {
+      // Reset animations when modal is hidden
+      searchAnim.setValue(0);
+      filterScrollAnim.setValue(0);
     }
+  }, [visible, searchAnim, filterScrollAnim]);
+  
+  // Filter types
+  const filters: { id: FilterType | string; label: string }[] = [
+    { id: 'all', label: 'All Events' },
+    { id: 'upcoming', label: 'Upcoming' },
+    { id: 'ongoing', label: 'Ongoing' },
+    { id: 'completed', label: 'Completed' },
+  ];
+  
+  // Animation interpolations
+  const modalScale = translateY.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.95],
+  });
+  
+  const modalOpacity = translateY.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+  
+  const searchTranslateX = searchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-20, 0],
+  });
+  
+  const searchOpacity = searchAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  
+  const filterScrollTranslateY = filterScrollAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [20, 0],
+  });
+  
+  const filterScrollOpacity = filterScrollAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  
+  // Render an event item
+  const renderEventItem = ({ item, index }: { item: Event; index: number }) => {
+    const isAttending = false; // This would be determined by context in a real app
+    const status = getEventStatus(item);
+    
+    return (
+      <Animated.View
+        style={{
+          opacity: visible ? 1 : 0,
+          transform: [
+            { 
+              translateY: visible ? 
+                new Animated.Value(0) : 
+                new Animated.Value(20 * (index % 3))
+            }
+          ],
+        }}
+      >
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => {
+            onClose();
+            router.push(`/screens/eventdetails?id=${item.id}`);
+          }}
+          style={styles.eventItem}
+          accessible={true}
+          accessibilityLabel={`${item.title} event on ${formatDate(item.date)}`}
+          accessibilityRole="button"
+          accessibilityHint="Opens event details"
+        >
+          <BlurView intensity={30} tint="dark" style={styles.eventItemBlur}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.02)']}
+              style={styles.eventItemGradient}
+            >
+              {/* Event Category Tag */}
+              <View style={[
+                styles.categoryTag,
+                { backgroundColor: getCategoryColor(item.category || '') }
+              ]}>
+                <Text style={styles.categoryTagText}>
+                  {item.category || 'Event'}
+                </Text>
+              </View>
+              
+              {/* Event Title */}
+              <Text style={styles.eventTitle}>{item.title}</Text>
+              
+              {/* Event Details */}
+              <View style={styles.eventDetails}>
+                <View style={styles.detailRow}>
+                  <MaterialIcons name="calendar-today" size={14} color={futuristicTheme.textSecondary} />
+                  <Text style={styles.detailText}>{formatDate(item.date)}</Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <MaterialIcons name="location-on" size={14} color={futuristicTheme.textSecondary} />
+                  <Text style={styles.detailText}>{item.location || 'Location TBD'}</Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <FontAwesome name="user" size={14} color={futuristicTheme.textSecondary} />
+                  <Text style={styles.detailText}>
+                    {`${item.attendees?.length || 0} attending`}
+                  </Text>
+                </View>
+              </View>
+              
+              {/* Status Badge */}
+              <View style={[
+                styles.statusBadge,
+                { 
+                  backgroundColor: 
+                    status === 'upcoming' ? 'rgba(16, 185, 129, 0.2)' :
+                    status === 'ongoing' ? 'rgba(251, 191, 36, 0.2)' :
+                                          'rgba(255, 255, 255, 0.1)'
+                }
+              ]}>
+                <View style={[
+                  styles.statusDot,
+                  {
+                    backgroundColor:
+                      status === 'upcoming' ? futuristicTheme.success :
+                      status === 'ongoing' ? futuristicTheme.warning :
+                                            'rgba(255, 255, 255, 0.5)'
+                  }
+                ]} />
+                <Text style={[
+                  styles.statusText,
+                  {
+                    color:
+                      status === 'upcoming' ? futuristicTheme.success :
+                      status === 'ongoing' ? futuristicTheme.warning :
+                                            'rgba(255, 255, 255, 0.5)'
+                  }
+                ]}>
+                  {status === 'upcoming' ? 'Upcoming' : 
+                   status === 'ongoing' ? 'Live Now' : 'Past'}
+                </Text>
+              </View>
+            </LinearGradient>
+          </BlurView>
+        </TouchableOpacity>
+      </Animated.View>
+    );
   };
+  
+  // Helper function to get color for category
+  const getCategoryColor = (category: string): string => {
+    const categoryColors: Record<string, string> = {
+      'Music': '#F87171',
+      'Sports': '#10B981',
+      'Business': '#4F46E5',
+      'Tech': '#0EA5E9',
+      'Food': '#FB923C',
+      'Health': '#EC4899',
+      'Arts': '#8B5CF6',
+    };
+    
+    return categoryColors[category] || '#6366F1';
+  };
+  
+  if (!visible) return null;
   
   return (
     <Modal
       visible={visible}
-      animationType="none"
-      transparent={true}
+      transparent
+      animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
-        <Animated.View 
-          style={[
-            styles.exploreModalContainer,
-            {
-              transform: [{ translateY }]
-            }
-          ]}
+      <Animated.View
+        style={[
+          styles.modalContainer,
+          {
+            opacity: modalOpacity,
+            transform: [{ scale: modalScale }],
+          }
+        ]}
+      >
+        <BlurView
+          intensity={90}
+          tint="dark"
+          style={styles.blurContainer}
         >
-          {/* Modal Header */}
-          <View style={styles.exploreHeader}>
-            <TouchableOpacity 
-              onPress={onClose}
+          {/* Modal Header with Close Button */}
+          <View style={styles.modalHeader}>
+            <TouchableOpacity
               style={styles.closeButton}
+              onPress={onClose}
               accessible={true}
               accessibilityLabel="Close explore modal"
               accessibilityRole="button"
             >
-              <FontAwesome name="times" size={24} color="#FFFFFF" />
+              <MaterialIcons name="close" size={24} color={futuristicTheme.textPrimary} />
             </TouchableOpacity>
-            <Text style={styles.exploreTitle}>Explore Events</Text>
-            <TouchableOpacity 
-              onPress={onReset}
+            
+            <Text style={styles.modalTitle}>Discover Events</Text>
+            
+            <TouchableOpacity
               style={styles.resetButton}
+              onPress={onReset}
               accessible={true}
               accessibilityLabel="Reset filters"
               accessibilityRole="button"
               accessibilityHint="Clear all search filters"
             >
+              <MaterialIcons name="refresh" size={22} color={futuristicTheme.textAccent} />
               <Text style={styles.resetText}>Reset</Text>
             </TouchableOpacity>
           </View>
           
-          {/* Search Section */}
-          <View style={styles.searchSection}>
-            {/* Search Bar */}
-            <View style={styles.exploreSearchContainer}>
-              <FontAwesome name="search" size={18} color="#6B7280" style={styles.searchIcon} />
+          {/* Search Input with Animation */}
+          <Animated.View
+            style={[
+              styles.searchContainer,
+              {
+                opacity: searchOpacity,
+                transform: [{ translateX: searchTranslateX }],
+              }
+            ]}
+          >
+            <LinearGradient
+              colors={['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
+              style={styles.searchGradient}
+            >
+              <MaterialIcons name="search" size={22} color={futuristicTheme.textSecondary} />
               <TextInput
-                style={styles.exploreSearchInput}
-                placeholder="Search events by title or location"
+                style={styles.searchInput}
+                placeholder="Search events..."
+                placeholderTextColor={futuristicTheme.textSecondary}
                 value={searchQuery}
                 onChangeText={onSearchChange}
-                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                autoCorrect={false}
                 accessible={true}
                 accessibilityLabel="Search events"
                 accessibilityHint="Enter text to search events by title or location"
               />
-              {searchQuery.length > 0 && (
+              {searchQuery ? (
                 <TouchableOpacity 
                   onPress={() => onSearchChange('')}
                   accessible={true}
                   accessibilityLabel="Clear search"
                   accessibilityRole="button"
                 >
-                  <FontAwesome name="times-circle" size={18} color="#6B7280" />
+                  <MaterialIcons name="clear" size={18} color={futuristicTheme.textSecondary} />
                 </TouchableOpacity>
-              )}
-            </View>
+              ) : null}
+            </LinearGradient>
+          </Animated.View>
           
-            {/* Filter Tabs */}
-            <View style={styles.exploreFilterContainer}>
-              <Text style={styles.filterSectionTitle}>Status</Text>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                accessible={true}
-                accessibilityLabel="Event status filters"
-                accessibilityHint="Scroll horizontally to view all filter options"
-              >
-                {['all', 'upcoming', 'ongoing', 'completed'].map(filter => (
-                  <TouchableOpacity
-                    key={filter}
+          {/* Filter Tabs with Animation */}
+          <Animated.View
+            style={[
+              styles.filtersContainer,
+              {
+                opacity: filterScrollOpacity,
+                transform: [{ translateY: filterScrollTranslateY }],
+              }
+            ]}
+          >
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filtersScrollContent}
+              accessible={true}
+              accessibilityLabel="Event status filters"
+              accessibilityHint="Scroll horizontally to view all filter options"
+            >
+              {filters.map((filter) => (
+                <TouchableOpacity
+                  key={filter.id}
+                  style={[
+                    styles.filterButton,
+                    selectedFilter === filter.id && styles.filterButtonActive
+                  ]}
+                  onPress={() => onFilterChange(filter.id as FilterType)}
+                  accessible={true}
+                  accessibilityLabel={`${filter.label} filter`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: selectedFilter === filter.id }}
+                >
+                  <Text
                     style={[
-                      styles.exploreFilterButton,
-                      selectedFilter === filter && styles.exploreFilterButtonActive,
-                      selectedFilter === filter && {
-                        backgroundColor: filter === 'upcoming' ? '#3B82F6' : 
-                                        filter === 'ongoing' ? '#10B981' : 
-                                        filter === 'completed' ? '#6B7280' : '#8B5CF6'
-                      }
+                      styles.filterButtonText,
+                      selectedFilter === filter.id && styles.filterButtonTextActive
                     ]}
-                    onPress={() => onFilterChange(filter as FilterType)}
-                    accessible={true}
-                    accessibilityLabel={`${filter} events filter`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: selectedFilter === filter }}
                   >
+                    {filter.label}
+                  </Text>
+                  
+                  {selectedFilter === filter.id && (
+                    <LinearGradient
+                      colors={futuristicTheme.accentGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.filterActiveIndicator}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Animated.View>
+          
+          {/* Categories with Animation */}
+          <Animated.View
+            style={[
+              styles.categoriesContainer,
+              {
+                opacity: filterScrollOpacity,
+                transform: [{ translateY: filterScrollTranslateY }],
+              }
+            ]}
+          >
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoriesScrollContent}
+              accessible={true}
+              accessibilityLabel="Event categories"
+              accessibilityHint="Scroll horizontally to view all categories"
+            >
+              {EVENT_CATEGORIES.map((category) => (
+                <TouchableOpacity
+                  key={category.id}
+                  style={[
+                    styles.categoryButton,
+                    selectedCategory === category.id && styles.categoryButtonActive
+                  ]}
+                  onPress={() => onCategoryChange(
+                    selectedCategory === category.id ? null : category.id
+                  )}
+                  accessible={true}
+                  accessibilityLabel={`${category.name} category`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: selectedCategory === category.id }}
+                >
+                  <LinearGradient
+                    colors={
+                      selectedCategory === category.id
+                        ? ['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']
+                        : ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']
+                    }
+                    style={styles.categoryButtonGradient}
+                  >
+                    <FontAwesome
+                      name={category.icon as any}
+                      size={16}
+                      color={
+                        selectedCategory === category.id
+                          ? futuristicTheme.textPrimary
+                          : futuristicTheme.textSecondary
+                      }
+                    />
                     <Text
                       style={[
-                        styles.exploreFilterButtonText,
-                        selectedFilter === filter && styles.exploreFilterButtonTextActive,
+                        styles.categoryButtonText,
+                        selectedCategory === category.id && styles.categoryButtonTextActive
                       ]}
                     >
-                      {filter.charAt(0).toUpperCase() + filter.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-            
-            {/* Category Chips */}
-            <View style={styles.exploreCategoriesContainer}>
-              <Text style={styles.filterSectionTitle}>Categories</Text>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                accessible={true}
-                accessibilityLabel="Event categories"
-                accessibilityHint="Scroll horizontally to view all categories"
-              >
-                {EVENT_CATEGORIES.map((category) => (
-                  <TouchableOpacity
-                    key={category.id}
-                    style={[
-                      styles.exploreCategoryChip,
-                      selectedCategory === category.id && styles.exploreCategoryChipSelected
-                    ]}
-                    onPress={() => onCategoryChange(
-                      selectedCategory === category.id ? null : category.id
-                    )}
-                    accessible={true}
-                    accessibilityLabel={`${category.name} category`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: selectedCategory === category.id }}
-                  >
-                    <FontAwesome 
-                      name={category.icon as any} 
-                      size={16} 
-                      color={selectedCategory === category.id ? "#FFFFFF" : "#6B7280"} 
-                    />
-                    <Text style={[
-                      styles.exploreCategoryChipText,
-                      selectedCategory === category.id && styles.exploreCategoryChipTextSelected
-                    ]}>
                       {category.name}
                     </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </Animated.View>
           
-          {/* Results Section */}
-          <View style={styles.resultsSection}>
-            <Text style={styles.resultsSectionTitle}>
-              Results {!loading && `(${events.length})`}
-            </Text>
-            
-            {/* Event List */}
-            {loading ? (
-              <View style={styles.exploreLoadingContainer}>
-                <MaterialIcons name="hourglass-empty" size={48} color="#D1D5DB" />
-                <Text style={styles.exploreLoadingText}>Loading events...</Text>
-              </View>
-            ) : (
-              <FlatList
-                data={events}
-                renderItem={({ item }) => {
-                  const status = getEventStatus(item);
-                  const statusBgColor = getStatusBgColor(status);
-                  
-                  return (
-                    <TouchableOpacity
-                      style={styles.exploreEventCard}
-                      onPress={() => {
-                        onClose();
-                        router.push(`/screens/eventdetails?id=${item.id}`);
-                      }}
-                      accessible={true}
-                      accessibilityLabel={`${item.title} event on ${formatDate(item.date)}`}
-                      accessibilityRole="button"
-                      accessibilityHint="Opens event details"
-                    >
-                      {/* Event image or color placeholder */}
-                      <ImageBackground
-                        source={item.imageUrl ? { uri: item.imageUrl } : undefined}
-                        style={[
-                          styles.eventImageBackground,
-                          !item.imageUrl && { backgroundColor: getEventColor(item.title) }
-                        ]}
-                        imageStyle={styles.eventImageStyle}
-                      >
-                        {/* Display letter if no image */}
-                        {!item.imageUrl && (
-                          <Text style={styles.eventImageLetter}>
-                            {item.title.charAt(0).toUpperCase()}
-                          </Text>
-                        )}
-                        
-                        {/* Status badge */}
-                        <View style={[styles.statusBadge, { backgroundColor: statusBgColor }]}>
-                          <Text style={styles.statusText}>{status.toUpperCase()}</Text>
-                        </View>
-                      </ImageBackground>
-                      
-                      {/* Event details */}
-                      <View style={styles.eventDetailsContainer}>
-                        <Text style={styles.eventTitle} numberOfLines={1}>
-                          {item.title}
-                        </Text>
-                        
-                        <View style={styles.eventMetaRow}>
-                          <FontAwesome name="calendar" size={14} color="#007AFF" />
-                          <Text style={styles.eventMetaText}>
-                            {formatDate(item.date)}
-                          </Text>
-                        </View>
-                        
-                        <View style={styles.eventMetaRow}>
-                          <FontAwesome name="map-marker" size={14} color="#007AFF" />
-                          <Text style={styles.eventMetaText} numberOfLines={1}>
-                            {item.location || "Location TBD"}
-                          </Text>
-                        </View>
-                        
-                        {item.isPaid && (
-                          <View style={styles.priceBadge}>
-                            <FontAwesome name="ticket" size={12} color="#FFF" />
-                            <Text style={styles.priceText}>
-                              ${item.price?.toFixed(2) || '0.00'}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  );
+          {/* Event List */}
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <Animated.View
+                style={{
+                  transform: [
+                    { 
+                      rotate: new Animated.Value(0).interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '360deg'],
+                      })
+                    }
+                  ]
                 }}
-                keyExtractor={item => item.id}
-                contentContainerStyle={styles.exploreEventList}
-                ListEmptyComponent={
-                  <View style={styles.exploreEmptyContainer}>
-                    <MaterialIcons name="event-busy" size={64} color="#D1D5DB" />
-                    <Text style={styles.exploreEmptyText}>No events found</Text>
-                    <Text style={styles.exploreEmptySubtext}>
-                      {searchQuery ? 'Try adjusting your search or filters' : 'No events match your current filters'}
-                    </Text>
-                  </View>
-                }
-                // Performance optimizations
-                initialNumToRender={10}
-                maxToRenderPerBatch={5}
-                windowSize={5}
-                removeClippedSubviews={true}
+              >
+                <MaterialIcons name="refresh" size={36} color={futuristicTheme.textAccent} />
+              </Animated.View>
+              <Text style={styles.loadingText}>Finding events...</Text>
+            </View>
+          ) : events.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="search-off" size={48} color={futuristicTheme.textSecondary} />
+              <Text style={styles.emptyText}>No events found</Text>
+              <Text style={styles.emptySubtext}>
+                Try adjusting your filters or search terms
+              </Text>
+              <TouchableOpacity
+                style={styles.resetAllButton}
+                onPress={onReset}
                 accessible={true}
-                accessibilityLabel="Filtered events list"
-                accessibilityHint="Scroll to view all filtered events"
-              />
-            )}
-          </View>
-        </Animated.View>
-      </View>
+                accessibilityLabel="Reset all filters"
+                accessibilityRole="button"
+              >
+                <LinearGradient
+                  colors={futuristicTheme.accentGradient}
+                  style={styles.resetAllGradient}
+                >
+                  <Text style={styles.resetAllText}>Reset All Filters</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <FlatList
+              data={events}
+              renderItem={renderEventItem}
+              keyExtractor={(item, index) => `explore-${item.id || index}`}
+              contentContainerStyle={styles.eventsList}
+              showsVerticalScrollIndicator={false}
+              initialNumToRender={6}
+              maxToRenderPerBatch={8}
+              numColumns={1}
+              accessible={true}
+              accessibilityLabel="Filtered events list"
+              accessibilityHint="Scroll to view all filtered events"
+            />
+          )}
+        </BlurView>
+      </Animated.View>
     </Modal>
   );
 };
 
-// Platform-specific shadows
-const cardShadow = createShadow(2);
-
+// Enhanced styles for the ExploreModal
 const styles = StyleSheet.create({
-  modalOverlay: {
+  modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  exploreModalContainer: {
-    flex: 1,
-    backgroundColor: '#121212',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    ...cardShadow,
-  },
-  exploreHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    paddingTop: Platform.OS === 'ios' ? 40 : 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-    backgroundColor: '#1E1E1E',
-  },
-  closeButton: {
-    padding: 8,
-  },
-  exploreTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  resetButton: {
-    padding: 8,
-  },
-  resetText: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  
-  // Search section
-  searchSection: {
-    backgroundColor: '#1E1E1E',
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  exploreSearchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2D2D2D',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    margin: 16,
-    borderRadius: 12,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  exploreSearchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#FFFFFF',
-  },
-  
-  // Filter sections
-  filterSectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#A0A0A0',
-    marginBottom: 8,
-    paddingHorizontal: 16,
-  },
-  exploreFilterContainer: {
-    paddingBottom: 16,
-  },
-  exploreFilterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginHorizontal: 4,
-    marginLeft: 16,
-    borderRadius: 20,
-    backgroundColor: '#2D2D2D',
-  },
-  exploreFilterButtonActive: {
-    backgroundColor: '#007AFF',
-  },
-  exploreFilterButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#A0A0A0',
-  },
-  exploreFilterButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  exploreCategoriesContainer: {
-    paddingBottom: 16,
-  },
-  exploreCategoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginHorizontal: 4,
-    marginLeft: 16,
-    borderRadius: 20,
-    backgroundColor: '#2D2D2D',
-  },
-  exploreCategoryChipSelected: {
-    backgroundColor: '#007AFF',
-  },
-  exploreCategoryChipText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#A0A0A0',
-    marginLeft: 6,
-  },
-  exploreCategoryChipTextSelected: {
-    color: '#FFFFFF',
-  },
-  
-  // Results section
-  resultsSection: {
-    flex: 1,
-    backgroundColor: '#121212',
-  },
-  resultsSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  exploreEventList: {
-    padding: 16,
-    paddingBottom: 120,
-  },
-  
-  // Enhanced event card
-  exploreEventCard: {
-    borderRadius: 12,
-    marginBottom: 16,
-    overflow: 'hidden',
-    backgroundColor: '#1E1E1E',
-    ...cardShadow,
-    elevation: 5,
-  },
-  eventImageBackground: {
-    height: 140,
-    width: '100%',
+    backgroundColor: 'rgba(10, 11, 20, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  eventImageStyle: {
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+  blurContainer: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
   },
-  eventImageLetter: {
-    fontSize: 48,
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 20,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  modalTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  statusBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    ...Platform.select({
-      ios: { zIndex: 1 }
-    }),
-  },
-  statusText: {
     color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    textShadowColor: 'rgba(99, 102, 241, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
-  eventDetailsContainer: {
+  resetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(99, 102, 241, 0.3)',
+  },
+  resetText: {
+    color: '#A78BFA',
+    fontWeight: '600',
+    fontSize: 14,
+    marginLeft: 6,
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  searchGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  filtersContainer: {
+    paddingHorizontal: 10,
+    marginBottom: 16,
+  },
+  filtersScrollContent: {
+    paddingHorizontal: 10,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginHorizontal: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    position: 'relative',
+  },
+  filterButtonActive: {
+    backgroundColor: 'rgba(99, 102, 241, 0.15)',
+    borderColor: 'rgba(99, 102, 241, 0.3)',
+  },
+  filterButtonText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  filterButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  filterActiveIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+  },
+  categoriesContainer: {
+    paddingHorizontal: 10,
+    marginBottom: 20,
+  },
+  categoriesScrollContent: {
+    paddingHorizontal: 10,
+  },
+  categoryButton: {
+    marginHorizontal: 6,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  categoryButtonActive: {
+    shadowColor: '#A78BFA',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  categoryButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+  },
+  categoryButtonText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontWeight: '500',
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  categoryButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  eventsList: {
+    paddingHorizontal: 16,
+    paddingBottom: 100,
+  },
+  eventItem: {
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  eventItemBlur: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  eventItemGradient: {
     padding: 16,
-    backgroundColor: '#1E1E1E',
+    position: 'relative',
+  },
+  categoryTag: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    zIndex: 1,
+  },
+  categoryTagText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 12,
   },
   eventTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 12,
+    marginRight: 80, // Leave space for the category tag
   },
-  eventMetaRow: {
+  eventDetails: {
+    gap: 8,
+  },
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: 8,
   },
-  eventMetaText: {
-    marginLeft: 8,
+  detailText: {
     fontSize: 14,
-    color: '#A0A0A0',
+    color: 'rgba(255, 255, 255, 0.7)',
   },
-  priceBadge: {
+  statusBadge: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(59, 130, 246, 0.2)', // Blue with opacity
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginTop: 4,
   },
-  priceText: {
-    color: '#60A5FA', // Light blue
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  statusText: {
     fontSize: 12,
     fontWeight: '600',
-    marginLeft: 4,
   },
-  
-  // Loading and empty states
-  exploreLoadingContainer: {
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    paddingBottom: 100,
   },
-  exploreLoadingText: {
-    marginTop: 12,
+  loadingText: {
+    marginTop: 16,
     fontSize: 16,
-    color: '#A0A0A0',
+    color: 'rgba(255, 255, 255, 0.7)',
   },
-  exploreEmptyContainer: {
+  emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
-    marginTop: 40,
+    paddingBottom: 100,
   },
-  exploreEmptyText: {
-    fontSize: 18,
-    fontWeight: '600',
+  emptyText: {
+    fontSize: 20,
+    fontWeight: 'bold',
     color: '#FFFFFF',
     marginTop: 16,
   },
-  exploreEmptySubtext: {
-    fontSize: 14,
-    color: '#A0A0A0',
-    textAlign: 'center',
+  emptySubtext: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.7)',
     marginTop: 8,
-  }
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  resetAllButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  resetAllGradient: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 16,
+  },
+  resetAllText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
 });
 
 // Use React.memo to prevent unnecessary re-renders

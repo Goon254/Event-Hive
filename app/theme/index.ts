@@ -7,7 +7,17 @@
  */
 
 import { Platform } from 'react-native';
-import { COLORS, GRADIENTS } from './constants';
+import {
+  COLORS,
+  GRADIENTS,
+  SPACING,
+  TYPOGRAPHY,
+  RADIUS,
+  SHADOWS,
+  ANIMATIONS,
+  Z_INDEX,
+  BREAKPOINTS
+} from './constants';
 
 // Define color palette
 const palette = {
@@ -92,60 +102,66 @@ const palette = {
   },
 };
 
-// Define spacing scale
+// Use spacing from constants with additional app-specific values
 const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-  xxl: 48,
+  ...SPACING,
+  // Map legacy keys to new format
+  xs: SPACING.xs,
+  sm: SPACING.s,
+  md: SPACING.m,
+  lg: SPACING.l,
+  xl: SPACING.xl,
+  xxl: SPACING.xxl,
   
-  // Specific spacing values
-  screenPadding: 16,
-  cardPadding: 16,
-  sectionSpacing: 24,
-  itemSpacing: 16,
+  // App-specific spacing values
+  screenPadding: SPACING.m,
+  cardPadding: SPACING.m,
+  sectionSpacing: SPACING.l,
+  itemSpacing: SPACING.m,
 };
 
-// Define typography
+// Merge typography from constants with app-specific font families
 const typography = {
+  ...TYPOGRAPHY,
   fontFamily: {
     regular: Platform.OS === 'ios' ? 'System' : 'Roboto',
     medium: Platform.OS === 'ios' ? 'System' : 'Roboto',
     bold: Platform.OS === 'ios' ? 'System' : 'Roboto',
   },
   
+  // Map legacy keys to new format for backward compatibility
   fontSize: {
-    xs: 12,
-    sm: 14,
-    md: 16,
-    lg: 18,
-    xl: 20,
-    xxl: 24,
-    xxxl: 32,
+    xs: TYPOGRAPHY.caption.fontSize,
+    sm: TYPOGRAPHY.body2.fontSize,
+    md: TYPOGRAPHY.body1.fontSize,
+    lg: TYPOGRAPHY.button.fontSize,
+    xl: TYPOGRAPHY.h3.fontSize,
+    xxl: TYPOGRAPHY.h2.fontSize,
+    xxxl: TYPOGRAPHY.h1.fontSize,
   },
   
   fontWeight: {
     regular: '400',
     medium: '500',
-    semibold: '600',
-    bold: '700',
+    semibold: TYPOGRAPHY.button.fontWeight,
+    bold: TYPOGRAPHY.h1.fontWeight,
   },
 };
 
-// Define border radius
+// Use border radius from constants with legacy mapping
 const borderRadius = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  round: 9999,
+  ...RADIUS,
+  // Map legacy keys to new format
+  xs: RADIUS.xs,
+  sm: RADIUS.s,
+  md: RADIUS.m,
+  lg: RADIUS.l,
+  xl: RADIUS.xl,
+  xxl: RADIUS.xl, // Map to closest value
+  round: RADIUS.round,
 };
 
-// Define shadows
+// Define shadow creation utility
 const createShadow = (elevation: number) => {
   return Platform.select({
     ios: {
@@ -161,12 +177,24 @@ const createShadow = (elevation: number) => {
   });
 };
 
+// Use shadows from constants with legacy mapping
 const shadows = {
-  sm: createShadow(1),
-  md: createShadow(2),
-  lg: createShadow(4),
-  xl: createShadow(8),
+  ...SHADOWS,
+  // Map legacy keys to new format
+  sm: SHADOWS.light,
+  md: SHADOWS.medium,
+  lg: SHADOWS.strong,
+  xl: createShadow(8), // Keep custom xl shadow
 };
+
+// Animation durations
+const animations = ANIMATIONS;
+
+// Z-index levels
+const zIndex = Z_INDEX;
+
+// Breakpoints
+const breakpoints = BREAKPOINTS;
 
 // Define theme for light mode (now using dark theme colors for consistency)
 const lightTheme = {
@@ -189,13 +217,13 @@ const lightTheme = {
     tabBarInactive: COLORS.tabBarInactive,
     
     // Card colors
-    cardBackground: COLORS.cardBackground,
-    cardBorder: COLORS.cardBorder,
+    cardBackground: COLORS.card,
+    cardBorder: COLORS.border,
     
     // Button colors
-    buttonPrimary: COLORS.buttonPrimary,
-    buttonSecondary: COLORS.buttonSecondary,
-    buttonText: COLORS.buttonText,
+    buttonPrimary: COLORS.primary,
+    buttonSecondary: COLORS.primaryDark,
+    buttonText: COLORS.text,
     buttonTextSecondary: COLORS.text,
     
     // Status colors
@@ -237,13 +265,13 @@ const darkTheme = {
     tabBarInactive: COLORS.tabBarInactive,
     
     // Card colors
-    cardBackground: COLORS.cardBackground,
-    cardBorder: COLORS.cardBorder,
+    cardBackground: COLORS.card,
+    cardBorder: COLORS.border,
     
     // Button colors
-    buttonPrimary: COLORS.buttonPrimary,
-    buttonSecondary: COLORS.buttonSecondary,
-    buttonText: COLORS.buttonText,
+    buttonPrimary: COLORS.primary,
+    buttonSecondary: COLORS.primaryDark,
+    buttonText: COLORS.text,
     buttonTextSecondary: COLORS.text,
     
     // Status colors
@@ -280,6 +308,9 @@ export default {
   borderRadius,
   shadows,
   createShadow,
+  animations,
+  zIndex,
+  breakpoints,
   colors: COLORS,
   gradients: GRADIENTS,
 };

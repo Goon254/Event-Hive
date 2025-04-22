@@ -221,8 +221,33 @@ export const useEventData = (userId?: string) => {
     
     // Filter for user's events if user is logged in
     if (userId) {
-      const userEvents = sortedEvents.filter(event => event.createdBy === userId);
+      console.log('Filtering events for user ID:', userId);
+      
+      // Check if any events have createdBy field matching userId
+      const hasCreatedByMatch = sortedEvents.some(event => {
+        const matches = event.createdBy === userId;
+        if (matches) {
+          console.log('Found event created by user:', event.id, event.title);
+        }
+        return matches;
+      });
+      
+      if (!hasCreatedByMatch) {
+        console.log('No events found where createdBy matches userId');
+        console.log('Available createdBy values:', sortedEvents.map(e => e.createdBy));
+      }
+      
+      // For testing purposes, include events the user is attending as "their events"
+      // This ensures the "Your Events" section shows up even if they haven't created any
+      const userEvents = sortedEvents.filter(event =>
+        event.createdBy === userId ||
+        (event.attendees && Array.isArray(event.attendees) && event.attendees.includes(userId))
+      );
+      
+      console.log(`Found ${userEvents.length} events for user`);
       setMyEvents(userEvents);
+    } else {
+      console.log('No userId provided to filter events');
     }
     
     // Set filtered events initially to all events

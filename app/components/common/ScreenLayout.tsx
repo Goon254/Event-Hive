@@ -1,6 +1,8 @@
 import React, { ReactNode } from 'react';
-import { View, StyleSheet, StatusBar, Platform, SafeAreaView } from 'react-native';
+import { View, StyleSheet, StatusBar, Platform } from 'react-native';
 import { COLORS } from '../../theme/constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface ScreenLayoutProps {
   children: ReactNode;
@@ -9,11 +11,13 @@ interface ScreenLayoutProps {
   statusBarStyle?: 'light-content' | 'dark-content';
   withSpacing?: boolean;
   testID?: string;
+  edges?: Array<'top' | 'right' | 'bottom' | 'left'>;
+  ignoreBottomSafeArea?: boolean;
 }
 
 /**
  * Common screen layout component that provides consistent spacing and styling
- * across all screens in the application
+ * across all screens in the application with proper safe area handling
  */
 const ScreenLayout: React.FC<ScreenLayoutProps> = ({
   children,
@@ -22,24 +26,49 @@ const ScreenLayout: React.FC<ScreenLayoutProps> = ({
   statusBarStyle = 'light-content',
   withSpacing = true,
   testID,
+  edges = ['top', 'right', 'bottom', 'left'],
+  ignoreBottomSafeArea = false,
 }) => {
+  const insets = useSafeAreaInsets();
+  
+  // Adjust edges if bottom safe area should be ignored
+  const safeAreaEdges = ignoreBottomSafeArea
+    ? edges.filter(edge => edge !== 'bottom')
+    : edges;
+  
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor }]} testID={testID}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor }]}
+      testID={testID}
+      edges={safeAreaEdges}
+    >
       <StatusBar barStyle={statusBarStyle} backgroundColor={statusBarColor} />
       
-      {/* Status Bar Spacer */}
-      <View style={[
-        styles.statusBarSpacer, 
-        { backgroundColor: statusBarColor }
-      ]} />
+      {/* Status Bar Spacer - only needed if top edge is not in safeAreaEdges */}
+      {!safeAreaEdges.includes('top') && (
+        <View style={[
+          styles.statusBarSpacer,
+          {
+            backgroundColor: statusBarColor,
+            height: insets.top
+          }
+        ]} />
+      )}
       
       {/* Main Content */}
       <View style={[
         styles.content,
-        withSpacing && styles.contentWithSpacing
+        withSpacing && {
+          paddingTop: safeAreaEdges.includes('top') ? 0 : insets.top
+        }
       ]}>
         {children}
       </View>
+      
+      {/* Bottom Spacer - only needed if ignoreBottomSafeArea is true but we still want padding */}
+      {ignoreBottomSafeArea && (
+        <View style={{ height: insets.bottom, backgroundColor }} />
+      )}
     </SafeAreaView>
   );
 };
@@ -49,7 +78,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   statusBarSpacer: {
-    height: Platform.OS === 'ios' ? 50 : 30,
     width: '100%',
     position: 'absolute',
     top: 0,
@@ -59,9 +87,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  contentWithSpacing: {
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
   }
 });
 

@@ -316,7 +316,14 @@ class SocialService {
       
       // Check if already liked
       const likeDoc = await getDoc(likeRef);
+      const postDoc = await getDoc(postRef);
       
+      if (!postDoc.exists()) {
+        throw new Error('Post not found');
+      }
+      
+      const postData = postDoc.data();
+      const userLikes = postData.userLikes || [];
       const batch = writeBatch(db);
       
       if (!likeDoc.exists()) {
@@ -328,16 +335,14 @@ class SocialService {
           createdAt: serverTimestamp()
         });
         
-        // Increment post like count
+        // Add user to userLikes array and increment like count
         batch.update(postRef, {
-          likes: increment(1)
+          likes: increment(1),
+          userLikes: [...userLikes, currentUser.uid]
         });
         
         // Create notification for post owner
-        const postDoc = await getDoc(postRef);
-        const postData = postDoc.data();
-        
-        if (postData && postData.userId !== currentUser.uid) {
+        if (postData.userId !== currentUser.uid) {
           const notificationData = {
             userId: postData.userId,
             type: 'like',
@@ -359,9 +364,10 @@ class SocialService {
         // Unlike
         batch.delete(likeRef);
         
-        // Decrement post like count
+        // Remove user from userLikes array and decrement like count
         batch.update(postRef, {
-          likes: increment(-1)
+          likes: increment(-1),
+          userLikes: userLikes.filter((id: string) => id !== currentUser.uid)
         });
       }
       

@@ -1,15 +1,19 @@
-// app/(tabs)/_layout.tsx
 import { Tabs } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
 import ErrorBoundary from '../container/shared/ErrorBoundary';
 import { Platform, StyleSheet } from 'react-native';
 import { createShadow } from '../utils/platformUtils';
-import theme from '../theme';
 import { COLORS } from '../theme/constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function TabsLayout() {
-  // Create platform-specific tab bar shadow
-  const tabBarShadow = createShadow(Platform.OS === 'ios' ? 3 : 5);
+  const insets = useSafeAreaInsets();
+  
+  // Calculate tab bar height with safe area
+  const tabBarHeight = 50; // Base height
+  const tabBarPaddingTop = 8;
+  const tabBarPaddingBottom = Platform.OS === 'ios' ? Math.max(8, insets.bottom) : 8;
+  const totalTabBarHeight = tabBarHeight + tabBarPaddingTop + tabBarPaddingBottom;
   
   return (
     <ErrorBoundary>
@@ -19,27 +23,42 @@ export default function TabsLayout() {
           tabBarActiveTintColor: COLORS.tabBarActive,
           tabBarInactiveTintColor: COLORS.tabBarInactive,
           tabBarStyle: {
-            height: 60,
-            paddingBottom: Platform.OS === 'ios' ? 10 : 8,
-            paddingTop: Platform.OS === 'ios' ? 10 : 8,
-            backgroundColor: COLORS.tabBar,
-            borderTopWidth: 1,
-            borderTopColor: COLORS.border,
-            ...tabBarShadow,
+            height: totalTabBarHeight,
+            paddingTop: tabBarPaddingTop,
+            paddingBottom: tabBarPaddingBottom,
+            backgroundColor: 'rgba(255, 255, 255, 0.95)', // Translucent white
+            borderTopWidth: 0, // Remove top border
+            ...Platform.select({
+              ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: -3 },
+                shadowOpacity: 0.08,
+                shadowRadius: 8,
+              },
+              android: {
+                elevation: 10,
+              },
+            }),
           },
           tabBarLabelStyle: {
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: '500',
+            marginBottom: Platform.OS === 'ios' ? -2 : 0,
           },
           headerStyle: {
             backgroundColor: COLORS.header,
-            height: Platform.OS === 'ios' ? 100 : 80,
+            height: Platform.OS === 'ios' ? 100 + insets.top : 80,
             ...createShadow(1),
           },
           headerTitleStyle: {
             fontWeight: Platform.OS === 'ios' ? '700' : 'bold',
             fontSize: 18,
             color: COLORS.headerText,
+          },
+          // Adjust header content for safe area
+          headerShadowVisible: false,
+          headerTitleContainerStyle: {
+            paddingTop: Platform.OS === 'ios' ? insets.top : 0,
           },
         }}
       >
@@ -50,7 +69,7 @@ export default function TabsLayout() {
             tabBarIcon: ({ color }) => (
               <FontAwesome5 name="home" size={22} color={color} />
             ),
-            headerShown: false, // Hide the header for the home tab
+            headerShown: false,
           }}
         />
         <Tabs.Screen
@@ -60,7 +79,7 @@ export default function TabsLayout() {
             tabBarIcon: ({ color }) => (
               <FontAwesome5 name="newspaper" size={22} color={color} />
             ),
-            headerShown: false, // Hide the header for the feed tab
+            headerShown: false,
           }}
         />
         <Tabs.Screen
@@ -70,7 +89,7 @@ export default function TabsLayout() {
             tabBarIcon: ({ color }) => (
               <FontAwesome5 name="network-wired" size={22} color={color} />
             ),
-            headerShown: false, // Hide the header for the connections tab
+            headerShown: false,
           }}
         />
         <Tabs.Screen
@@ -80,7 +99,7 @@ export default function TabsLayout() {
             tabBarIcon: ({ color }) => (
               <FontAwesome5 name="user" size={22} color={color} />
             ),
-            headerShown: false, // Hide the header for the profile tab
+            headerShown: false,
           }}
         />
       </Tabs>

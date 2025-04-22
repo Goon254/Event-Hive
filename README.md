@@ -2,6 +2,14 @@
 
 ScanGo is a mobile application for event management and social networking, built with React Native and Firebase.
 
+## Documentation
+
+This repository contains comprehensive documentation for the ScanGo project:
+
+- [Technical Documentation](./ScanGo_Technical_Documentation.md) - Detailed technical overview of the project architecture, implementation details, and technical considerations
+- [Project Report](./ScanGo_Project_Report.md) - Concise summary of the project focusing on business value, features, and future roadmap
+- [User Guide](./ScanGo_User_Guide.md) - User-focused guide explaining how to use the application
+
 ## Features
 
 - User authentication and profile management
@@ -20,21 +28,6 @@ ScanGo is a mobile application for event management and social networking, built
   - Cloud Functions
 - **State Management**: React Context API
 - **Navigation**: Expo Router
-
-## Firebase Integration
-
-ScanGo uses several Firebase services:
-
-- **Authentication**: User sign-up, sign-in, and profile management
-- **Firestore**: Database for storing user data, events, posts, etc.
-- **Storage**: Image storage for profiles, posts, and events
-- **Cloud Functions**: Backend processing for various features
-
-For detailed information about specific integrations, see:
-
-- [Firebase Storage Integration](./FIREBASE_STORAGE_INTEGRATION.md)
-- [Firestore Implementation](./FIRESTORE_IMPLEMENTATION.md)
-- [Auth Implementation](./AUTH_IMPLEMENTATION.md)
 
 ## Getting Started
 
@@ -81,17 +74,6 @@ For detailed information about specific integrations, see:
   - `utils/`: Utility functions
 - `assets/`: Static assets like images and fonts
 - `lib/`: Library configurations
-
-## Testing
-
-To test the Firebase Storage integration, navigate to the Image Upload Test screen:
-
-```javascript
-import { router } from 'expo-router';
-
-// Navigate to the test screen
-router.push('/screens/ImageUploadTest');
-```
 
 ## Contributing
 

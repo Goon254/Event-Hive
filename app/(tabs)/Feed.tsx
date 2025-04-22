@@ -1,988 +1,450 @@
-// app/(tabs)/Feed.tsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { COLORS } from '../theme/constants';
-import { LinearGradient } from 'expo-linear-gradient';
+// ImprovedFeed.tsx - Enhanced visual design for social feed
+
+import React, { useState, useCallback, memo, useRef } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
   Image,
-  TextInput,
   ActivityIndicator,
   RefreshControl,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-  Modal,
   Share,
-  Animated as RNAnimated
+  Animated,
+  Platform,
+  StyleSheet,
+  Dimensions,
+  SafeAreaView,
+  TextInput
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import ScreenLayout from '../components/common/ScreenLayout';
+import ScreenWrapper from '../components/common/ScreenWrapper';
 import { useRouter } from 'expo-router';
-import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
-import socialService from '../services/socialService';
-import { SocialPost, ContentType, PrivacyLevel } from '../models/social';
-import * as ImagePicker from 'expo-image-picker';
+import { SocialPost } from '../models/social';
+import { COLORS } from '../theme/constants';
+import EnhancedPostCard from '../posts/EnhancedPostCard'; // Using the EnhancedPostCard component
+import PostCreation from '../posts/PostCreation';
+import CommentsModal from '../components/social/CommentsModal';
+import { useFeedManager } from '../hooks/useFeedManager';
+import { StatusBar } from 'expo-status-bar';
 import { createShadow } from '../utils/platformUtils';
-import { enhancedImageService, ImageType, ImageQuality, ImageSize } from '../services/enhancedImageService';
-import { useSocialPosts } from '../hooks/useSocialPosts';
-// Using our own date utilities instead of date-fns to avoid RangeError issues
-import { toDateObject, getRelativeTime } from '../utils/dateUtils';
-import migrationService from '../services/migrationService';
-import { auth } from '../../lib/firebaseConfig';
-export default function SocialFeedScreen() {
+
+const { width, height } = Dimensions.get('window');
+
+// Updated theme colors
+const THEME = {
+  ...COLORS,
+  background: '#F9FAFB',
+  card: '#FFFFFF',
+  primaryGradientStart: '#2563EB', // Adjusted blue gradient
+  primaryGradientEnd: '#4F46E5',   // Adjusted blue gradient
+  border: '#E5E7EB',
+  divider: '#F3F4F6',
+};
+
+const ImprovedFeed = () => {
   const router = useRouter();
   const { user } = useAuth();
-  const [posts, setPosts] = useState<SocialPost[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastDoc, setLastDoc] = useState<any>(null);
-  const [hasMorePosts, setHasMorePosts] = useState(true);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const headerHeight = Platform.OS === 'ios' ? 130 : 110;
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<SocialPost[]>([]);
   
-  // Post creation states
-  const [isCreatingPost, setIsCreatingPost] = useState(false);
-  const [postText, setPostText] = useState('');
-  const [postImage, setPostImage] = useState<string | null>(null);
-  const [postPrivacy, setPostPrivacy] = useState<PrivacyLevel>(PrivacyLevel.PUBLIC);
+  // Dynamic header animation
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 60],
+    outputRange: [1, 0.9],
+    extrapolate: 'clamp',
+  });
   
-  // Use the social posts hook for post creation and image uploads
+  const headerScale = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [1, 0.95],
+    extrapolate: 'clamp',
+  });
+
   const {
-    createPost,
-    isLoading: isPostLoading,
+    posts,
+    isLoading,
+    isRefreshing,
+    hasMorePosts,
     isUploading,
-    uploadProgress
-  } = useSocialPosts();
-  
-  // Comment states
-  const [commentText, setCommentText] = useState('');
+    uploadProgress,
+    createPost,
+    addPostToList,
+    handleLikePost,
+    sharePost,
+    updatePostShareCount,
+    handleRefresh,
+    loadMorePosts,
+  } = useFeedManager({ pageSize: 5, initialRefresh: true }); // Reduced page size for better UX
+
+  const [isCreatingPost, setIsCreatingPost] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [currentPost, setCurrentPost] = useState<SocialPost | null>(null);
-  const [comments, setComments] = useState<any[]>([]);
-  const [commentsUnsubscribe, setCommentsUnsubscribe] = useState<(() => void) | null>(null);
-  const [postsUnsubscribe, setPostsUnsubscribe] = useState<(() => void) | null>(null);
-  const [isLoadingComments, setIsLoadingComments] = useState(false);
 
-  // Initialize database and fetch posts
-  useEffect(() => {
-    const initializeAndFetch = async () => {
-      try {
-        // Initialize database (creates user document if needed)
-        await migrationService.initializeDatabase();
-        
-        // For development, seed initial data if needed
-        if (__DEV__) {
-          await migrationService.seedInitialData();
-        }
-        
-        // Fetch posts
-        fetchPosts();
-      } catch (error) {
-        console.error('Error initializing feed:', error);
-        // Fetch posts anyway even if initialization fails
-        fetchPosts();
-      }
-    };
-    
-    initializeAndFetch();
-    
-    // Cleanup function
-    return () => {
-      // Clean up any active listeners
-      if (commentsUnsubscribe) {
-        commentsUnsubscribe();
-      }
-      if (postsUnsubscribe) {
-        postsUnsubscribe();
-      }
-    };
-  }, [commentsUnsubscribe, postsUnsubscribe]);
-
-  // Fetch posts from service
-  const fetchPosts = async (refresh = false) => {
-    try {
-      setIsLoading(true);
-      
-      // If refreshing, reset pagination
-      if (refresh) {
-        setLastDoc(null);
-        setHasMorePosts(true);
-      }
-      
-      // Clean up any existing listener
-      if (postsUnsubscribe) {
-        postsUnsubscribe();
-        setPostsUnsubscribe(null);
-      }
-      
-      // Check if user is authenticated
-      if (!auth.currentUser) {
-        console.log('No authenticated user found, showing empty feed');
-        setPosts([]);
-        setIsLoading(false);
-        setIsRefreshing(false);
-        return;
-      }
-      
-      // Initial fetch to get posts immediately
-      const options = {
-        lastDoc: refresh ? null : lastDoc,
-        pageSize: 10
-      };
-      
-      const result = await socialService.fetchPosts(options);
-      
-      if (result.posts.length < 10) {
-        setHasMorePosts(false);
-      }
-      // Ensure unique posts by ID to prevent duplicate key warnings
-      if (refresh) {
-        setPosts(result.posts);
-      } else {
-        // Create a map of existing posts by ID
-        const existingPostsMap = new Map(posts.map(post => [post.id, post]));
-        
-        // Add new posts only if they don't already exist
-        const updatedPosts = [...posts];
-        result.posts.forEach(post => {
-          if (!existingPostsMap.has(post.id)) {
-            updatedPosts.push(post);
-          }
-        });
-        
-        setPosts(updatedPosts);
-      }
-      
-      setLastDoc(result.lastDoc);
-      setLastDoc(result.lastDoc);
-      
-      // Set up real-time listener for posts
-      const unsubscribe = socialService.setupPostsListener((updatedPosts) => {
-        // Only update if we're not in the middle of pagination
-        if (!isLoading && !isRefreshing) {
-          setPosts(updatedPosts);
-        }
-      }, { limit: 20 });
-      
-      setPostsUnsubscribe(() => unsubscribe);
-      
-    } catch (error) {
-      console.error('Error fetching posts:', error);
-      // Show a more specific error message based on the error
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes('permission')) {
-        Alert.alert(
-          'Authentication Required',
-          'Please sign in to view the feed. The app will continue to work with limited functionality.'
-        );
-      } else {
-        Alert.alert('Error', 'Failed to load posts. Please try again.');
-      }
-      // Set empty posts array to avoid showing stale data
-      setPosts([]);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
+  const submitPost = async (postText: string, postImage: string | null, postPrivacy: any) => {
+    let mediaFiles: string[] = [];
+    if (postImage) mediaFiles.push(postImage);
+    const newPost = await createPost(postText.trim(), mediaFiles, postPrivacy);
+    addPostToList(newPost);
+    setIsCreatingPost(false);
   };
 
-  // Handle pull-to-refresh
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    fetchPosts(true);
-  };
-
-  // Load more posts when reaching the end
-  const loadMorePosts = () => {
-    if (!isLoading && hasMorePosts) {
-      fetchPosts();
-    }
-  };
-
-  // Pick an image from gallery using enhanced image service
-  const pickImage = async () => {
-    try {
-      // Use the enhanced image service to pick an image
-      const selectedImageUri = await enhancedImageService.pickImage({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-      
-      if (selectedImageUri) {
-        setPostImage(selectedImageUri);
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to select image. Please try again.');
-    }
-  };
-
-  // Submit a new post
-  const submitPost = async () => {
-    if (!postText.trim() && !postImage) {
-      Alert.alert('Error', 'Please enter some text or add an image');
-      return;
-    }
-    
-    try {
-      // Prepare media files array
-      let mediaFiles: string[] = [];
-      if (postImage) {
-        mediaFiles.push(postImage);
-      }
-      
-      // Create the post using the hook
-      const newPost = await createPost(
-        postText.trim(),
-        mediaFiles,
-        postPrivacy
-      );
-      
-      // Add to posts list and reset form
-      setPosts([newPost, ...posts]);
-      setPostText('');
-      setPostImage(null);
-      setIsCreatingPost(false);
-      
-    } catch (error) {
-      console.error('Error creating post:', error);
-      
-      // Show more specific error message if available
-      const errorMessage = error instanceof Error
-        ? error.message
-        : 'Failed to create post. Please try again.';
-        
-      Alert.alert('Error', errorMessage);
-    }
-  };
-
-  // Like a post
-  const handleLikePost = async (postId: string) => {
-    if (!user) {
-      Alert.alert('Login Required', 'Please log in to like posts');
-      return;
-    }
-    
-    try {
-      // Optimistic update
-      setPosts(posts.map(post => {
-        if (post.id === postId) {
-          return { ...post, likes: post.likes + 1 };
-        }
-        return post;
-      }));
-      
-      // Call API
-      await socialService.likePost(postId);
-      
-    } catch (error) {
-      console.error('Error liking post:', error);
-      // Revert on error
-      setPosts(posts.map(post => {
-        if (post.id === postId) {
-          return { ...post, likes: post.likes - 1 };
-        }
-        return post;
-      }));
-    }
-  };
-
-  // View comments for a post
-  const viewComments = async (post: SocialPost) => {
+  const handleCommentPress = useCallback((post: SocialPost) => {
     setCurrentPost(post);
     setShowComments(true);
-    setIsLoadingComments(true);
-    
-    try {
-      // Fetch comments from Firestore
-      const fetchedComments = await socialService.getPostComments(post.id);
-      setComments(fetchedComments);
-      
-      // Set up real-time listener for new comments
-      const unsubscribe = socialService.setupCommentsListener(post.id, (updatedComments) => {
-        setComments(updatedComments);
-      });
-      
-      // Store unsubscribe function
-      setCommentsUnsubscribe(() => unsubscribe);
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-    } finally {
-      setIsLoadingComments(false);
-    }
-  };
+  }, []);
 
-  // Add a comment to the current post
-  const addComment = async () => {
-    if (!currentPost || !commentText.trim()) return;
-    
-    try {
-      // Create a new comment
-      const newComment = {
-        id: Date.now().toString(),
-        userName: user?.name || 'Anonymous',
-        content: commentText,
-        createdAt: new Date()
-      };
-      
-      // Add to comments list
-      setComments([...comments, newComment]);
-      setCommentText('');
-      
-      // Increment comment count on post
-      setPosts(posts.map(post => {
-        if (post.id === currentPost.id) {
-          return { ...post, comments: post.comments + 1 };
-        }
-        return post;
-      }));
-      
-      // Update current post
-      setCurrentPost({
-        ...currentPost,
-        comments: currentPost.comments + 1
-      });
-      
-      // Save the comment to Firestore
-      await socialService.commentOnPost(currentPost.id, commentText);
-      
-    } catch (error) {
-      console.error('Error adding comment:', error);
-    }
-  };
+  const handleSharePress = useCallback(async (post: SocialPost) => {
+    const shareContent = await sharePost(post);
+    const result = await Share.share(shareContent);
+    if (result.action === Share.sharedAction) updatePostShareCount(post.id);
+  }, [sharePost, updatePostShareCount]);
 
-  // Share a post
-  const sharePost = async (post: SocialPost) => {
-    try {
-      // Generate a shareable link for the post
-      const shareableLink = await socialService.generateShareableLink(post.id);
-      
-      // Use the Share API to share the link
-      const result = await Share.share({
-        message: `Check out this post from ${post.userName}: ${shareableLink}`,
-        url: shareableLink,
-        title: 'Share Post'
-      });
-      
-      if (result.action === Share.sharedAction) {
-        // Update the share count in the UI
-        setPosts(posts.map(p => {
-          if (p.id === post.id) {
-            return { ...p, shares: p.shares + 1 };
-          }
-          return p;
-        }));
-      }
-    } catch (error) {
-      console.error('Error sharing post:', error);
-      
-      // Show more specific error message based on the error type
-      if (error instanceof Error) {
-        if (error.message.includes('privacy')) {
-          Alert.alert('Privacy Restriction', 'Only public posts can be shared with external links.');
-        } else {
-          Alert.alert('Error', `Failed to share post: ${error.message}`);
-        }
-      } else {
-        Alert.alert('Error', 'Failed to share post. Please try again.');
-      }
-    }
-  };
-
-  // Format the timestamp for display with robust error handling
-  const formatTimestamp = (timestamp: any) => {
-    if (!timestamp) return 'Just now';
-    
-    try {
-      // Use our robust date conversion utility
-      const dateObj = toDateObject(timestamp);
-      
-      // If we couldn't parse the date, return a default value
-      if (!dateObj) return 'Recently';
-      
-      // Use our utility that handles relative time formatting
-      return getRelativeTime(dateObj);
-    } catch (error) {
-      console.warn('Error formatting timestamp:', error);
-      return 'Recently';
-    }
-  };
-
-  // Render each post item
-  function renderPostItem({ item }: { item: SocialPost; }) {
-    return (
-      <View style={styles.postCard}>
-        {/* Post Header */}
-        <View style={styles.postHeader}>
-          {item.userAvatar ? (
-            <Image source={{ uri: item.userAvatar }} style={styles.userAvatar} />
-          ) : (
-            <View style={styles.userAvatarPlaceholder}>
-              <Text style={styles.avatarInitial}>{item.userName.charAt(0).toUpperCase()}</Text>
-            </View>
-          )}
-
-          <View style={styles.postHeaderInfo}>
-            <Text style={styles.userName}>{item.userName}</Text>
-            <Text style={styles.postTime}>{formatTimestamp(item.createdAt)}</Text>
-          </View>
-
-          <TouchableOpacity style={styles.moreButton}>
-            <MaterialIcons name="more-horiz" size={24} color="#6B7280" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Post Content */}
-        <View style={styles.postContent}>
-          {item.content && (
-            <Text style={styles.postText}>{item.content}</Text>
-          )}
-
-          {item.mediaUrls && item.mediaUrls.length > 0 && (
-            <Image
-              source={{ uri: item.mediaUrls[0] }}
-              style={styles.postImage}
-              resizeMode="cover" />
-          )}
-        </View>
-
-        {/* Post Metrics */}
-        <View style={styles.postMetrics}>
-          <Text style={styles.likeCount}>{item.likes} likes</Text>
-          <Text style={styles.commentCount}>{item.comments} comments</Text>
-        </View>
-
-        {/* Post Actions */}
-        <View style={styles.postActions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handleLikePost(item.id)}
-          >
-            <FontAwesome name="thumbs-o-up" size={20} color="#6B7280" />
-            <Text style={styles.actionText}>Like</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => viewComments(item)}
-          >
-            <FontAwesome name="comment-o" size={20} color="#6B7280" />
-            <Text style={styles.actionText}>Comment</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => sharePost(item)}
-          >
-            <FontAwesome name="share" size={20} color="#6B7280" />
-            <Text style={styles.actionText}>Share</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  // Render post creation form
-  const renderPostCreation = () => (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={90}
-    >
-      <View style={styles.createPostCard}>
-        <View style={styles.createPostHeader}>
-          <TouchableOpacity onPress={() => setIsCreatingPost(false)}>
-            <MaterialIcons name="arrow-back" size={24} color="#6B7280" />
-          </TouchableOpacity>
-          <Text style={styles.createPostTitle}>Create Post</Text>
-          <TouchableOpacity 
-            style={[styles.postButton, (!postText.trim() && !postImage) && styles.postButtonDisabled]}
-            onPress={submitPost}
-            disabled={isUploading || (!postText.trim() && !postImage)}
-          >
-            {isUploading ? (
-              <View style={styles.uploadingContainer}>
-                <ActivityIndicator size="small" color="#FFFFFF" />
-                <Text style={styles.uploadingText}>{Math.round(uploadProgress * 100)}%</Text>
-              </View>
-            ) : (
-              <Text style={styles.postButtonText}>Post</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.createPostContent}>
-          <View style={styles.createPostUser}>
-            {user?.avatar ? (
-              <Image source={{ uri: user.avatar }} style={styles.userAvatar} />
-            ) : (
-              <View style={styles.userAvatarPlaceholder}>
-                <Text style={styles.avatarInitial}>{user?.name?.charAt(0).toUpperCase() || 'U'}</Text>
-              </View>
-            )}
-            <View>
-              <Text style={styles.userName}>{user?.name || 'User'}</Text>
-              <View style={styles.privacySelector}>
-                <MaterialIcons name="public" size={16} color="#6B7280" />
-                <Text style={styles.privacyText}>Public</Text>
-                <MaterialIcons name="arrow-drop-down" size={16} color="#6B7280" />
-              </View>
-            </View>
-          </View>
-          
-          <TextInput
-            style={styles.postInput}
-            placeholder="What's on your mind?"
-            multiline
-            value={postText}
-            onChangeText={setPostText}
-            autoFocus
-          />
-          
-          {postImage && (
-            <View style={styles.imagePreviewContainer}>
-              <Image source={{ uri: postImage }} style={styles.imagePreview} />
-              <TouchableOpacity 
-                style={styles.removeImageButton}
-                onPress={() => setPostImage(null)}
-              >
-                <MaterialIcons name="close" size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-        
-        <View style={styles.createPostActions}>
-          <TouchableOpacity style={styles.mediaButton} onPress={pickImage}>
-            <MaterialIcons name="photo" size={24} color="#10B981" />
-            <Text style={styles.mediaButtonText}>Photo</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.mediaButton}>
-            <MaterialIcons name="event" size={24} color="#3B82F6" />
-            <Text style={styles.mediaButtonText}>Event</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
-  );
-
-  // Render comments modal
-  const renderCommentsModal = () => (
-    <Modal
-      visible={showComments}
-      animationType="slide"
-      transparent={false}
-      onRequestClose={() => {
-        // Clean up comments listener when closing modal
-        if (commentsUnsubscribe) {
-          commentsUnsubscribe();
-          setCommentsUnsubscribe(null);
-        }
-        setShowComments(false);
+  const renderPostItem = useCallback(({ item }: { item: SocialPost }) => (
+    <EnhancedPostCard
+      post={item}
+      onLike={handleLikePost}
+      onComment={() => handleCommentPress(item)}
+      onShare={() => handleSharePress(item)}
+      onPress={() => {
+        // Navigate to post detail
+        router.push({
+          pathname: '/screens/PostDetail',
+          params: { postId: item.id }
+        });
       }}
-    >
-      <View style={styles.commentsContainer}>
-        <View style={styles.commentsHeader}>
-          <TouchableOpacity onPress={() => {
-            // Clean up comments listener when closing modal
-            if (commentsUnsubscribe) {
-              commentsUnsubscribe();
-              setCommentsUnsubscribe(null);
-            }
-            setShowComments(false);
-          }}>
-            <MaterialIcons name="arrow-back" size={24} color="#6B7280" />
-          </TouchableOpacity>
-          <Text style={styles.commentsTitle}>Comments</Text>
-          <View style={{ width: 24 }} />
-        </View>
-        
-        {/* Original post summary */}
-        {currentPost && (
-          <View style={styles.originalPost}>
-            <View style={styles.postHeader}>
-              {currentPost.userAvatar ? (
-                <Image source={{ uri: currentPost.userAvatar }} style={styles.userAvatarSmall} />
-              ) : (
-                <View style={styles.userAvatarSmallPlaceholder}>
-                  <Text style={styles.avatarInitialSmall}>
-                    {currentPost.userName.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-              
-              <View style={styles.postHeaderInfo}>
-                <Text style={styles.userName}>{currentPost.userName}</Text>
-                <Text style={styles.postTime}>{formatTimestamp(currentPost.createdAt)}</Text>
-              </View>
-            </View>
-            
-            <Text style={styles.originalPostText} numberOfLines={2}>
-              {currentPost.content}
+    />
+  ), [handleLikePost, handleCommentPress, handleSharePress, router]);
+
+  const renderHeader = useCallback(() => (
+    <View style={styles.createPostContainer}>
+      <View style={styles.createPostWrapper}>
+        {user?.avatar ? (
+          <Image source={{ uri: user.avatar }} style={styles.userAvatar} />
+        ) : (
+          <View style={styles.userAvatarPlaceholder}>
+            <Text style={styles.userAvatarText}>
+              {user?.name?.charAt(0).toUpperCase() || 'A'}
             </Text>
           </View>
         )}
-        
-        {/* Comments list */}
-        {isLoadingComments ? (
-          <ActivityIndicator style={styles.loadingIndicator} />
-        ) : (
-          <FlatList
-            data={comments}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <View style={styles.commentItem}>
-                <View style={styles.userAvatarSmallPlaceholder}>
-                  <Text style={styles.avatarInitialSmall}>
-                    {item.userName.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={styles.commentContent}>
-                  <Text style={styles.commentUserName}>{item.userName}</Text>
-                  <Text style={styles.commentText}>{item.content}</Text>
-                  <Text style={styles.commentTime}>{formatTimestamp(item.createdAt)}</Text>
-                </View>
-              </View>
-            )}
-            ListEmptyComponent={
-              <Text style={styles.noCommentsText}>No comments yet. Be the first to comment!</Text>
-            }
-            contentContainerStyle={styles.commentsList}
-          />
-        )}
-        
-        {/* Comment input */}
-        <View style={styles.commentInputContainer}>
-          <TextInput
-            style={styles.commentInput}
-            placeholder="Write a comment..."
-            value={commentText}
-            onChangeText={setCommentText}
-            multiline
-          />
-          <TouchableOpacity 
-            style={[styles.sendButton, !commentText.trim() && styles.sendButtonDisabled]}
-            onPress={addComment}
-            disabled={!commentText.trim()}
-          >
-            <MaterialIcons name="send" size={20} color={commentText.trim() ? "#007AFF" : "#9CA3AF"} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // Main component render
-  return (
-    <ScreenLayout
-      backgroundColor={COLORS.background}
-      statusBarColor={COLORS.background}
-      statusBarStyle="light-content"
-    >
-      {/* Animated Header */}
-      <RNAnimated.View style={[
-        styles.header,
-        {
-          height: Platform.OS === 'ios' ? 130 : 110,
-        }
-      ]}>
-        <LinearGradient
-          colors={[COLORS.primaryGradientStart, COLORS.primaryGradientEnd]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.headerGradient}
-        >
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={styles.welcomeText}>Social Feed</Text>
-              <Text style={styles.subtitleText}>
-                Connect with your community
-              </Text>
-            </View>
-            
-            <View style={styles.headerButtons}>
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={() => router.push('//screens/search')}
-              >
-                <MaterialIcons name="search" size={22} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </LinearGradient>
-      </RNAnimated.View>
-      
-      {/* Create post button */}
-      {!isCreatingPost && (
-        <TouchableOpacity
+        <TouchableOpacity 
           style={styles.createPostButton}
           onPress={() => setIsCreatingPost(true)}
         >
-          <View style={styles.createPostPrompt}>
-            {user?.avatar ? (
-              <Image source={{ uri: user.avatar }} style={styles.userAvatarSmall} />
-            ) : (
-              <View style={styles.userAvatarSmallPlaceholder}>
-                <Text style={styles.avatarInitialSmall}>{user?.name?.charAt(0).toUpperCase() || 'U'}</Text>
-              </View>
-            )}
-            <Text style={styles.createPostPromptText}>What's on your mind?</Text>
-          </View>
-          <View style={styles.createPostOptions}>
-            <TouchableOpacity style={styles.postOptionButton}>
-              <MaterialIcons name="photo" size={20} color="#10B981" />
+          <Text style={styles.createPostText}>What's on your mind?</Text>
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.postTypeButtons}>
+        <TouchableOpacity style={styles.postTypeButton} onPress={() => setIsCreatingPost(true)}>
+          <Ionicons name="image" size={22} color="#4CAF50" />
+          <Text style={styles.postTypeText}>Photo</Text>
+        </TouchableOpacity>
+        
+        <View style={styles.buttonDivider} />
+        
+        <TouchableOpacity style={styles.postTypeButton} onPress={() => setIsCreatingPost(true)}>
+          <Ionicons name="videocam" size={22} color="#F44336" />
+          <Text style={styles.postTypeText}>Video</Text>
+        </TouchableOpacity>
+        
+        <View style={styles.buttonDivider} />
+        
+        <TouchableOpacity style={styles.postTypeButton} onPress={() => router.push('/screens/check-in')}>
+          <Ionicons name="location" size={22} color="#2196F3" />
+          <Text style={styles.postTypeText}>Check In</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  ), [user]);
+
+  const renderEmptyComponent = useCallback(() => (
+    <View style={styles.emptyState}>
+      {isLoading ? (
+        <ActivityIndicator size="large" color={THEME.primary} />
+      ) : (
+        <>
+          <Ionicons name="chatbubble-ellipses-outline" size={70} color="#D1D5DB" />
+          <Text style={styles.emptyTitle}>No Posts Yet</Text>
+          <Text style={styles.emptyText}>
+            Be the first to share something with your community!
+          </Text>
+          <TouchableOpacity 
+            style={styles.createFirstPostButton}
+            onPress={() => setIsCreatingPost(true)}
+          >
+            <Text style={styles.createFirstPostText}>Create Your First Post</Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </View>
+  ), [isLoading]);
+
+  return (
+    <ScreenWrapper
+      backgroundColor={THEME.background}
+      statusBarStyle="light-content"
+      header={{
+        title: 'Social Feed',
+        subtitle: 'Connect with your community',
+        rightContent: (
+          <>
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => setIsSearching(true)}
+            >
+              <Ionicons name="search" size={22} color="#FFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => router.push('/screens/notifications')}
+            >
+              <Ionicons name="notifications" size={22} color="#FFF" />
+            </TouchableOpacity>
+          </>
+        ),
+        gradientColors: [THEME.primaryGradientStart, THEME.primaryGradientEnd]
+      }}
+    >
+
+      {/* Search Modal */}
+      {isSearching && (
+        <View style={styles.searchOverlay}>
+          <View style={styles.searchContainer}>
+            <View style={styles.searchInputContainer}>
+              <Ionicons name="search" size={20} color={THEME.secondaryText} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search posts..."
+                placeholderTextColor={THEME.secondaryText}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+              />
+              <TouchableOpacity onPress={() => {
+                setIsSearching(false);
+                setSearchQuery('');
+                setSearchResults([]);
+              }}>
+                <Ionicons name="close" size={20} color={THEME.secondaryText} />
+              </TouchableOpacity>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.searchButton}
+              onPress={() => {
+                // Filter posts based on search query
+                if (searchQuery.trim()) {
+                  const filtered = posts.filter(post =>
+                    post.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    post.userName?.toLowerCase().includes(searchQuery.toLowerCase())
+                  );
+                  setSearchResults(filtered);
+                } else {
+                  setSearchResults([]);
+                }
+              }}
+            >
+              <Text style={styles.searchButtonText}>Search</Text>
             </TouchableOpacity>
           </View>
-        </TouchableOpacity>
+          
+          {searchQuery.trim() ? (
+            <FlatList
+              data={searchResults}
+              renderItem={renderPostItem}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.searchResultsContainer}
+              ListEmptyComponent={
+                <View style={styles.emptySearchState}>
+                  <Text style={styles.emptySearchText}>No posts found matching "{searchQuery}"</Text>
+                </View>
+              }
+            />
+          ) : (
+            <View style={styles.emptySearchState}>
+              <Text style={styles.emptySearchText}>Enter a search term to find posts</Text>
+            </View>
+          )}
+        </View>
       )}
-      
-      {/* Post creation form or post list */}
+
       {isCreatingPost ? (
-        renderPostCreation()
+        <PostCreation
+          onClose={() => setIsCreatingPost(false)}
+          onPostCreated={(newPost) => {
+            addPostToList(newPost);
+            setIsCreatingPost(false);
+          }}
+          paddingTop={headerHeight}
+        />
       ) : (
         <FlatList
           data={posts}
           renderItem={renderPostItem}
-          keyExtractor={(item, index) => item.id || `post-${index}`}
-          contentContainerStyle={styles.postList}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={renderEmptyComponent}
+          ListFooterComponent={
+            hasMorePosts && posts.length > 0 ? (
+              <ActivityIndicator style={styles.footerLoader} size="large" color={THEME.primary} />
+            ) : (
+              <View style={styles.endOfFeed}>
+                {posts.length > 0 && (
+                  <Text style={styles.endOfFeedText}>
+                    You're all caught up!
+                  </Text>
+                )}
+              </View>
+            )
+          }
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              colors={['#007AFF']}
-              tintColor="#007AFF"
+              tintColor={THEME.primary}
+              colors={[THEME.primary]}
             />
           }
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: false }
+          )}
+          scrollEventThrottle={16}
           onEndReached={loadMorePosts}
           onEndReachedThreshold={0.5}
-          ListEmptyComponent={
-            isLoading ? (
-              <ActivityIndicator style={styles.loadingIndicator} size="large" color="#007AFF" />
-            ) : (
-              <View style={styles.emptyState}>
-                <MaterialIcons name="forum" size={60} color="#D1D5DB" />
-                <Text style={styles.emptyStateTitle}>No Posts Yet</Text>
-                <Text style={styles.emptyStateText}>
-                  Be the first to share something with the community!
-                </Text>
-              </View>
-            )
-          }
-          ListFooterComponent={
-            hasMorePosts && posts.length > 0 && !isRefreshing ? (
-              <ActivityIndicator style={styles.paginationLoader} />
-            ) : null
-          }
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={3}
+          maxToRenderPerBatch={5}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === 'android'}
         />
       )}
-      
-      {/* Comments modal */}
-      {renderCommentsModal()}
-    </ScreenLayout>
-  );
-}
 
-// Create platform-specific shadows
-const cardShadow = createShadow(2);
-const buttonShadow = createShadow(1);
+      <CommentsModal
+        visible={showComments}
+        post={currentPost}
+        onClose={() => setShowComments(false)}
+        userName={user?.name || 'Anonymous'}
+        userAvatar={user?.avatar}
+      />
+    </ScreenWrapper>
+  );
+};
 
 const styles = StyleSheet.create({
-  // Enhanced Header - no borders or outlines
   header: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 30, // Adjusted to account for status bar spacer
+    top: 0,
     left: 0,
     right: 0,
     zIndex: 10,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
   },
   headerGradient: {
     flex: 1,
     paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    paddingBottom: 30, // Extra padding at bottom
+    paddingBottom: 20,
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 24,
-  },
-  welcomeText: {
-    fontSize: 32, // Larger text
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
-  },
-  subtitleText: {
-    fontSize: 18, // Larger text
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginTop: 6,
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   headerButtons: {
     flexDirection: 'row',
-    gap: 16, // Increased spacing
+    gap: 12,
+  },
+  welcomeText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  subtitleText: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   headerButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    width: 48, // Slightly larger
-    height: 48, // Slightly larger
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  createPostButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: COLORS.card,
-    padding: 12,
-    marginHorizontal: 16,
-    marginTop: 100, // Add space for the header
-    marginBottom: 12,
-    borderRadius: 12,
-    ...cardShadow,
-  },
-  createPostPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  createPostPromptText: {
-    marginLeft: 12,
-    fontSize: 16,
-    color: COLORS.secondaryText,
-  },
-  createPostOptions: {
-    flexDirection: 'row',
-  },
-  postOptionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  createPostCard: {
-    backgroundColor: COLORS.card,
-    margin: 16,
-    borderRadius: 12,
-    ...cardShadow,
-  },
-  createPostHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  createPostTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
-  },
-  postButton: {
+  listContainer: {
+    paddingTop: Platform.OS === 'ios' ? 20 : 10,
+    paddingBottom: 80,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: COLORS.primary,
+    backgroundColor: THEME.background,
+  },
+  emptyState: {
+    alignItems: 'center',
+    padding: 40,
+    marginTop: 50,
+    backgroundColor: THEME.card,
     borderRadius: 16,
-    ...buttonShadow,
+    ...createShadow(1),
   },
-  postButtonDisabled: {
-    backgroundColor: COLORS.secondaryText,
-  },
-  postButtonText: {
-    fontSize: 14,
+  emptyTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: THEME.text,
+    marginTop: 20,
+    marginBottom: 10,
   },
-  createPostContent: {
-    padding: 16,
-  },
-  createPostUser: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  privacySelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 4,
-  },
-  privacyText: {
-    fontSize: 12,
-    color: COLORS.secondaryText,
-    marginHorizontal: 4,
-  },
-  postInput: {
+  emptyText: {
     fontSize: 16,
-    color: COLORS.text,
-    minHeight: 100,
-    textAlignVertical: 'top',
+    color: THEME.secondaryText,
+    textAlign: 'center',
+    maxWidth: '80%',
+    marginBottom: 30,
   },
-  imagePreviewContainer: {
-    marginTop: 16,
-    position: 'relative',
+  createFirstPostButton: {
+    backgroundColor: THEME.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+    ...createShadow(2),
   },
-  imagePreview: {
-    width: '100%',
-    height: 200,
-    borderRadius: 12,
+  createFirstPostText: {
+    color: '#FFF',
+    fontWeight: '600',
+    fontSize: 16,
   },
-  removeImageButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
+  footerLoader: {
+    marginVertical: 20,
+  },
+  endOfFeed: {
     alignItems: 'center',
+    padding: 20,
   },
-  createPostActions: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    padding: 12,
-  },
-  mediaButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-    paddingVertical: 8,
-  },
-  mediaButtonText: {
-    marginLeft: 4,
+  endOfFeedText: {
     fontSize: 14,
-    color: COLORS.secondaryText,
+    color: THEME.secondaryText,
   },
-  postList: {
-    paddingTop: 100, // Add space for the header
-    paddingBottom: 20,
+  createPostContainer: {
+    backgroundColor: THEME.card,
+    borderRadius: 16,
+    marginBottom: 16,
+    ...createShadow(1),
   },
-  postCard: {
-    backgroundColor: COLORS.card,
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    ...cardShadow,
-  },
-  postHeader: {
+  createPostWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: 16,
   },
   userAvatar: {
     width: 40,
@@ -993,251 +455,119 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: COLORS.primary,
+    backgroundColor: THEME.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  userAvatarSmall: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  userAvatarSmallPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarInitial: {
+  userAvatarText: {
+    color: '#FFF',
+    fontWeight: 'bold',
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
   },
-  avatarInitialSmall: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  postHeaderInfo: {
+  createPostButton: {
     flex: 1,
+    height: 40,
     marginLeft: 12,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  postTime: {
-    fontSize: 12,
-    color: COLORS.secondaryText,
-  },
-  moreButton: {
-    padding: 4,
-  },
-  postContent: {
-    padding: 12,
-    paddingTop: 0,
-  },
-  postText: {
-    fontSize: 16,
-    color: COLORS.text,
-    marginBottom: 12,
-  },
-  postImage: {
-    width: '100%',
-    height: 250,
-    borderRadius: 12,
-  },
-  postMetrics: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  likeCount: {
-    fontSize: 14,
-    color: COLORS.secondaryText,
-  },
-  commentCount: {
-    fontSize: 14,
-    color: COLORS.secondaryText,
-  },
-  postActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 8,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingVertical: 8,
-  },
-  actionText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: COLORS.secondaryText,
-  },
-  loadingIndicator: {
-    padding: 20,
-  },
-  paginationLoader: {
-    padding: 10,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-    marginTop: 40,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: COLORS.secondaryText,
-    textAlign: 'center',
-    maxWidth: '80%',
-  },
-  commentsContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  commentsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: COLORS.card,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-    ...Platform.select({
-      ios: {
-        paddingTop: 60
-      },
-      android: {
-        paddingTop: 16
-      }
-    })
-  },
-  commentsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
-  },
-  originalPost: {
-    backgroundColor: COLORS.card,
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  originalPostText: {
-    fontSize: 14,
-    color: COLORS.secondaryText,
-    marginTop: 8,
-  },
-  commentsList: {
-    padding: 16,
-    paddingBottom: 80,
-  },
-  commentItem: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  commentContent: {
-    flex: 1,
-    marginLeft: 12,
-    backgroundColor: COLORS.card,
+    paddingHorizontal: 16,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 10,
-    borderRadius: 12,
+    borderColor: THEME.border,
+    justifyContent: 'center',
+    backgroundColor: THEME.background,
   },
-  commentUserName: {
+  createPostText: {
+    color: THEME.secondaryText,
+    fontSize: 16,
+  },
+  postTypeButtons: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: THEME.border,
+    paddingVertical: 8,
+  },
+  postTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  postTypeText: {
+    marginLeft: 6,
     fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
-    marginBottom: 4,
+    color: THEME.text,
+    fontWeight: '500',
   },
-  commentText: {
-    fontSize: 14,
-    color: COLORS.secondaryText,
+  buttonDivider: {
+    width: 1,
+    backgroundColor: THEME.border,
   },
-  commentTime: {
-    fontSize: 12,
-    color: COLORS.secondaryText,
-    marginTop: 4,
-  },
-  noCommentsText: {
-    fontSize: 14,
-    color: COLORS.secondaryText,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 20,
-  },
-  commentInputContainer: {
+  searchOverlay: {
     position: 'absolute',
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    backgroundColor: COLORS.background,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    bottom: 0,
+    backgroundColor: THEME.background,
+    zIndex: 20,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+  },
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    ...Platform.select({
-      ios: {
-        paddingBottom: 30
-      }
-    })
-  },
-  commentInput: {
-    flex: 1,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    fontSize: 14,
-    maxHeight: 100,
+    paddingVertical: 12,
+    backgroundColor: THEME.card,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.border,
   },
-  sendButton: {
-    marginLeft: 8,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    justifyContent: 'center',
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: THEME.background,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    height: 40,
+    marginRight: 8,
   },
-    sendButtonDisabled: {
-      opacity: 0.5,
-    },
-    uploadingContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    uploadingText: {
-      color: '#FFFFFF',
-      marginLeft: 8,
-      fontSize: 12,
-      fontWeight: 'bold',
-    },
-  });
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: THEME.text,
+    height: 40,
+  },
+  searchButton: {
+    backgroundColor: THEME.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    ...createShadow(1),
+  },
+  searchButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  searchResultsContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 80,
+  },
+  emptySearchState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+    marginTop: 50,
+  },
+  emptySearchText: {
+    fontSize: 16,
+    color: THEME.secondaryText,
+    textAlign: 'center',
+  },
+});
+
+export default memo(ImprovedFeed);
