@@ -59,7 +59,7 @@ export default function StripeProvider({ children }: StripeProviderProps) {
     <StripeReactNativeProvider
       // The publishable key is already set in the initializeStripe function,
       // but we need to provide it here as well for typing purposes
-      publishableKey="pk_test_YOUR_TEST_KEY_HERE"
+      publishableKey="pk_test_51R9phj03PVcdX2kJz8vj5IoRvVamTukQXjH6cnwPQyEp7G856KD22qB0GBcv8YdiCLfw3fIm5OJhUIUDAoR7Xivv0043UooPNC"
     >
       {children}
     </StripeReactNativeProvider>

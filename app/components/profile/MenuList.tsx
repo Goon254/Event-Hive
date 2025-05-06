@@ -1,5 +1,5 @@
 // app/components/profile/MenuList.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -9,6 +9,9 @@ import {
   Platform 
 } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { createShadow } from '../../utils/platformUtils';
 
 export type FontAwesomeIconName = 
@@ -37,79 +40,102 @@ interface MenuListProps {
 /**
  * Menu list component
  * Displays a list of menu items with icons and descriptions
+ * With enhanced glassmorphism styling and animations
  */
 const MenuList: React.FC<MenuListProps> = ({ 
   items, 
   fadeAnim,
   isLoading = false
 }) => {
+  // Track which item is being pressed for animation
+  const [pressedIndex, setPressedIndex] = useState<number | null>(null);
+
+  const handlePressIn = (index: number) => {
+    setPressedIndex(index);
+  };
+
+  const handlePressOut = () => {
+    setPressedIndex(null);
+  };
+
+  // Get gradient colors for icon background
+  const getIconGradientColors = (icon: string) => {
+    const gradients = {
+      'user': ['#6366F1', '#4F46E5'],
+      'gear': ['#34D399', '#10B981'],
+      'bell': ['#FBBF24', '#F59E0B'],
+      'shield': ['#F87171', '#EF4444'],
+      'question-circle': ['#A78BFA', '#8B5CF6'],
+      'credit-card': ['#60A5FA', '#3B82F6'],
+      'history': ['#F472B6', '#EC4899'],
+    };
+    return gradients[icon as keyof typeof gradients] || ['#9CA3AF', '#6B7280'];
+  };
+
   return (
     <View style={styles.container} testID="menu-list">
       <Text style={styles.sectionTitle}>Account Settings</Text>
-      <View style={styles.menuContainer}>
-        {items.map((item, index) => (
-          <Animated.View 
-            key={index} 
-            style={{ 
-              opacity: fadeAnim,
-              transform: [{ 
-                translateY: fadeAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0]
-                })
-              }]
-            }}
-          >
-            <TouchableOpacity
-              style={[
-                styles.menuItem,
-                index === items.length - 1 && styles.menuItemLast
-              ]}
-              onPress={item.onPress}
-              disabled={isLoading}
-              accessibilityLabel={item.title}
-              testID={`menu-item-${index}`}
+      <BlurView intensity={25} tint="light" style={styles.blurContainer}>
+        <View style={styles.menuContainer}>
+          {items.map((item, index) => (
+            <Animated.View 
+              key={index} 
+              style={{ 
+                opacity: fadeAnim,
+                transform: [{ 
+                  translateY: fadeAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [20, 0]
+                  })
+                }]
+              }}
             >
-              <View style={styles.menuItemContent}>
-                <View style={[styles.iconContainer, { backgroundColor: getIconBackgroundColor(item.icon) }]}>
-                  <FontAwesome name={item.icon} size={18} color="white" />
-                </View>
-                <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuItemText}>{item.title}</Text>
-                  {item.description && (
-                    <Text style={styles.menuItemDescription}>{item.description}</Text>
-                  )}
-                </View>
-              </View>
-              
-              <View style={styles.menuRightContainer}>
-                {item.badge ? (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{item.badge}</Text>
+              <TouchableOpacity
+                style={[
+                  styles.menuItem,
+                  index === items.length - 1 && styles.menuItemLast,
+                  pressedIndex === index && styles.menuItemPressed
+                ]}
+                onPress={item.onPress}
+                onPressIn={() => handlePressIn(index)}
+                onPressOut={handlePressOut}
+                activeOpacity={0.8}
+                disabled={isLoading}
+                accessibilityLabel={item.title}
+                testID={`menu-item-${index}`}
+              >
+                <View style={styles.menuItemContent}>
+                  <LinearGradient
+                    colors={getIconGradientColors(item.icon)}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.iconContainer}
+                  >
+                    <FontAwesome name={item.icon} size={18} color="white" />
+                  </LinearGradient>
+                  <View style={styles.menuTextContainer}>
+                    <Text style={styles.menuItemText}>{item.title}</Text>
+                    {item.description && (
+                      <Text style={styles.menuItemDescription}>{item.description}</Text>
+                    )}
                   </View>
-                ) : null}
-                <FontAwesome name="chevron-right" size={14} color="#9CA3AF" />
-              </View>
-            </TouchableOpacity>
-          </Animated.View>
-        ))}
-      </View>
+                </View>
+                
+                <View style={styles.menuRightContainer}>
+                  {item.badge ? (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{item.badge}</Text>
+                    </View>
+                  ) : null}
+                  <MaterialIcons name="chevron-right" size={22} color="#9CA3AF" />
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
+          ))}
+        </View>
+      </BlurView>
     </View>
   );
-};
-
-// Helper function to get a consistent color for each icon
-const getIconBackgroundColor = (icon: string) => {
-  const colors = {
-    'user': '#4F46E5',
-    'gear': '#10B981',
-    'bell': '#F59E0B',
-    'shield': '#EF4444',
-    'question-circle': '#8B5CF6',
-    'credit-card': '#3B82F6',
-    'history': '#EC4899',
-  };
-  return colors[icon as keyof typeof colors] || '#6B7280';
 };
 
 // Platform-specific shadows
@@ -126,10 +152,16 @@ const styles = StyleSheet.create({
     marginLeft: 16,
     marginBottom: 8,
   },
-  menuContainer: {
-    backgroundColor: 'white',
-    borderRadius: 16,
+  blurContainer: {
+    borderRadius: 20,
+    overflow: 'hidden',
     marginHorizontal: 16,
+  },
+  menuContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     ...cardShadow,
   },
   menuItem: {
@@ -139,7 +171,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: 'rgba(243, 244, 246, 0.5)',
+  },
+  menuItemPressed: {
+    backgroundColor: 'rgba(0, 0, 0, 0.03)',
+    transform: [{ scale: 0.99 }],
   },
   menuItemLast: {
     borderBottomWidth: 0,
@@ -150,12 +186,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 14,
+    shadowColor: 'rgba(0,0,0,0.2)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   menuTextContainer: {
     flex: 1,
@@ -176,10 +217,15 @@ const styles = StyleSheet.create({
   },
   badge: {
     backgroundColor: '#EF4444',
-    borderRadius: 12,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     marginRight: 8,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 2,
   },
   badgeText: {
     color: 'white',

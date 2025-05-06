@@ -12,6 +12,7 @@ interface ProfileHeaderProps {
 /**
  * Profile header component
  * Displays the header with title and settings button
+ * Enhanced with transparent background and modern styling
  */
 const ProfileHeader: React.FC<ProfileHeaderProps> = ({ onSettingsPress }) => {
   const insets = useSafeAreaInsets();
@@ -34,14 +35,11 @@ const ProfileHeader: React.FC<ProfileHeaderProps> = ({ onSettingsPress }) => {
         accessibilityRole="button"
         testID="settings-button"
       >
-        <FontAwesome name="cog" size={22} color="#1F2937" />
+        <FontAwesome name="cog" size={22} color="#FFFFFF" />
       </TouchableOpacity>
     </View>
   );
 };
-
-// Platform-specific shadows
-const cardShadow = createShadow(3);
 
 const styles = StyleSheet.create({
   header: {
@@ -50,22 +48,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingBottom: 10,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    ...cardShadow,
+    backgroundColor: 'transparent', // Removed white background
+    borderBottomWidth: 0, // Removed border
+    zIndex: 999, // Added zIndex to ensure header stays on top
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: Platform.OS === 'ios' ? '700' : 'bold',
-    color: '#1F2937',
+    fontSize: 26, // Increased from 20
+    fontWeight: '700', 
+    color: '#FFFFFF', // Changed to white
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   settingsButton: {
-    width: 40,
-    height: 40,
+    width: 44, // Slightly larger
+    height: 44, // Slightly larger
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', // Translucent background
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
   },
 });
 

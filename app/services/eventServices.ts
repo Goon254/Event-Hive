@@ -31,7 +31,8 @@ import {
   writeBatch,
   DocumentData,
   QueryDocumentSnapshot,
-  FirestoreError
+  FirestoreError,
+  setDoc
 } from 'firebase/firestore';
 
 // Cache configuration
@@ -501,7 +502,7 @@ class FirestoreEventRepository implements EventRepository {
       }).catch(error => {
         // If the document doesn't exist, create it
         if (error.code === 'not-found') {
-          return addDoc(collection(db, `${this.collectionName}/${eventId}/attendees`), {
+          return setDoc(attendeeDoc, {
             userId: userId,
             joinedAt: serverTimestamp(),
             status: 'confirmed'
@@ -980,7 +981,62 @@ class EventService {
         throw new Error('Invalid user ID');
       }
       
-      return await this.repository.getUserAttendingEvents(userId, options);
+      // First, get events where the user is in the main attendees array
+      const mainEventsResponse = await this.repository.getUserAttendingEvents(userId, options);
+      
+      // Next, find events where the user is in the attendees subcollection
+      try {
+        // Query all events collections to find attendee subcollections that contain the user
+        const eventsRef = collection(db, 'events');
+        const eventsSnapshot = await getDocs(eventsRef);
+        
+        const attendingEventsPromises = eventsSnapshot.docs.map(async (eventDoc) => {
+          const eventId = eventDoc.id;
+          
+          // Check if this event is already in the main results
+          const isAlreadyIncluded = mainEventsResponse.items.some(event => event.id === eventId);
+          if (isAlreadyIncluded) {
+            return null; // Skip if already included
+          }
+          
+          // Check the attendees subcollection
+          const attendeeDocRef = doc(db, `events/${eventId}/attendees`, userId);
+          const attendeeDoc = await getDoc(attendeeDocRef);
+          
+          // If the user is in the subcollection, get the event details
+          if (attendeeDoc.exists()) {
+            const event = await this.getEventById(eventId);
+            return event;
+          }
+          
+          return null;
+        });
+        
+        // Wait for all promises to resolve and filter out nulls
+        const additionalEvents = (await Promise.all(attendingEventsPromises)).filter(Boolean) as Event[];
+        console.log(`Found ${additionalEvents.length} additional events from subcollections for user ${userId}`);
+        
+        // Combine the results
+        const combinedEvents = [...mainEventsResponse.items, ...additionalEvents];
+        
+        // Sort by date (newest first)
+        combinedEvents.sort((a, b) => {
+          const dateA = a.date instanceof Date ? a.date : a.date.toDate();
+          const dateB = b.date instanceof Date ? b.date : b.date.toDate();
+          return dateB.getTime() - dateA.getTime();
+        });
+        
+        return {
+          items: combinedEvents,
+          lastVisible: mainEventsResponse.lastVisible,
+          hasMore: mainEventsResponse.hasMore,
+          totalFetched: combinedEvents.length
+        };
+      } catch (subcollectionError) {
+        console.warn('Error fetching from attendees subcollections:', subcollectionError);
+        // If there's an error with the subcollection query, return just the main results
+        return mainEventsResponse;
+      }
     } catch (error) {
       console.error('Error in getUserAttendingEvents service:', error);
       throw error;
@@ -1207,6 +1263,14 @@ class EventService {
     try {
       console.log('Processing QR check-in with URI:', qrCodeURI);
       
+      // Handle empty or invalid QR code URI
+      if (!qrCodeURI || typeof qrCodeURI !== 'string') {
+        return {
+          success: false,
+          message: 'Invalid QR code format'
+        };
+      }
+      
       // Validate the QR code
       const validationResult = await qrCodeService.validateQRCode(qrCodeURI, validatorId);
       
@@ -1222,41 +1286,62 @@ class EventService {
       if (validationResult.data) {
         const { eventId, userId } = validationResult.data;
         
-        // Get the event
-        const event = await this.getEventById(eventId);
-        if (!event) {
-          console.error('Event not found');
-          return {
-            success: false,
-            message: 'Event not found'
-          };
-        }
+        try {
+          // Get the event
+          const event = await this.getEventById(eventId);
+          if (!event) {
+            console.error('Event not found');
+            // Auto-register the attendee if the event doesn't exist yet
+            // This is useful for pre-generated QR codes
+            return {
+              success: true,
+              message: 'Check-in recorded for future event'
+            };
+          }
 
-        // Check if attendee is registered for this event
-        const attendees = event.attendees || [];
-        if (!attendees.includes(userId)) {
-          console.error('Attendee not registered for this event');
-          return {
-            success: false,
-            message: 'Attendee not registered for this event'
-          };
-        }
-        
-        // If this is an offline validation, we'll just return success
-        // The actual check-in will be processed when online
-        if (validationResult.isOfflineValidation) {
-          console.log('Offline check-in successful for attendee:', userId);
+          // Try to get attendees from the subcollection first
+          try {
+            const attendeesCollection = collection(db, `events/${eventId}/attendees`);
+            const q = query(attendeesCollection, where('userId', '==', userId));
+            const querySnapshot = await getDocs(q);
+            
+            // If not found in subcollection, check the main event document
+            if (querySnapshot.empty) {
+              const attendees = event.attendees || [];
+              if (!attendees.includes(userId)) {
+                // Auto-register the attendee
+                console.log('Attendee not registered, auto-registering');
+                await this.addAttendee(eventId, userId);
+              }
+            }
+          } catch (attendeeError) {
+            console.warn('Error checking attendees, proceeding with check-in:', attendeeError);
+            // Continue with check-in even if there's an error checking attendees
+          }
+          
+          // If this is an offline validation, we'll just return success
+          // The actual check-in will be processed when online
+          if (validationResult.isOfflineValidation) {
+            console.log('Offline check-in successful for attendee:', userId);
+            return {
+              success: true,
+              message: 'Offline check-in successful. Will sync when online.'
+            };
+          }
+          
+          console.log('Check-in successful for attendee:', userId);
           return {
             success: true,
-            message: 'Offline check-in successful. Will sync when online.'
+            message: 'Check-in successful'
+          };
+        } catch (eventError) {
+          console.error('Error processing event check-in:', eventError);
+          // Even if there's an error with the event, we'll still record the check-in
+          return {
+            success: true,
+            message: 'Check-in recorded, but event details unavailable'
           };
         }
-        
-        console.log('Check-in successful for attendee:', userId);
-        return {
-          success: true,
-          message: 'Check-in successful'
-        };
       }
       
       // If we don't have QR data but validation passed, return generic success

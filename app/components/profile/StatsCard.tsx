@@ -40,11 +40,14 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: 'white',
-    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     marginHorizontal: 16,
     marginBottom: 24,
-    paddingVertical: 16,
+    paddingVertical: 20,
+    paddingHorizontal: 12,
     ...cardShadow,
   },
   statItem: {
@@ -52,21 +55,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   statLabel: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: 13,
+    color: '#D1D5DB',
     marginTop: 4,
   },
   statDivider: {
     width: 1,
-    height: '70%',
-    backgroundColor: '#E5E7EB',
+    height: '60%',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     alignSelf: 'center',
   },
 });
+
 
 export default StatsCard;

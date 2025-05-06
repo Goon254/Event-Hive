@@ -1,98 +1,120 @@
 import React, { ReactNode } from 'react';
-import { View, Text, StyleSheet, StatusBar, Platform } from 'react-native';
+import { View, StyleSheet, StatusBar, Image, ImageBackground, ViewStyle, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS } from '../../theme/constants';
 import { LinearGradient } from 'expo-linear-gradient';
-import { createShadow } from '../../utils/platformUtils';
+import { useThemeColors } from '../../theme/constants';
 
 interface HeaderProps {
-  title: string;
+  title?: string;
   subtitle?: string;
   rightContent?: ReactNode;
+  leftContent?: ReactNode;
+  hidden?: boolean;
   gradientColors?: string[];
 }
 
 interface ScreenWrapperProps {
   children: ReactNode;
-  header: HeaderProps;
   backgroundColor?: string;
   statusBarStyle?: 'light-content' | 'dark-content';
-  withSearchBar?: boolean;
-  searchBarContent?: ReactNode;
-  contentContainerStyle?: any;
+  contentContainerStyle?: ViewStyle;
+  header?: HeaderProps;
+  backgroundImage?: any; // Image source
+  backgroundOpacity?: number;
+  backgroundGradient?: {
+    colors: string[];
+    start?: { x: number; y: number };
+    end?: { x: number; y: number };
+  };
 }
 
-/**
- * A consistent wrapper component for shared styling across all screens.
- * Provides a standardized header with text and optional right content,
- * and an optional search bar that's embedded directly in the layout.
- */
 const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
   children,
-  header,
-  backgroundColor = COLORS.background,
+  backgroundColor = 'COLORS.background',
   statusBarStyle = 'light-content',
-  withSearchBar = false,
-  searchBarContent,
   contentContainerStyle,
+  header,
+  backgroundImage,
+  backgroundOpacity = 1,
+  backgroundGradient,
 }) => {
   const insets = useSafeAreaInsets();
-  const HEADER_HEIGHT = Platform.OS === 'ios' ? 130 : 110;
-  const SEARCH_BAR_HEIGHT = 60;
-  
-  // Calculate the top padding for the content based on header and search bar
-  const contentTopPadding = HEADER_HEIGHT + (withSearchBar ? SEARCH_BAR_HEIGHT - 15 : 0);
-  
-  return (
-    <View style={[styles.container, { backgroundColor }]}>
-      <StatusBar barStyle={statusBarStyle} backgroundColor="transparent" translucent />
-      
-      {/* Static Header */}
-      <View style={[styles.header, { height: HEADER_HEIGHT }]}>
+  const COLORS = useThemeColors();
+
+  // If a background color is not provided, use the theme background
+  const bgColor = backgroundColor === 'transparent' ? COLORS.background : backgroundColor;
+
+  // Render background based on props
+  const renderBackground = () => {
+    if (backgroundGradient) {
+      return (
         <LinearGradient
-          colors={header.gradientColors as any || [COLORS.primaryGradientStart, COLORS.primaryGradientEnd] as any}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.headerGradient}
-        >
-          <View style={[styles.headerContent, { paddingTop: Platform.OS === 'ios' ? insets.top : 25 }]}>
-            <View>
-              {/* Title */}
-              <Text style={styles.titleText}>
-                {header.title}
-              </Text>
-              
-              {/* Subtitle */}
-              {header.subtitle && (
-                <Text style={styles.subtitleText}>
-                  {header.subtitle}
-                </Text>
-              )}
-            </View>
-            
-            {/* Right Content (buttons, icons, etc.) */}
-            {header.rightContent && (
-              <View style={styles.headerButtons}>
+          colors={backgroundGradient.colors.length >= 2 ? backgroundGradient.colors as any : ['#FFFFFF', '#FFFFFF']}
+          start={backgroundGradient.start || { x: 0, y: 0 }}
+          end={backgroundGradient.end || { x: 0, y: 1 }}
+          style={styles.backgroundGradient}
+        />
+      );
+    }
+    
+    if (backgroundImage) {
+      return (
+        <Image
+          source={backgroundImage}
+          style={[styles.backgroundImage, { opacity: backgroundOpacity }]}
+          resizeMode="cover"
+        />
+      );
+    }
+    
+    return null;
+  };
+
+  return (
+    <View style={[styles.wrapper, { backgroundColor: bgColor }]}>
+      <StatusBar
+        barStyle={statusBarStyle}
+        translucent
+        backgroundColor="COLORS.background"
+      />
+      
+      {renderBackground()}
+      
+      {header && !header.hidden && (
+        <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+          {header.gradientColors ? (
+            <LinearGradient
+              colors={header.gradientColors && header.gradientColors.length >= 2 ? header.gradientColors as any : ['#FFFFFF', '#FFFFFF']}
+              style={styles.headerGradient}
+            >
+              <View style={styles.headerContent}>
+                {header.leftContent}
+                <View style={styles.headerTextContainer}>
+                  {header.title && <Text style={[styles.headerTitle, { color: COLORS.headerText }]}>{header.title}</Text>}
+                  {header.subtitle && <Text style={[styles.headerSubtitle, { color: COLORS.headerSubtitle }]}>{header.subtitle}</Text>}
+                </View>
                 {header.rightContent}
               </View>
-            )}
-          </View>
-        </LinearGradient>
-      </View>
-      
-      {/* Search Bar - Embedded directly in the layout */}
-      {withSearchBar && (
-        <View style={[styles.searchBarContainer, { top: HEADER_HEIGHT - 15 }]}>
-          {searchBarContent}
+            </LinearGradient>
+          ) : (
+            <View style={styles.headerContent}>
+              {header.leftContent}
+              <View style={styles.headerTextContainer}>
+                {header.title && <Text style={[styles.headerTitle, { color: COLORS.headerText }]}>{header.title}</Text>}
+                {header.subtitle && <Text style={[styles.headerSubtitle, { color: COLORS.headerSubtitle }]}>{header.subtitle}</Text>}
+              </View>
+              {header.rightContent}
+            </View>
+          )}
         </View>
       )}
       
-      {/* Main Content */}
-      <View 
+      <View
         style={[
-          styles.contentContainer, 
-          { paddingTop: contentTopPadding },
-          contentContainerStyle
+          styles.contentContainer,
+          contentContainerStyle,
+           { paddingTop: header?.hidden !== false ? insets.top : 0 },
+
         ]}
       >
         {children}
@@ -102,55 +124,56 @@ const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
     flex: 1,
-  },
-  header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    overflow: 'hidden',
-    ...createShadow(2),
-  },
-  headerGradient: {
-    flex: 1,
-    paddingBottom: 15,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  titleText: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  subtitleText: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 4,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  searchBarContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    zIndex: 9,
-    paddingHorizontal: 20,
+    position: 'relative',
   },
   contentContainer: {
     flex: 1,
   },
+  backgroundImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+  },
+  backgroundGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+  },
+  header: {
+    width: '100%',
+    zIndex: 10,
+  },
+  headerGradient: {
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+  },
+  headerTextContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    marginTop: 2,
+  },
 });
 
 export default ScreenWrapper;
+export { ScreenWrapper };
+export type { ScreenWrapperProps, HeaderProps };

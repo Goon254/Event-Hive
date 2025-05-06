@@ -21,6 +21,9 @@ interface EventFormHeaderProps {
   
   /** Title to display in the header */
   title?: string;
+
+  /** Callback for back button press */
+  onBackPress?: () => void;
 }
 
 /**
@@ -38,16 +41,26 @@ export function EventFormHeader({
   isSubmitting = false,
   onPreviewPress,
   title = 'Create Event',
+  onBackPress,
 }: EventFormHeaderProps) {
+  const handleBackPress = () => {
+    if (onBackPress) {
+      onBackPress();
+    } else {
+      // Use navigate instead of replace to properly handle the back action
+      router.navigate('/(tabs)');
+    }
+  };
+
   return (
     <View style={styles.header}>
       <TouchableOpacity
-        onPress={() => router.back()}
+        onPress={handleBackPress}
         disabled={isSubmitting}
         accessibilityLabel="Go back"
         style={styles.backButton}
       >
-        <MaterialIcons name="arrow-back" size={24} color="#1F2937" />
+        <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
       </TouchableOpacity>
       
       <Text style={styles.headerTitle}>{title}</Text>

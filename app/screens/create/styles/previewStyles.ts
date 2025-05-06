@@ -9,7 +9,7 @@ const previewStyles = StyleSheet.create({
   // Preview container
   previewContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#121212', // Dark background to match Home.tsx
   },
   previewHeader: {
     flexDirection: 'row',
@@ -18,9 +18,8 @@ const previewStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     paddingTop: Platform.OS === 'ios' ? 60 : 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    backgroundColor: 'transparent', // Transparent to show gradient
+    borderBottomWidth: 0,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -30,7 +29,7 @@ const previewStyles = StyleSheet.create({
   previewHeaderTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: '#FFFFFF',
   },
   closePreviewButton: {
     padding: 8,
@@ -51,7 +50,7 @@ const previewStyles = StyleSheet.create({
   previewBannerPlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#2D2D2D', // Darker placeholder for dark mode
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -108,12 +107,12 @@ const previewStyles = StyleSheet.create({
     padding: 16,
   },
   previewDetailCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(45, 45, 45, 0.85)', // Dark card background
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#2D2D2D', // Darker border
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -130,27 +129,27 @@ const previewStyles = StyleSheet.create({
   },
   previewDetailLabel: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#9CA3AF', // Lighter gray for dark mode
     marginBottom: 4,
   },
   previewDetailText: {
     fontSize: 16,
-    color: '#1F2937',
+    color: '#FFFFFF',
     fontWeight: '500',
   },
   previewDetailTextSecondary: {
     fontSize: 14,
-    color: '#6B7280',
+    color: '#9CA3AF', // Lighter gray for dark mode
     marginTop: 2,
   },
   previewDivider: {
     height: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#2D2D2D', // Darker divider
     marginVertical: 4,
   },
   previewTicketPrice: {
     fontSize: 14,
-    color: '#10B981',
+    color: '#00BFA6', // Updated to primary teal color
     marginTop: 2,
   },
   
@@ -162,12 +161,12 @@ const previewStyles = StyleSheet.create({
   previewSectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#FFFFFF',
     marginBottom: 12,
   },
   previewDescription: {
     fontSize: 16,
-    color: '#4B5563',
+    color: 'rgba(255,255,255,0.8)', // Slightly dimmed white text
     lineHeight: 24,
   },
   
@@ -177,7 +176,7 @@ const previewStyles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   previewCategory: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: 'rgba(0, 191, 166, 0.1)', // Light teal background
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -185,12 +184,12 @@ const previewStyles = StyleSheet.create({
     marginBottom: 8,
   },
   previewCategoryText: {
-    color: '#1D4ED8',
+    color: '#00BFA6', // Updated to primary teal color
     fontSize: 14,
     fontWeight: '500',
   },
   previewTag: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', // Translucent white
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -198,7 +197,7 @@ const previewStyles = StyleSheet.create({
     marginBottom: 8,
   },
   previewTagText: {
-    color: '#4B5563',
+    color: 'rgba(255,255,255,0.8)', // Slightly dimmed white text
     fontSize: 14,
   },
   
@@ -223,7 +222,7 @@ const previewStyles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#2D2D2D', // Darker placeholder
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -235,12 +234,12 @@ const previewStyles = StyleSheet.create({
   previewSpeakerName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#FFFFFF',
     textAlign: 'center',
   },
   previewSpeakerRole: {
     fontSize: 12,
-    color: '#6B7280',
+    color: 'rgba(255,255,255,0.7)', // Slightly dimmed white text
     textAlign: 'center',
   },
 });

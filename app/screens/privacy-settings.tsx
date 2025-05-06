@@ -1,26 +1,22 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  ScrollView, 
-  Switch, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Switch,
+  TouchableOpacity,
   Alert,
   ActivityIndicator
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
 import { usePrivacySettings } from '../hooks/usePrivacySettings';
-import { StatusBar } from 'expo-status-bar';
+import ScreenWrapper from '../components/common/ScreenWrapper';
 
 // Define styles first to avoid "used before declaration" errors
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -32,31 +28,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
   backButton: {
     padding: 8,
   },
-  headerTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-    textAlign: 'center',
-    marginRight: 40, // To offset the back button and center the title
-  },
-  scrollView: {
-    flex: 1,
-  },
   contentContainer: {
+    paddingTop: 20,
     paddingBottom: 40,
   },
   section: {
@@ -339,25 +315,29 @@ export default function PrivacySettingsScreen() {
     );
   }
   
+  // Create back button for header
+  const headerBackButton = (
+    <TouchableOpacity
+      onPress={() => router.back()}
+      accessibilityLabel="Go back"
+      accessibilityHint="Navigates to the previous screen"
+      style={styles.backButton}
+    >
+      <FontAwesome name="arrow-left" size={20} color="#FFFFFF" />
+    </TouchableOpacity>
+  );
+  
   return (
-    <View style={styles.container}>
-      <StatusBar style="dark" />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => router.back()}
-          accessibilityLabel="Go back"
-          accessibilityHint="Navigates to the previous screen"
-        >
-          <Ionicons name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Privacy & Security</Text>
-      </View>
-      
-      <ScrollView 
-        style={styles.scrollView}
+    <ScreenWrapper
+      backgroundColor="#F9FAFB"
+      statusBarStyle="light-content"
+      header={{
+        title: "Privacy & Security",
+        rightContent: <View style={{ width: 40 }} />,
+        gradientColors: ['#2563EB', '#4F46E5']
+      }}
+    >
+      <ScrollView
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
@@ -643,6 +623,6 @@ export default function PrivacySettingsScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </View>
+    </ScreenWrapper>
   );
 }

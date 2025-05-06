@@ -1,860 +1,565 @@
-import React, { useState, useEffect, useRef } from 'react';
+// app/(tabs)/Home.tsx
+
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import * as Device from 'expo-device';
+import { router, usePathname } from 'expo-router';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   FlatList,
   RefreshControl,
-  Platform,
-  Animated as RNAnimated,
+  Animated,
   Dimensions,
-  ScrollView,
+  ImageBackground,
+  StatusBar,
+  Platform,
   Pressable,
   Image,
 } from 'react-native';
-import { router } from 'expo-router';
-import { FontAwesome, MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { useColorScheme } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView, BlurTint } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../AuthContext';
-import { useColorScheme } from 'react-native';
-import { createShadow } from '../utils/platformUtils';
-import ScreenLayout from '../components/common/ScreenLayout';
 import ScreenWrapper from '../components/common/ScreenWrapper';
 import SearchBar from '../components/common/SearchBar';
-import { BlurView } from 'expo-blur';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import FloatingActionButton from '../components/common/FloatingActionButton';
+import { EventCard, useEventData, useAnimations } from '../components/home';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Event as EventType } from '../services/eventServices';
 
-// Import components from home directory
-import {
-  EventCard,
-  FeaturedEvent,
-  EventSection,
-  ExploreModal,
-  useEventData,
-  useAnimations
-} from '../components/home';
-// Import EVENT_CATEGORIES but we won't use it in the UI
-import { EVENT_CATEGORIES } from '../components/home/CategoryButtons';
-import { getEventColor } from '../components/home/utils/uiHelpers';
+// Define EventStatus interface locally
+interface EventStatus {
+  label: string;
+  color?: string;
+  backgroundColor?: string;
+}
 
-// Get screen dimensions for responsive design
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// SkeletonLoader component for loading states
-const SkeletonLoader = ({ 
-  width, 
-  height, 
-  style, 
-  borderRadius = 8 
-}: { 
-  width?: number | string; 
-  height?: number | string; 
-  style?: any; 
-  borderRadius?: number 
-}) => {
-  const animatedValue = new RNAnimated.Value(0);
-  
-  useEffect(() => {
-    RNAnimated.loop(
-      RNAnimated.sequence([
-        RNAnimated.timing(animatedValue, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: false,
-        }),
-        RNAnimated.timing(animatedValue, {
-          toValue: 0,
-          duration: 1000,
-          useNativeDriver: false,
-        }),
-      ])
-    ).start();
-  }, []);
-  
-  const backgroundColor = animatedValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['rgba(0, 0, 0, 0.03)', 'rgba(0, 0, 0, 0.15)'],
-  });
-  
-  return (
-    <RNAnimated.View
-      style={[
-        {
-          width: width || '100%',
-          height: height || 20,
-          borderRadius,
-          backgroundColor,
-        },
-        style,
-      ]}
-    />
-  );
+
+const PREMIUM_GRADIENT = {
+  light: ['#00BFA6', '#00A19D'],
+  dark: ['#00CFAD', '#008F8B']
 };
 
-// SkeletonEventCard component
-const SkeletonEventCard = ({ isDarkMode }: { isDarkMode: boolean }) => {
-  return (
-    <View style={[styles.skeletonCard, { backgroundColor: isDarkMode ? '#1E1E1E' : '#FFFFFF' }]}>
-      <SkeletonLoader height={120} borderRadius={12} style={{}} />
-      <View style={styles.skeletonCardContent}>
-        <SkeletonLoader width={150} height={24} style={{ marginBottom: 12 }} />
-        <SkeletonLoader width={100} height={16} style={{ marginBottom: 8 }} />
-        <SkeletonLoader width={180} height={16} style={{ marginBottom: 16 }} />
-        <View style={styles.skeletonFooter}>
-          <SkeletonLoader width={80} height={24} borderRadius={12} style={{}} />
-          <SkeletonLoader width={40} height={40} borderRadius={20} style={{}} />
-        </View>
-      </View>
-    </View>
-  );
-};
+// Type guard to check if user has premium status
+interface PremiumUser extends Record<string, any> {
+  isPremium: boolean;
+}
 
-/**
- * Home screen component with styling consistent with the feed screen
- * Category buttons have been removed as requested
- */
+function hasPremium(user: any): user is PremiumUser {
+  return user && typeof user.isPremium === 'boolean';
+}
+
 export default function Home() {
+  const { user } = useAuth();
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === 'dark';
-  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   
-  // Define tab bar height - ideally this would come from a shared constant
+  // Check if BlurView is supported on this device
+  const [isBlurSupported, setIsBlurSupported] = useState(true);
+  
+  useEffect(() => {
+    // On Android, BlurView might not be supported on all devices
+    // We'll check the device and OS to determine if we should use a fallback
+    const checkBlurSupport = async () => {
+      if (Platform.OS === 'android') {
+        const deviceInfo = await Device.getDeviceTypeAsync();
+        const osVersion = Platform.Version;
+        
+        // This is a simplified check - in a real app, you might want to check
+        // specific device models or Android API levels
+        if (deviceInfo === Device.DeviceType.PHONE && osVersion < 23) {
+          setIsBlurSupported(false);
+        }
+      }
+    };
+    
+    checkBlurSupport();
+  }, []);
+
   const TAB_BAR_HEIGHT = 60;
-  
-  // Dynamic theme based on color scheme
+
   const THEME = {
-    // Base colors
-    background: isDarkMode ? '#121212' : '#F9FAFB',
-    card: isDarkMode ? '#1E1E1E' : '#FFFFFF',
-    
-    // Gradients
-    primaryGradientStart: '#2563EB',
-    primaryGradientEnd: '#4F46E5',
-    
-    // Text colors
-    text: isDarkMode ? '#F3F4F6' : '#1F2937',
+    background: isDarkMode ? '#121212' : '#F7F9FC',
+    card: isDarkMode ? 'rgba(45, 45, 45, 0.85)' : 'rgba(255, 255, 255, 0.85)',
+    text: isDarkMode ? '#F0FDF4' : '#1F2937',
     secondaryText: isDarkMode ? '#9CA3AF' : '#6B7280',
-    accentText: '#4F46E5', // Keep accent the same for brand consistency
-    
-    // UI elements
-    border: isDarkMode ? '#2D2D2D' : '#E5E7EB',
-    divider: isDarkMode ? '#262626' : '#F3F4F6',
-    
-    // Status colors remain the same
-    success: '#10B981',
-    warning: '#FBBF24',
-    error: '#EF4444',
+    accentText: '#00BFA6',
+    primaryGradientStart: isDarkMode ? PREMIUM_GRADIENT.dark[0] : PREMIUM_GRADIENT.light[0],
+    primaryGradientEnd: isDarkMode ? PREMIUM_GRADIENT.dark[1] : PREMIUM_GRADIENT.light[1],
+    cardGlassEffect: true,
   };
-  
-  // Animated values
-  const scrollY = useRef(new RNAnimated.Value(0)).current;
-  const animationProgress = useRef(new RNAnimated.Value(0)).current;
-  const rotateAnim = useRef(new RNAnimated.Value(0)).current;
-  
-  // Use the event data hook to manage all event-related state and operations
+
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const animationProgress = useRef(new Animated.Value(0)).current;
+  const headerOpacity = useRef(new Animated.Value(1)).current;
+
   const {
-    events,
     upcomingEvents,
-    nearbyEvents,
-    myEvents,
-    featuredEvent,
-    filteredEvents,
-    attendingEvents,
+    featuredEvent, // Single featured event
+    nearbyEvents, // New addition - nearby events
     loading,
     refreshing,
     error,
-    isOffline,
     searchQuery,
     selectedFilter,
     selectedCategory,
+    filteredEvents,
+    refreshEvents,
+    retryLoading,
+    getEventStatus,
+    isUserAttending,
     setSearchQuery,
     setSelectedFilter,
     setSelectedCategory,
-    loadEvents,
-    refreshEvents,
-    resetFilters,
-    retryLoading,
-    getEventStatus,
-    getDaysUntil,
-    isUserAttending
   } = useEventData(user?.id);
-  
-  // Use the animations hook to manage all animations
+
+  // Create a featuredEvents array from the single featuredEvent for compatibility
+  const featuredEvents = featuredEvent ? [featuredEvent] : [];
+
   const {
     fadeAnim,
-    translateY,
-    exploreModalTranslateY,
     animateListItems,
-    animateContentAppearance,
-    showExploreModal,
-    hideExploreModal,
-    getItemAnimationValues
   } = useAnimations();
+
+  const [activeSection, setActiveSection] = useState('all'); // 'all', 'featured', 'nearby'
   
-  // Explore modal state
-  const [exploreModalVisible, setExploreModalVisible] = useState(false);
-  const [pulseAnim] = useState(new RNAnimated.Value(1));
+  // Wrapper function to convert FilterType to EventStatus
+  const getEventStatusWrapper = useCallback((event: EventType): EventStatus => {
+    const status = getEventStatus(event);
+    // Convert FilterType to EventStatus
+    switch(status) {
+      case 'upcoming':
+        return { label: 'Upcoming', color: '#00BFA6', backgroundColor: '#00BFA620' };
+      case 'ongoing':
+        return { label: 'Ongoing', color: '#F59E0B', backgroundColor: '#F59E0B20' };
+      case 'completed':
+        return { label: 'Completed', color: '#6B7280', backgroundColor: '#6B728020' };
+      default:
+        return { label: 'All', color: '#6B7280', backgroundColor: '#6B728020' };
+    }
+  }, [getEventStatus]);
   
-  // Start pulse animation
+
+  // Track if screen is focused using Expo Router
+  const pathname = usePathname();
+  const isFocused = pathname === '/' || pathname === '/Home' || pathname === '/(tabs)/Home';
+
   useEffect(() => {
-    // Rotation animation for loading icon
-    RNAnimated.loop(
-      RNAnimated.timing(rotateAnim, {
-        toValue: 1,
-        duration: 2000,
-        useNativeDriver: true,
-      })
-    ).start();
-    
-    // Pulse animation for action buttons
-    RNAnimated.loop(
-      RNAnimated.sequence([
-        RNAnimated.timing(pulseAnim, {
-          toValue: 1.08,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-        RNAnimated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-    
-    // Initial appearance animation with a subtle delay sequence
     const timer = setTimeout(() => {
-      RNAnimated.timing(animationProgress, {
+      Animated.timing(animationProgress, {
         toValue: 1,
-        duration: 1800,
+        duration: 1200,
         useNativeDriver: true,
       }).start();
+      animateListItems(upcomingEvents.length);
       
-      // Staggered animations for list items
-      setTimeout(() => {
-        animateListItems(events.length);
-      }, 600);
     }, 300);
-    
     return () => clearTimeout(timer);
-  }, [animateListItems, events.length]);
-  
-  // Handle category selection (now used only in explore modal)
-  const handleCategorySelect = (categoryId: string) => {
-    setSelectedCategory(categoryId);
-    handleOpenExploreModal();
+  }, [animateListItems, upcomingEvents.length]);
+
+  const handleOpenExploreScreen = () => {
+    router.push('/screens/explore');
   };
-  
-  // Handle opening the explore modal
-  const handleOpenExploreModal = () => {
-    setExploreModalVisible(true);
-    showExploreModal();
-  };
-  
-  // Handle closing the explore modal
-  const handleCloseExploreModal = () => {
-    hideExploreModal(() => {
-      setExploreModalVisible(false);
-    });
-  };
-  
-  // Animation interpolations
-  const rotateInterpolation = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-  
-  // Calculate the top area height with proper component measurements and safe area insets
-  const HEADER_HEIGHT = Platform.OS === 'ios' ? 130 : 110;
-  const SEARCH_HEIGHT = 60;
-  // Use actual safe area insets instead of hardcoded values
-  const topAreaHeight = HEADER_HEIGHT + SEARCH_HEIGHT - 15;
-  
-  // Glowing dot pulse for notification indicator
-  const glowOpacity = pulseAnim.interpolate({
-    inputRange: [1, 1.08],
-    outputRange: [0.7, 1],
+
+
+  // Animated header with scroll effect
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [0, 80],
+    outputRange: [0, -20],
     extrapolate: 'clamp',
   });
-  
-  // Create header right content
-  const headerRightContent = (
-    <>
-      <TouchableOpacity
-        style={styles.headerButtonContainer}
-        onPress={() => router.push('/screens/NearbyEventsScreen')}
-      >
-        <BlurView 
-          intensity={30} 
-          tint="light" 
-          style={styles.headerButtonBlur}
-        >
-          <MaterialIcons name="map" size={22} color="#FFF" />
-        </BlurView>
-      </TouchableOpacity>
-      
-      <TouchableOpacity
-        style={styles.headerButtonContainer}
-        onPress={() => router.push('/screens/notifications')}
-      >
-        <BlurView 
-          intensity={30} 
-          tint="light" 
-          style={styles.headerButtonBlur}
-        >
-          <FontAwesome name="bell" size={22} color="#FFF" />
-          <RNAnimated.View 
-            style={[
-              styles.notificationDot,
-              { 
-                opacity: glowOpacity,
-                transform: [{ scale: pulseAnim }],
-              }
-            ]} 
-          />
-        </BlurView>
-      </TouchableOpacity>
-    </>
+
+  const headerScale = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [1, 0.92],
+    extrapolate: 'clamp',
+  });
+
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    { useNativeDriver: false }
   );
 
-return (
-    <ScreenWrapper
-      backgroundColor={THEME.background}
-      statusBarStyle={isDarkMode ? "light-content" : "dark-content"}
-      header={{
-        title: user?.name ? `Hello ${user.name.split(' ')[0]}` : 'Hello',
-        subtitle: 'Discover exciting events near you',
-        rightContent: headerRightContent,
-        gradientColors: [THEME.primaryGradientStart, THEME.primaryGradientEnd]
-      }}
-      withSearchBar={true}
-      searchBarContent={
-        <View style={{ paddingTop: 18, paddingHorizontal: 0 }}>
-          <SearchBar
-            placeholder="Explore all events"
-            value=""
-            editable={false}
-            onPress={() => router.push('/screens/explore')}
-          />
-          <View style={{
-            height: 0.5,
-            backgroundColor: 'rgba(0,0,0,0.05)',
-            marginTop: 10
-          }} />
-        </View>
+  // Get events based on selected section
+  const getDisplayedEvents = () => {
+    switch(activeSection) {
+      case 'featured':
+        return featuredEvents || [];
+      case 'nearby':
+        return nearbyEvents || [];
+      default:
+        return upcomingEvents || [];
+    }
+  };
+
+  const renderSectionTabs = () => (
+    <View style={styles.sectionTabsContainer}>
+      <Pressable 
+        style={[styles.sectionTab, activeSection === 'all' && styles.sectionTabActive]} 
+        onPress={() => setActiveSection('all')}
+      >
+        <Text style={[
+          styles.sectionTabText, 
+          activeSection === 'all' ? { color: THEME.primaryGradientStart } : { color: THEME.secondaryText }
+        ]}>All Events</Text>
+      </Pressable>
+      
+      <Pressable 
+        style={[styles.sectionTab, activeSection === 'featured' && styles.sectionTabActive]} 
+        onPress={() => setActiveSection('featured')}
+      >
+        <Text style={[
+          styles.sectionTabText, 
+          activeSection === 'featured' ? { color: THEME.primaryGradientStart } : { color: THEME.secondaryText }
+        ]}>Featured</Text>
+      </Pressable>
+      
+      <Pressable 
+        style={[styles.sectionTab, activeSection === 'nearby' && styles.sectionTabActive]} 
+        onPress={() => setActiveSection('nearby')}
+      >
+        <Text style={[
+          styles.sectionTabText, 
+          activeSection === 'nearby' ? { color: THEME.primaryGradientStart } : { color: THEME.secondaryText }
+        ]}>Nearby</Text>
+      </Pressable>
+    </View>
+  );
+
+  const renderHeader = () => (
+    <Animated.View style={[
+      styles.headerAnimatedContainer,
+      {
+        transform: [
+          { translateY: headerTranslateY },
+          { scale: headerScale }
+        ],
+        opacity: headerOpacity,
       }
+    ]}>
+      {/* Weather Widget - New Premium Feature */}
+      {user && hasPremium(user) && user.isPremium && (
+        <View style={styles.weatherWidget}>
+          <LinearGradient
+            colors={['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.05)']}
+            style={styles.weatherGradient}
+          >
+            <Ionicons name="partly-sunny" size={18} color="#FFF" style={{ marginRight: 8 }} />
+            <Text style={styles.weatherText}>82°F • Perfect for outdoor events</Text>
+          </LinearGradient>
+        </View>
+      )}
+      
+      {/* App Title and Enhanced Profile Section */}
+      <View style={styles.headerContainer}>
+        <Animated.Text style={[styles.headerTitle]}>
+          Event<Text style={styles.headerTitleHive}>Hive</Text>
+        </Animated.Text>
+        
+        {user && (
+          <Pressable
+            style={styles.profileButton}
+            onPress={() => router.push('/(tabs)/profile')}
+          >
+            <LinearGradient
+              colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+              style={styles.profileButtonGradient}
+            >
+              {user.avatar ? (
+                <Image source={{ uri: user.avatar }} style={styles.profileAvatar} />
+              ) : (
+                <View style={styles.profileAvatarPlaceholder}>
+                  <Text style={styles.profileInitials}>{user.name?.charAt(0) || 'U'}</Text>
+                </View>
+              )}
+              
+              {/* Premium badge if user is premium */}
+              {user && hasPremium(user) && user.isPremium && (
+                <View style={styles.premiumBadge}>
+                  <MaterialCommunityIcons name="star" size={10} color="#FFFFFF" />
+                </View>
+              )}
+            </LinearGradient>
+          </Pressable>
+        )}
+      </View>
+
+      {/* Welcome Message - New Feature */}
+      <View style={styles.welcomeContainer}>
+        <Text style={styles.welcomeText}>
+          {getWelcomeMessage()}, {user?.name?.split(' ')[0] || 'Explorer'}
+        </Text>
+        <Text style={styles.welcomeSubtext}>
+          Discover amazing experiences around you
+        </Text>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <SearchBar
+          placeholder="Explore all events"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onPress={handleOpenExploreScreen}
+          premium={true}
+        />
+      </View>
+
+      {/* Section Tabs */}
+      {renderSectionTabs()}
+    </Animated.View>
+  );
+
+  // Welcome message based on time of day
+  const getWelcomeMessage = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  };
+
+  return (
+    <ScreenWrapper
+      header={{ hidden: true }}
+      backgroundColor="transparent"
+      statusBarStyle="light-content"
       contentContainerStyle={{ flex: 1 }}
     >
-      {/* Main Content */}
-      <RNAnimated.FlatList
-        data={[]}
-        renderItem={null}
-        onScroll={RNAnimated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
-        scrollEventThrottle={16}
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{
-          paddingTop: 20,
-          paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 20, // Add tab bar height plus buffer
-          paddingHorizontal: 16,
-        }}
-        ListHeaderComponent={
-          <>
-            {/* Loading State - Using skeleton loaders */}
-            {loading && (
-              <>
-                <View style={[styles.sectionContainer, { backgroundColor: THEME.card }]}>
-                  <View style={[styles.sectionHeader, { borderBottomColor: THEME.border }]}>
-                    <SkeletonLoader width={150} height={24} style={{}} />
-                    <SkeletonLoader width={80} height={20} style={{}} />
-                  </View>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.horizontalScrollContent}
-                  >
-                    {[1, 2, 3].map((_, index) => (
-                      <View key={`skeleton-${index}`} style={{ marginRight: 16 }}>
-                        <SkeletonEventCard isDarkMode={isDarkMode} />
-                      </View>
-                    ))}
-                  </ScrollView>
-                </View>
-                
-                <View style={[styles.sectionContainer, { backgroundColor: THEME.card }]}>
-                  <View style={[styles.sectionHeader, { borderBottomColor: THEME.border }]}>
-                    <SkeletonLoader width={150} height={24} style={{}} />
-                    <SkeletonLoader width={80} height={20} style={{}} />
-                  </View>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.horizontalScrollContent}
-                  >
-                    {[1, 2, 3].map((_, index) => (
-                      <View key={`skeleton-nearby-${index}`} style={{ marginRight: 16 }}>
-                        <SkeletonEventCard isDarkMode={isDarkMode} />
-                      </View>
-                    ))}
-                  </ScrollView>
-                </View>
-              </>
-            )}
-            
-            {/* Error State */}
-            {error && !loading && (
-              <View style={[styles.errorContainer, { 
-                backgroundColor: THEME.card,
-                borderColor: 'rgba(239, 68, 68, 0.2)'
-              }]}>
-                <View style={styles.errorIconContainer}>
-                  <MaterialIcons name="error-outline" size={48} color={THEME.error} />
-                </View>
-                <Text style={[styles.errorText, { color: THEME.error }]}>
-                  Connection Interrupted
-                </Text>
-                <Text style={[styles.errorSubtext, { color: THEME.secondaryText }]}>
-                  {error.message || "Unable to reach event servers. Check your connection."}
-                </Text>
-                <TouchableOpacity
-                  style={styles.retryButton}
-                  activeOpacity={0.8}
-                  onPress={retryLoading}
-                >
-                  <Text style={styles.retryButtonText}>Reconnect</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            
-            {/* Featured Event */}
-            {!loading && featuredEvent && (
-              <RNAnimated.View 
-                style={[
-                  styles.featuredEventContainer,
-                  {
-                    opacity: animationProgress.interpolate({
-                      inputRange: [0, 0.4, 1],
-                      outputRange: [0, 0, 1]
-                    }),
-                    transform: [{ 
-                      translateY: animationProgress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [30, 0]
-                      })
-                    }]
-                  }
-                ]}
-              >
-                <FeaturedEvent
-                  event={featuredEvent}
-                  daysUntil={getDaysUntil(featuredEvent.date)}
-                  fadeAnim={fadeAnim}
-                  translateY={translateY}
-                  theme={THEME}
-                />
-              </RNAnimated.View>
-            )}
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      
+      <ImageBackground
+        source={require('../../assets/images/tropical-gradient.png')} // Update with your premium background
+        style={styles.background}
+        resizeMode="cover"
+      >
+        <LinearGradient
+          colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.1)']}
+          style={styles.backgroundOverlay}
+        />
 
-            {/* Upcoming Events Section */}
-            {!loading && upcomingEvents && upcomingEvents.length > 0 && (
-              <RNAnimated.View
-                style={[
-                  styles.sectionContainer,
-                  {
-                    backgroundColor: THEME.card,
-                    opacity: animationProgress.interpolate({
-                      inputRange: [0, 0.5, 1],
-                      outputRange: [0, 0, 1]
-                    }),
-                    transform: [{
-                      translateY: animationProgress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [30, 0]
-                      })
-                    }]
-                  }
-                ]}
-              >
-                <View style={[styles.sectionHeader, { borderBottomColor: THEME.border }]}>
-                  <View style={styles.sectionTitleContainer}>
-                    <Ionicons
-                      name="calendar-outline"
-                      size={22}
-                      color={THEME.accentText}
-                      style={styles.sectionIcon}
-                    />
-                    <Text style={[styles.sectionTitle, { color: THEME.text }]}>
-                      Upcoming Events
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={[styles.seeAllButton, { backgroundColor: `${THEME.accentText}20` }]}
-                    onPress={() => router.push('/screens/UpcomingEventsScreen')}
-                  >
-                    <Text style={[styles.seeAllText, { color: THEME.accentText }]}>
-                      See All
-                    </Text>
-                    <MaterialIcons name="arrow-forward-ios" size={12} color={THEME.accentText} />
-                  </TouchableOpacity>
-                </View>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.horizontalScrollContent}
-                >
-                  {upcomingEvents.map((event, index) => (
-                    <EventCard
-                      key={`upcoming-${event.id}`}
-                      event={event}
-                      theme={THEME}
-                      onPress={() => router.push({
-                        pathname: '/screens/eventdetails',
-                        params: { id: event.id.toString() }
-                      })}
-                      style={{ marginRight: index < upcomingEvents.length - 1 ? 16 : 0 }}
-                      animationDelay={index * 100}
-                      getEventStatus={getEventStatus}
-                      isUserAttending={isUserAttending}
-                    />
-                  ))}
-                </ScrollView>
-              </RNAnimated.View>
-            )}
+        {renderHeader()}
 
-            {/* Your Events Section */}
-            {!loading && myEvents && myEvents.length > 0 && (
-              <RNAnimated.View
-                style={[
-                  styles.sectionContainer,
-                  {
-                    backgroundColor: THEME.card,
-                    opacity: animationProgress.interpolate({
-                      inputRange: [0, 0.6, 1],
-                      outputRange: [0, 0, 1]
-                    }),
-                    transform: [{
-                      translateY: animationProgress.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [30, 0]
-                      })
-                    }]
-                  }
-                ]}
-              >
-                <View style={[styles.sectionHeader, { borderBottomColor: THEME.border }]}>
-                  <View style={styles.sectionTitleContainer}>
-                    <Ionicons
-                      name="star-outline"
-                      size={22}
-                      color={THEME.accentText}
-                      style={styles.sectionIcon}
-                    />
-                    <Text style={[styles.sectionTitle, { color: THEME.text }]}>
-                      Your Events
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    style={[styles.seeAllButton, { backgroundColor: `${THEME.accentText}20` }]}
-                    onPress={() => router.push('/screens/MyEventsScreen')}
-                  >
-                    <Text style={[styles.seeAllText, { color: THEME.accentText }]}>
-                      See All
-                    </Text>
-                    <MaterialIcons name="arrow-forward-ios" size={12} color={THEME.accentText} />
-                  </TouchableOpacity>
-                </View>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.horizontalScrollContent}
-                >
-                  {myEvents.map((event, index) => (
-                    <EventCard
-                      key={`my-event-${event.id}`}
-                      event={event}
-                      theme={THEME}
-                      onPress={() => router.push({
-                        pathname: '/screens/eventdetails',
-                        params: { id: event.id.toString() }
-                      })}
-                      style={{ marginRight: index < myEvents.length - 1 ? 16 : 0 }}
-                      animationDelay={index * 100}
-                      getEventStatus={getEventStatus}
-                      isUserAttending={isUserAttending}
-                    />
-                  ))}
-                </ScrollView>
-              </RNAnimated.View>
-            )}
-          </>
-        }
-        keyExtractor={() => 'home-content'}
-        ListEmptyComponent={null}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={refreshEvents}
-            colors={[THEME.primaryGradientEnd]}
-            tintColor={THEME.accentText}
-            progressViewOffset={topAreaHeight + insets.top}
-          />
-        }
-      />
+        {/* Event List */}
+        <FlatList
+          data={getDisplayedEvents()}
+          renderItem={({ item, index }) => (
+            <Animated.View
+              style={{
+                opacity: animationProgress.interpolate({ 
+                  inputRange: [0, 0.3 + index * 0.1, 1], 
+                  outputRange: [0, 0, 1] 
+                }),
+                transform: [{ 
+                  translateY: animationProgress.interpolate({ 
+                    inputRange: [0, 1], 
+                    outputRange: [30, 0] 
+                  }) 
+                }],
+              }}
+            >
+              <EventCard
+                event={item}
+                theme={THEME}
+                getEventStatus={getEventStatusWrapper}
+                isUserAttending={isUserAttending}
+                style={{ marginBottom: 16 }}
+              />
+            </Animated.View>
+          )}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={{ 
+            paddingHorizontal: 24,
+            paddingTop: 340, // Adjust based on header height
+            paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 40
+          }}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={refreshEvents} 
+              colors={[THEME.accentText]}
+              progressBackgroundColor={isDarkMode ? '#2D2D2D' : '#FFFFFF'}
+              tintColor="#FFFFFF"
+              progressViewOffset={340} // Match paddingTop
+            />
+          }
+          ListEmptyComponent={() => (
+            <View style={styles.emptyStateContainer}>
+              <MaterialCommunityIcons name="calendar-blank" size={60} color="rgba(255,255,255,0.5)" />
+              <Text style={styles.emptyStateText}>No events found</Text>
+              <Text style={styles.emptyStateSubtext}>Try changing filters or create your first event</Text>
+            </View>
+          )}
+        />
 
-      {/* Explore Modal */}
-      <ExploreModal
-        visible={exploreModalVisible}
-        events={filteredEvents}
-        searchQuery={searchQuery}
-        selectedFilter={selectedFilter}
-        selectedCategory={selectedCategory}
-        getEventStatus={getEventStatus}
-        onClose={handleCloseExploreModal}
-        onReset={resetFilters}
-        onSearchChange={setSearchQuery}
-        onFilterChange={setSelectedFilter}
-        onCategoryChange={setSelectedCategory}
-        translateY={exploreModalTranslateY}
-        loading={loading}
-        futuristicTheme={THEME as any}
-      />
+        {/* Create Event FAB removed - we now use the Create tab instead */}
+      </ImageBackground>
 
-      {/* Floating Action Button - positioned above tab bar */}
-      <RNAnimated.View style={[
-        styles.fabContainer,
-        {
-          transform: [{ scale: pulseAnim }],
-          bottom: TAB_BAR_HEIGHT + insets.bottom,
-        }
-      ]}>
-        <TouchableOpacity
-          style={styles.fab}
-          activeOpacity={0.9}
-          onPress={() => router.push('/screens/Create')}
-        >
-          <LinearGradient
-            colors={[THEME.primaryGradientStart, THEME.primaryGradientEnd]}
-            style={styles.fabGradient}
-          >
-            <MaterialIcons name="add" size={32} color="#FFFFFF" />
-          </LinearGradient>
-        </TouchableOpacity>
-      </RNAnimated.View>
+      {/* We've removed the Explore Modal and now use the explore screen instead */}
     </ScreenWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  // Header
-  headerButtonContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  headerButtonBlur: {
+  background: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
   },
-  notificationDot: {
+  backgroundOverlay: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#EF4444',
+    width: '100%',
+    height: '100%',
   },
-  
-  // Loading State
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 30,
-    marginVertical: 20,
-    borderRadius: 16,
-    ...createShadow(1),
+  headerAnimatedContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingTop: Platform.OS === 'ios' ? 50 : 40,
+    zIndex: 10,
   },
-  loadingIconContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    justifyContent: 'center',
+  weatherWidget: {
     alignItems: 'center',
     marginBottom: 16,
   },
-  loadingText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  
-  // Error State
-  errorContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 30,
-    marginVertical: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-    ...createShadow(1),
-  },
-  errorIconContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-  },
-  errorText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  errorSubtext: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  retryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 20,
-    backgroundColor: '#EF4444',
-    ...createShadow(1),
-  },
-  retryButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  
-  // Featured Event
-  featuredEventContainer: {
-    marginBottom: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-    ...createShadow(2),
-  },
-  
-  // Section Containers
-  sectionContainer: {
-    marginBottom: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-    ...createShadow(1),
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-  },
-  sectionTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  sectionIcon: {
-    marginRight: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  seeAllButton: {
+  weatherGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
-  },
-  seeAllText: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginRight: 4,
-  },
-  horizontalScrollContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingBottom: 20,
-  },
-  
-  // Empty State
-  emptyContainer: {
-    margin: 16,
-    padding: 20,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginVertical: 14,
-  },
-  createButton: {
     borderRadius: 20,
-    overflow: 'hidden',
-    marginTop: 12,
-    ...createShadow(2),
   },
-  createGradient: {
+  weatherText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 20,
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
   },
-  createButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  headerTitle: {
+    fontSize: 34,
+    fontWeight: '700',
     color: '#FFFFFF',
-    marginRight: 8,
   },
-  
-  // Floating Action Button
-  fabContainer: {
-    position: 'absolute',
-    right: 25,
-    zIndex: 10,
-    ...createShadow(3),
+  headerTitleHive: {
+    color: '#00BFA6',
+    fontWeight: '800',
   },
-  fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  profileButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
-  fabGradient: {
+  profileButtonGradient: {
     width: '100%',
     height: '100%',
+    borderRadius: 22,
+    padding: 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  
-  // Skeleton Loading Styles
-  skeletonCard: {
-    width: SCREEN_WIDTH * 0.75,
-    borderRadius: 12,
-    overflow: 'hidden',
-    ...createShadow(1),
+  profileAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
-  skeletonCardContent: {
-    padding: 16,
-  },
-  skeletonFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  profileAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
+    justifyContent: 'center',
   },
+  profileInitials: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  premiumBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FFB800',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+  },
+  welcomeContainer: {
+    paddingHorizontal: 24,
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  welcomeText: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  welcomeSubtext: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 4,
+  },
+  searchContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  sectionTabsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
+  sectionTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginRight: 8,
+    borderRadius: 20,
+  },
+  sectionTabActive: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  sectionTabText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyStateText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+  },
+  emptyStateSubtext: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  // FAB styles are now handled in the component
 });

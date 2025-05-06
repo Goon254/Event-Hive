@@ -15,8 +15,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
-import { Link } from 'expo-router';
+import { Link, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 // Optional: Use ScrollView as fallback if PagerView isn't available
 // import PagerView from 'react-native-pager-view';
@@ -103,11 +102,11 @@ export default function LandingPage() {
   if (showSplash) {
     return (
       <ImageBackground
-        source={require('../assets/images/eventhive-icon.png')}
+        source={require('../assets/images/tropical-gradient.png')}
         style={styles.backgroundImage}
       >
         <LinearGradient
-          colors={['rgba(0,0,0,0.8)', 'rgba(26, 32, 44, 0.95)']}
+          colors={['rgba(0, 191, 166, 0.7)', 'rgba(252, 211, 77, 0.8)']} // Teal to yellow gradient
           style={styles.gradient}
         >
           <StatusBar style="light" />
@@ -131,7 +130,7 @@ export default function LandingPage() {
                 ]
               }]}
             >
-              <MaterialIcons name="event" size={80} color="#007AFF" />
+              <MaterialIcons name="event" size={80} color="#00BFA6" /> // Tropical teal
             </Animated.View>
             
             <Image
@@ -140,7 +139,7 @@ export default function LandingPage() {
               resizeMode="contain"
             />
             <Text style={styles.splashTitle}>Event-Hive</Text>
-            <Text style={styles.splashTagline}>Scan, Attend, Connect</Text>
+            <Text style={styles.splashTagline}>Your Tropical Event Paradise</Text>
             
             <TouchableOpacity 
               style={styles.continueButton}
@@ -163,11 +162,11 @@ export default function LandingPage() {
   // Main content with pager
   return (
     <ImageBackground
-      source={require('../assets/images/hive.png')}
+      source={require('../assets/images/tropical-gradient.png')}
       style={styles.backgroundImage}
     >
       <LinearGradient
-        colors={['rgba(0,0,0,0.7)', 'rgba(26, 32, 44, 0.95)']}
+        colors={['rgba(0, 191, 166, 0.7)', 'rgba(252, 211, 77, 0.8)']} // Teal to yellow gradient
         style={styles.gradient}
       >
         <SafeAreaView style={styles.container}>
@@ -193,13 +192,13 @@ export default function LandingPage() {
                     />
                   </View>
                   <Text style={styles.logo}>Event-Hive</Text>
-                  <Text style={styles.tagline}>Scan, Attend, Connect</Text>
+                  <Text style={styles.tagline}>Your Tropical Event Paradise</Text>
                   
                   <BlurView intensity={20} tint="dark" style={styles.descriptionContainer}>
-                    <Text style={styles.descriptionTitle}>Simplify Event Management</Text>
+                    <Text style={styles.descriptionTitle}>Your Island of Events</Text>
                     <Text style={styles.descriptionText}>
-                      Event-Hive helps you create and manage events with ease. Use QR codes for seamless check-ins,
-                      track attendance, and connect with participants all in one place.
+                      Relax and enjoy Event-Hive's tropical experience. Create and manage events with ease,
+                      scan QR codes for breezy check-ins, and connect with fellow islanders in paradise.
                     </Text>
                   </BlurView>
                 </View>
@@ -217,22 +216,22 @@ export default function LandingPage() {
                 <View style={styles.featuresContainer}>
                   <FeatureCard
                     icon={<MaterialIcons name="qr-code-scanner" size={32} color="#FFFFFF" />}
-                    title="Easy Check-in"
-                    description="Scan QR codes for quick and secure event check-ins"
+                    title="Breezy Check-in"
+                    description="Scan QR codes for a relaxed, hassle-free entry experience"
                     delay={200}
                   />
 
                   <FeatureCard
                     icon={<MaterialIcons name="analytics" size={32} color="#FFFFFF" />}
-                    title="Track Attendance"
-                    description="Real-time attendance tracking and analytics"
+                    title="Island Insights"
+                    description="Watch your event paradise grow with real-time analytics"
                     delay={400}
                   />
 
                   <FeatureCard
                     icon={<MaterialIcons name="notifications" size={32} color="#FFFFFF" />}
-                    title="Stay Updated"
-                    description="Get notifications for your upcoming events"
+                    title="Ocean Waves"
+                    description="Let notifications gently remind you of upcoming events"
                     delay={600}
                   />
                 </View>
@@ -248,7 +247,7 @@ export default function LandingPage() {
                 <Text style={styles.pageTitle}>Get Started</Text>
                 
                 <BlurView intensity={40} tint="dark" style={styles.glassCard}>
-                  <Text style={styles.actionTitle}>Ready to join Event-Hive?</Text>
+                  <Text style={styles.actionTitle}>Ready to join our tropical paradise?</Text>
                   
                   <Link href="/(auth)/login" asChild>
                     <TouchableOpacity style={styles.loginButton}>
@@ -284,7 +283,7 @@ export default function LandingPage() {
                   key={index}
                   style={[
                     styles.paginationDot,
-                    { backgroundColor: index === 0 ? '#007AFF' : 'rgba(255, 255, 255, 0.5)' }
+                    { backgroundColor: index === 0 ? '#00BFA6' : 'rgba(255, 255, 255, 0.5)' } // Tropical teal
                   ]}
                   onPress={() => pagerRef.current?.scrollTo({ x: width * index, animated: true })}
                 />
@@ -396,7 +395,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
     borderWidth: 2,
-    borderColor: 'rgba(0, 122, 255, 0.5)',
+    borderColor: 'rgba(0, 191, 166, 0.5)', // Tropical teal with transparency
   },
   splashLogo: {
     width: 120,
@@ -418,7 +417,7 @@ const styles = StyleSheet.create({
     marginBottom: 50,
   },
   continueButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#00BFA6', // Tropical teal
     paddingVertical: 16,
     paddingHorizontal: 40,
     borderRadius: 12,
@@ -466,11 +465,11 @@ const styles = StyleSheet.create({
   nextButton: {
     position: 'absolute',
     bottom: 40,
-    backgroundColor: 'rgba(0, 122, 255, 0.3)',
+    backgroundColor: 'rgba(0, 191, 166, 0.3)', // Tropical teal with transparency
     padding: 10,
     borderRadius: 25,
     borderWidth: 1,
-    borderColor: 'rgba(0, 122, 255, 0.7)',
+    borderColor: 'rgba(0, 191, 166, 0.7)', // Tropical teal with transparency
   },
   // Header Styles
   headerContainer: {
@@ -544,12 +543,12 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: 'rgba(0, 122, 255, 0.3)',
+    backgroundColor: 'rgba(0, 191, 166, 0.3)', // Tropical teal with transparency
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0, 122, 255, 0.5)',
+    borderColor: 'rgba(0, 191, 166, 0.5)', // Tropical teal with transparency
   },
   featureTitle: {
     fontSize: 20,
@@ -581,7 +580,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   loginButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#00BFA6', // Tropical teal
     paddingVertical: 16,
     paddingHorizontal: 40,
     borderRadius: 12,
@@ -601,7 +600,7 @@ const styles = StyleSheet.create({
   registerButton: {
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: '#007AFF',
+    borderColor: '#00BFA6', // Tropical teal
     paddingVertical: 16,
     paddingHorizontal: 40,
     borderRadius: 12,
@@ -611,7 +610,7 @@ const styles = StyleSheet.create({
   registerButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#007AFF',
+    color: '#00BFA6', // Tropical teal
   },
   // Social Auth Styles
   socialAuthContainer: {
@@ -622,7 +621,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#DB4437',
+    backgroundColor: '#2DD4BF', // Lighter teal
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,

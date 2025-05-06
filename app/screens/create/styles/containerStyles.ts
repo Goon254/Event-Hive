@@ -9,7 +9,7 @@ const containerStyles = StyleSheet.create({
   // Container styles
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#121212', // Dark background to match Home.tsx
   },
   scrollContent: {
     paddingBottom: 50,
@@ -22,14 +22,10 @@ const containerStyles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     paddingTop: Platform.OS === 'ios' ? 60 : 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    backgroundColor: 'transparent', // Transparent to show gradient
+    borderBottomWidth: 0,
+    elevation: 0,
+    shadowColor: 'transparent',
   },
   backButton: {
     padding: 8,
@@ -37,31 +33,27 @@ const containerStyles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: '#FFFFFF',
   },
   previewButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: 'rgba(0, 191, 166, 0.2)', // Light teal background
     borderRadius: 8,
   },
   previewButtonText: {
-    color: '#1D4ED8',
+    color: '#00BFA6', // Primary teal color
     fontSize: 14,
     fontWeight: '600',
   },
   
   // Progress indicator styles
   progressContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
+    borderBottomWidth: 0,
+    elevation: 0,
+    shadowColor: 'transparent',
   },
   progressBar: {
     height: 4,
@@ -74,7 +66,7 @@ const containerStyles = StyleSheet.create({
   },
   progressFill: {
     height: 4,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#00BFA6', // Updated to primary teal color
     borderRadius: 2,
   },
   stepsContainer: {
@@ -93,12 +85,12 @@ const containerStyles = StyleSheet.create({
     borderColor: '#D1D5DB',
   },
   activeStep: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: '#00BFA6', // Updated to primary teal color
+    borderColor: '#00BFA6', // Updated to primary teal color
   },
   completedStep: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+    backgroundColor: '#009688', // Primary dark teal color
+    borderColor: '#009688', // Primary dark teal color
   },
   stepNumber: {
     fontSize: 12,
@@ -115,23 +107,24 @@ const containerStyles = StyleSheet.create({
   stepLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#FFFFFF',
   },
   
   // Section styles
   section: {
     padding: 20,
+    backgroundColor: 'transparent',
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: '#FFFFFF',
     marginBottom: 20,
   },
   sectionSubtitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#FFFFFF',
     marginBottom: 10,
   },
   

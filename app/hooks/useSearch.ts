@@ -19,45 +19,71 @@ export function useSearch(
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<EnhancedConnection[]>([]);
   
-  // Filter connections based on search query
-  const filteredConnections = useMemo(() => {
-    if (!searchQuery.trim()) return connections;
-    
-    return connections.filter(conn => 
-      conn.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (conn.role && conn.role.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+  // State for filtered results
+  const [filteredConnections, setFilteredConnections] = useState<EnhancedConnection[]>(connections);
+  const [filteredPendingConnections, setFilteredPendingConnections] = useState<EnhancedConnection[]>(pendingConnections);
+  const [filteredSuggestedConnections, setFilteredSuggestedConnections] = useState<EnhancedConnection[]>(suggestedConnections);
+  const [filteredContactMatches, setFilteredContactMatches] = useState<ContactMatch[]>(contactMatches);
+  
+  // Update filtered connections when connections or search query changes
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredConnections(connections);
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredConnections(
+        connections.filter(conn =>
+          conn.name.toLowerCase().includes(query) ||
+          (conn.role && conn.role.toLowerCase().includes(query))
+        )
+      );
+    }
   }, [connections, searchQuery]);
   
-  // Filter pending connections based on search query
-  const filteredPendingConnections = useMemo(() => {
-    if (!searchQuery.trim()) return pendingConnections;
-    
-    return pendingConnections.filter(conn => 
-      conn.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (conn.role && conn.role.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+  // Update filtered pending connections when pending connections or search query changes
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredPendingConnections(pendingConnections);
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredPendingConnections(
+        pendingConnections.filter(conn =>
+          conn.name.toLowerCase().includes(query) ||
+          (conn.role && conn.role.toLowerCase().includes(query))
+        )
+      );
+    }
   }, [pendingConnections, searchQuery]);
   
-  // Filter suggested connections based on search query
-  const filteredSuggestedConnections = useMemo(() => {
-    if (!searchQuery.trim()) return suggestedConnections;
-    
-    return suggestedConnections.filter(conn => 
-      conn.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (conn.role && conn.role.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+  // Update filtered suggested connections when suggested connections or search query changes
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredSuggestedConnections(suggestedConnections);
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredSuggestedConnections(
+        suggestedConnections.filter(conn =>
+          conn.name.toLowerCase().includes(query) ||
+          (conn.role && conn.role.toLowerCase().includes(query))
+        )
+      );
+    }
   }, [suggestedConnections, searchQuery]);
   
-  // Filter contact matches based on search query
-  const filteredContactMatches = useMemo(() => {
-    if (!searchQuery.trim()) return contactMatches;
-    
-    return contactMatches.filter(contact => 
-      contact.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      contact.phoneNumber.includes(searchQuery) ||
-      (contact.email && contact.email.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+  // Update filtered contact matches when contact matches or search query changes
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredContactMatches(contactMatches);
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredContactMatches(
+        contactMatches.filter(contact =>
+          contact.name.toLowerCase().includes(query) ||
+          contact.phoneNumber.includes(query) ||
+          (contact.email && contact.email.toLowerCase().includes(query))
+        )
+      );
+    }
   }, [contactMatches, searchQuery]);
   
   // Perform global search across all connection types

@@ -17,14 +17,15 @@ import {
   ScrollView,
   Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { FontAwesome, MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../AuthContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import eventService, { Event as EventType, PaginatedResponse } from '../services/eventServices';
-import { createShadow, safeTopPadding } from '../utils/platformUtils';
+import { createShadow } from '../utils/platformUtils';
 import { auth } from '../../lib/firebaseConfig';
+import ScreenWrapper from '../components/common/ScreenWrapper';
 
 // Get screen dimensions
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -541,172 +542,166 @@ export default function EventsScreen() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      {/* Animated Header with gradient */}
-      <Animated.View 
-        style={[
-          styles.header,
-          {
-            transform: [{ translateY: headerTranslateY }],
-            opacity: headerOpacity,
-          }
-        ]}
+  // Create header right content
+  const headerRightContent = (
+    <View style={styles.headerButtons}>
+      <TouchableOpacity
+        style={styles.headerButton}
+        onPress={() => router.push('/screens/map')}
       >
-        <LinearGradient
-          colors={[THEME.primaryGradientStart, THEME.primaryGradientEnd]}
-          style={styles.headerGradient}
-        >
-          <View style={[styles.headerContent, { paddingTop: insets.top }]}>
-            <Text style={styles.headerTitle}>Explore Events</Text>
-            <View style={styles.headerButtons}>
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={() => router.push('/screens/map')}
-              >
-                <MaterialIcons name="map" size={22} color="#FFF" />
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={() => router.push('/screens/notifications')}
-              >
-                <Ionicons name="notifications" size={22} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </LinearGradient>
-      </Animated.View>
+        <MaterialIcons name="map" size={22} color="#FFF" />
+      </TouchableOpacity>
       
-      <Animated.View
-        style={[
-          styles.searchContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: translateY }],
-            marginTop: Platform.OS === 'ios' ? 140 : 120
-          }
-        ]}
+      <TouchableOpacity
+        style={styles.headerButton}
+        onPress={() => router.push('/screens/notifications')}
       >
-        <Ionicons name="search" size={18} color={THEME.secondaryText} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search events by title or location"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor={THEME.secondaryText}
+        <Ionicons name="notifications" size={22} color="#FFF" />
+      </TouchableOpacity>
+    </View>
+  );
+
+  return (
+    <ScreenWrapper
+      backgroundColor={THEME.background}
+      statusBarStyle="light-content"
+      header={{
+        title: "Explore Events",
+        rightContent: headerRightContent,
+        gradientColors: [THEME.primaryGradientStart, THEME.primaryGradientEnd]
+      }}
+      contentContainerStyle={{ paddingTop: 0 }}
+    >
+      <View style={{ flex: 1 }}>
+        <Animated.View
+          style={[
+            styles.searchContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: translateY }],
+              marginTop: 20
+            }
+          ]}
+        >
+          <Ionicons name="search" size={18} color={THEME.secondaryText} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search events by title or location"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor={THEME.secondaryText}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color={THEME.secondaryText} />
+            </TouchableOpacity>
+          )}
+        </Animated.View>
+
+        <Animated.View
+          style={[
+            styles.filterContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: translateY }]
+            }
+          ]}
+        >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+            {['all', 'upcoming', 'ongoing', 'completed', ...(user ? ['attending'] : [])].map(filter => (
+              <TouchableOpacity
+                key={filter}
+                style={[
+                  styles.filterButton,
+                  selectedFilter === filter && styles.filterButtonActive,
+                  selectedFilter === filter && { backgroundColor: getStatusColor(filter as string) + '20' }
+                ]}
+                onPress={() => setSelectedFilter(filter as FilterType)}
+              >
+                <Text
+                  style={[
+                    styles.filterButtonText,
+                    selectedFilter === filter && styles.filterButtonTextActive,
+                    selectedFilter === filter && { color: getStatusColor(filter as string) }
+                  ]}
+                >
+                  {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </Animated.View>
+
+        {/* Create an animated version of FlatList to support native scroll events */}
+        {/* This fixes the "Components based on VirtualizedList must be wrapped with Animated.createAnimatedComponent" error */}
+        <Animated.FlatList
+          data={filteredEvents}
+          renderItem={renderEventCard}
+          keyExtractor={item => item.id || Math.random().toString()}
+          contentContainerStyle={styles.eventList}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true }
+          )}
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={[THEME.primaryGradientStart]}
+              tintColor={THEME.accentText}
+            />
+          }
+          ListEmptyComponent={
+            <Animated.View
+              style={[
+                styles.emptyContainer,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ translateY: translateY }]
+                }
+              ]}
+            >
+              <MaterialIcons name="event-busy" size={64} color="#D1D5DB" />
+              <Text style={styles.emptyText}>No events found</Text>
+              {searchQuery.length > 0 && (
+                <Text style={styles.emptySubtext}>Try adjusting your search</Text>
+              )}
+              {selectedFilter !== 'all' && searchQuery.length === 0 && (
+                <Text style={styles.emptySubtext}>Try changing your filter</Text>
+              )}
+              
+              {selectedFilter === 'all' && searchQuery.length === 0 && (
+                <TouchableOpacity
+                  style={styles.refreshButton}
+                  onPress={handleRefresh}
+                >
+                  <Text style={styles.refreshButtonText}>Refresh</Text>
+                </TouchableOpacity>
+              )}
+            </Animated.View>
+          }
         />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons name="close-circle" size={18} color={THEME.secondaryText} />
+        
+        {user && (
+          <TouchableOpacity
+            style={[
+              styles.createButton,
+              { bottom: Platform.OS === 'ios' ? 32 : 24 }
+            ]}
+            onPress={() => router.push('/screens/create')}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={[THEME.primaryGradientStart, THEME.primaryGradientEnd]}
+              style={styles.createButtonGradient}
+            >
+              <MaterialIcons name="add" size={24} color="#FFFFFF" />
+            </LinearGradient>
           </TouchableOpacity>
         )}
-      </Animated.View>
-
-      <Animated.View 
-        style={[
-          styles.filterContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: translateY }]
-          }
-        ]}
-      >
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-          {['all', 'upcoming', 'ongoing', 'completed', ...(user ? ['attending'] : [])].map(filter => (
-            <TouchableOpacity
-              key={filter}
-              style={[
-                styles.filterButton,
-                selectedFilter === filter && styles.filterButtonActive,
-                selectedFilter === filter && { backgroundColor: getStatusColor(filter as string) + '20' }
-              ]}
-              onPress={() => setSelectedFilter(filter as FilterType)}
-            >
-              <Text
-                style={[
-                  styles.filterButtonText,
-                  selectedFilter === filter && styles.filterButtonTextActive,
-                  selectedFilter === filter && { color: getStatusColor(filter as string) }
-                ]}
-              >
-                {filter.charAt(0).toUpperCase() + filter.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </Animated.View>
-
-      {/* Create an animated version of FlatList to support native scroll events */}
-      {/* This fixes the "Components based on VirtualizedList must be wrapped with Animated.createAnimatedComponent" error */}
-      <Animated.FlatList
-        data={filteredEvents}
-        renderItem={renderEventCard}
-        keyExtractor={item => item.id || Math.random().toString()}
-        contentContainerStyle={styles.eventList}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
-        scrollEventThrottle={16}
-        refreshControl={
-          <RefreshControl 
-            refreshing={isRefreshing} 
-            onRefresh={handleRefresh}
-            colors={[THEME.primaryGradientStart]} 
-            tintColor={THEME.accentText}
-            progressViewOffset={Platform.OS === 'ios' ? 140 : 120}
-          />
-        }
-        ListEmptyComponent={
-          <Animated.View 
-            style={[
-              styles.emptyContainer,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: translateY }]
-              }
-            ]}
-          >
-            <MaterialIcons name="event-busy" size={64} color="#D1D5DB" />
-            <Text style={styles.emptyText}>No events found</Text>
-            {searchQuery.length > 0 && (
-              <Text style={styles.emptySubtext}>Try adjusting your search</Text>
-            )}
-            {selectedFilter !== 'all' && searchQuery.length === 0 && (
-              <Text style={styles.emptySubtext}>Try changing your filter</Text>
-            )}
-            
-            {selectedFilter === 'all' && searchQuery.length === 0 && (
-              <TouchableOpacity
-                style={styles.refreshButton}
-                onPress={handleRefresh}
-              >
-                <Text style={styles.refreshButtonText}>Refresh</Text>
-              </TouchableOpacity>
-            )}
-          </Animated.View>
-        }
-      />
-      
-      {user && (
-        <TouchableOpacity
-          style={[
-            styles.createButton,
-            { bottom: Platform.OS === 'ios' ? 32 + insets.bottom : 24 }
-          ]}
-          onPress={() => router.push('/screens/Create')}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={[THEME.primaryGradientStart, THEME.primaryGradientEnd]}
-            style={styles.createButtonGradient}
-          >
-            <MaterialIcons name="add" size={24} color="#FFFFFF" />
-          </LinearGradient>
-        </TouchableOpacity>
-      )}
-    </View>
+      </View>
+    </ScreenWrapper>
   );
 }
 
@@ -716,39 +711,6 @@ const searchShadow = createShadow(1);
 const buttonShadow = createShadow(3);
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: THEME.background,
-  },
-  // Header styling
-  header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-    height: Platform.OS === 'ios' ? 130 : 110,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    overflow: 'hidden',
-    ...createShadow(2),
-  },
-  headerGradient: {
-    flex: 1,
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    paddingBottom: 20,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
   headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -783,7 +745,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 20,
     marginHorizontal: 16,
-    marginTop: Platform.OS === 'ios' ? 140 : 120,
+    marginTop: 20,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: THEME.border,

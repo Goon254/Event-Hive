@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react';
-import { InteractionManager } from 'react-native';
+import { InteractionManager, View, Text } from 'react-native';
+import React from 'react';
 
 /**
  * Performance monitoring utilities
@@ -213,3 +214,17 @@ export const useTrackedEffect = (
     return cleanup;
   }, deps);
 };
+
+/**
+ * Default export component for performance utilities
+ * This component is exported to satisfy route requirements
+ */
+const PerformanceUtilities: React.FC = () => {
+  return React.createElement(
+    View,
+    { style: { flex: 1, justifyContent: 'center', alignItems: 'center' } },
+    React.createElement(Text, null, "Performance Utilities")
+  );
+};
+
+export default PerformanceUtilities;

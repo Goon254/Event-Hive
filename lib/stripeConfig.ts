@@ -11,9 +11,12 @@ const STRIPE_PUBLISHABLE_KEY = Platform.select({
   default: 'pk_test_51R9phj03PVcdX2kJz8vj5IoRvVamTukQXjH6cnwPQyEp7G856KD22qB0GBcv8YdiCLfw3fIm5OJhUIUDAoR7Xivv0043UooPNC'
 });
 
-// Your backend URL for creating payment intents
-// In a real app, this would be your actual server endpoint
-export const PAYMENT_API_URL = 'https://your-backend.com/api/payments';
+// Your backend URLs for creating payment intents
+// Primary URL points to the Firebase Cloud Functions endpoint
+export const PAYMENT_API_URL = 'https://us-central1-event-hive-992c0.cloudfunctions.net/createPaymentIntent';
+
+// Fallback URL in case the primary one is unavailable - using the same endpoint but through a different region
+export const FALLBACK_PAYMENT_API_URL = 'https://us-west1-event-hive-992c0.cloudfunctions.net/createPaymentIntent';
 
 /**
  * Initialize Stripe with your publishable key

@@ -20,8 +20,8 @@ const navigationStyles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -31,7 +31,7 @@ const navigationStyles = StyleSheet.create({
   prevButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#4B5563',
+    color: '#FFFFFF',
     marginLeft: 6,
   },
   nextButton: {
@@ -40,7 +40,7 @@ const navigationStyles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#00BFA6', // Updated to primary teal color
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -67,7 +67,7 @@ const navigationStyles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#10B981',
+    backgroundColor: '#009688', // Updated to primary dark teal color
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -88,7 +88,7 @@ const navigationStyles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   editEventButton: {
     flexDirection: 'row',
@@ -97,12 +97,12 @@ const navigationStyles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   editEventButtonText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: '#FFFFFF',
     marginLeft: 8,
   },
   publishEventButton: {
@@ -111,7 +111,7 @@ const navigationStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
-    backgroundColor: '#10B981',
+    backgroundColor: '#009688', // Updated to primary dark teal color
   },
   publishEventButtonText: {
     fontSize: 16,

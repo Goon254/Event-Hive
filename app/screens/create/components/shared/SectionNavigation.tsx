@@ -64,7 +64,7 @@ export function SectionNavigation({
           accessibilityLabel="Previous section"
           accessibilityHint="Go back to the previous section"
         >
-          <MaterialIcons name="arrow-back-ios" size={16} color="#6B7280" />
+          <MaterialIcons name="arrow-back-ios" size={16} color="#FFFFFF" />
           <Text style={styles.prevButtonText}>Back</Text>
         </TouchableOpacity>
       ) : (

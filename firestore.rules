@@ -99,6 +99,7 @@ service cloud.firestore {
       allow delete: if isSignedIn() && 
                       isOwner(resource.data.userId);
     }
+    
     // Events collection with privacy controls
     match /events/{eventId} {
       // Public events readable by anyone
@@ -131,6 +132,76 @@ service cloud.firestore {
       }
     }
     
+    // QR code collection
+    match /qr_codes/{qrCodeId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if false; // Don't allow deletion
+    }
+    
+    // Check-ins collection
+    match /check_ins/{checkInId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if false; // Don't allow updates
+      allow delete: if false; // Don't allow deletion
+    }
+    
+    // User Suggestions Collection Rules
+    match /userSuggestions/{suggestionId} {
+      // Users can only read their own suggestions
+      allow read: if request.auth != null && 
+                  resource.data.userId == request.auth.uid;
+      
+      // Only admin users or the system can write to suggestions
+      allow write: if request.auth != null && 
+                   (request.auth.token.admin == true || 
+                    request.auth.token.system == true);
+      
+      // Validate suggestion data structure
+      function isValidSuggestion() {
+        let requiredFields = ['userId', 'suggestedUserId', 'score', 'reason', 'createdAt'];
+        let data = request.resource.data;
+        
+        return requiredFields.hasAll(data.keys()) &&
+               data.userId is string &&
+               data.suggestedUserId is string &&
+               data.score is number &&
+               data.score >= 0 && data.score <= 1 &&
+               data.reason is string &&
+               data.createdAt is timestamp;
+      }
+      
+      // Additional validation for create operations
+      allow create: if request.auth != null && 
+                    request.auth.token.admin == true && 
+                    isValidSuggestion();
+    }
+    
+    // Update privacy settings rules to include suggestion controls
+    match /privacySettings/{userId} {
+      // Allow users to read and write their own privacy settings
+      allow read, write: if request.auth != null && 
+                          request.auth.uid == userId;
+      
+      // Validate privacy settings structure
+      function isValidPrivacySettings() {
+        let data = request.resource.data;
+        
+        return data.keys().hasAny(['allowRecommendations', 'profileVisibility']) &&
+               (!data.keys().hasAny(['allowRecommendations']) || data.allowRecommendations is bool) &&
+               (!data.keys().hasAny(['profileVisibility']) || 
+                (data.profileVisibility is string && 
+                 ['public', 'connections', 'private'].hasAny([data.profileVisibility])));
+      }
+      
+      // Additional validation for update operations
+      allow update: if request.auth != null && 
+                    request.auth.uid == userId && 
+                    isValidPrivacySettings();
+    }
+    
     // Allow read access to all collections for debugging
     match /{document=**} {
       allow read: if true;
@@ -138,7 +209,7 @@ service cloud.firestore {
     
     // Allow collection group queries for attendees
     match /{path=**}/attendees/{attendeeId} {
-      allow read: if isSignedIn();
+      allow read: if true; // Allow all reads to attendees subcollection
     }
   }
 }

@@ -1,5 +1,6 @@
 // app/screens/help.tsx
 import React, { useState, useCallback } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -8,7 +9,6 @@ import {
   ScrollView,
   Linking,
   Platform,
-  StatusBar,
   TextInput,
   KeyboardAvoidingView,
   ActivityIndicator,
@@ -17,8 +17,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createShadow } from '../utils/platformUtils';
+import ScreenWrapper from '../components/common/ScreenWrapper';
 
 // AI Chat configuration
 const HUGGING_FACE_API_KEY = 'YOUR_HUGGING_FACE_API_KEY'; // Replace with your API key
@@ -156,30 +156,28 @@ export default function HelpScreen() {
     }
   }, [inputMessage, messages]);
 
+  // Create back button for header
+  const headerBackButton = (
+    <TouchableOpacity
+      onPress={() => router.back()}
+      hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+      style={styles.backButton}
+    >
+      <FontAwesome name="arrow-left" size={20} color="#FFFFFF" />
+    </TouchableOpacity>
+  );
+
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      
-      {/* Header */}
-      <View style={[
-        styles.header,
-        { paddingTop: Math.max(insets.top, 20) }
-      ]}>
-        <TouchableOpacity 
-          onPress={() => router.back()}
-          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-          style={styles.backButton}
-        >
-          <FontAwesome name="arrow-left" size={20} color="#1F2937" />
-        </TouchableOpacity>
-        
-        <Text style={styles.headerTitle}>Help & Support</Text>
-        
-        <View style={{ width: 40 }} />
-      </View>
-      
-      <ScrollView 
-        style={styles.scrollView}
+    <ScreenWrapper
+      backgroundColor="#F9FAFB"
+      statusBarStyle="light-content"
+      header={{
+        title: "Help & Support",
+        rightContent: <View style={{ width: 40 }} />,
+        gradientColors: ['#2563EB', '#4F46E5']
+      }}
+    >
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -334,7 +332,7 @@ export default function HelpScreen() {
           </View>
         </View>
       )}
-    </View>
+    </ScreenWrapper>
   );
 }
 
@@ -343,10 +341,6 @@ const cardShadow = createShadow(2);
 const buttonShadow = createShadow(1);
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
   // AI Chat Modal Styles
   chatModalOverlay: {
     position: 'absolute',
@@ -434,29 +428,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    ...cardShadow,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
-    color: '#1F2937',
-  },
   backButton: {
     padding: 8,
   },
-  scrollView: {
-    flex: 1,
-  },
   scrollContent: {
+    paddingTop: 20,
     paddingBottom: 30,
   },
   section: {

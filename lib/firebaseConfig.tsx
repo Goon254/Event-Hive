@@ -48,7 +48,7 @@ try {
     })
   });
   
-  storage = getStorage(app, firebaseConfig.storageBucket);
+  storage = getStorage(app);
   
   console.log("Firebase initialized successfully");
 } catch (error) {

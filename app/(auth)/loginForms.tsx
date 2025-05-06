@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     marginLeft: 5,
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#EA580C', // Rich tangerine orange for buttons
     borderRadius: 10,
     padding: 16,
     alignItems: 'center',
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   forgotPasswordText: {
-    color: '#007AFF',
+    color: '#F97316', // Vibrant warm orange
     fontSize: 14,
   },
 });

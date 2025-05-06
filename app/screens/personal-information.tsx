@@ -1,27 +1,42 @@
 // app/screens/personal-information.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
-  Switch,
-  Image,
-  StatusBar,
+  Animated,
+  Alert,
+  Dimensions,
+  ImageBackground,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../AuthContext';
-import { FontAwesome } from '@expo/vector-icons';
-import { useProfile } from '../hooks/useProfile';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { createShadow } from '../utils/platformUtils';
+import ScreenWrapper from '../components/common/ScreenWrapper';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SharedElement } from 'react-navigation-shared-element';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createShadow, safeTopPadding } from '../utils/platformUtils';
-import * as ImagePicker from 'expo-image-picker';
+import { profileService } from '../services/profileService';
+import { Image } from 'expo-image';
+import {
+  InfoRow,
+  VerificationBadge,
+  Divider
+} from '../components/profile';
+import { COLORS, GRADIENTS, RADIUS, SHADOWS, Z_INDEX } from '../theme/constants';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Responsive calculation helpers
+const scale = (size: number): number => {
+  const baseWidth = 375; // Base width (iPhone X)
+  return (SCREEN_WIDTH / baseWidth) * size;
+};
 
 interface UserInformation {
   name: string;
@@ -31,29 +46,16 @@ interface UserInformation {
   location: string;
   dateOfBirth: string;
   profilePicture: string;
-  notifications: {
-    email: boolean;
-    push: boolean;
-    sms: boolean;
-  };
+  isEmailVerified?: boolean;
 }
 
-export default function PersonalInformationScreen() {
+export default function ViewPersonalInformationScreen() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isImageChanged, setIsImageChanged] = useState(false);
-  const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [isEditMode, setIsEditMode] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0.01)).current; // Start at 0.01 to ensure minimal visibility
+  const insets = useSafeAreaInsets();
   
-  // Use the profile hook to get the uploadProfileImage function
-  const {
-    uploadProfileImage,
-    isImageUploading
-  } = useProfile(user?.id);
-
   // User information state
   const [userInfo, setUserInfo] = useState<UserInformation>({
     name: '',
@@ -63,588 +65,528 @@ export default function PersonalInformationScreen() {
     location: '',
     dateOfBirth: '',
     profilePicture: '',
-    notifications: {
-      email: true,
-      push: true,
-      sms: false,
-    },
+    isEmailVerified: true,
   });
 
-  // Fetch user data
+  // Animate content on load - with safer animation settings
   useEffect(() => {
-    if (user) {
-      setIsLoading(true);
-      // Simulate API call to fetch user details
-      setTimeout(() => {
-        setUserInfo({
-          name: user.name || 'Your Name',
-          email: user.email || 'email@example.com',
-          phone: '+1 (555) 123-4567',
-          bio: 'Event enthusiast and networking professional.',
-          location: 'San Francisco, CA',
-          dateOfBirth: '1990-01-01',
-          profilePicture: user.avatar || 'https://via.placeholder.com/150',
-          notifications: {
-            email: true,
-            push: true,
-            sms: false,
-          },
-        });
-        setProfileImage(user.avatar || 'https://via.placeholder.com/150');
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: false, // Changed to false for better compatibility
+    }).start();
+  }, [fadeAnim]);
+
+  // Fetch user data from database with improved error handling
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (!user || !user.id) return; // Guard against missing user
+      
+      try {
+        setIsLoading(true);
+        
+        // Use profile service to fetch user details
+        const userProfile = await profileService.fetchProfile(user.id);
+        
+        if (userProfile) {
+          setUserInfo({
+            name: userProfile.name || '',
+            email: userProfile.email || '',
+            phone: userProfile.phoneNumber || '',
+            bio: userProfile.bio || '',
+            // Improved location formatting to handle missing data
+            location: `${userProfile.city || ''}, ${userProfile.country || ''}`.replace(', ,', ',').replace(/^,\s|,\s$/g, ''),
+            dateOfBirth: '', // Default value since it's not in the UserProfile interface
+            profilePicture: userProfile.profileImageUrl || (user.avatar || ''),
+            isEmailVerified: true, // Default value since it's not in the UserProfile interface
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        Alert.alert(
+          'Error',
+          'Failed to load your profile information. Please try again later.',
+          [{ text: 'OK' }]
+        );
+      } finally {
         setIsLoading(false);
-      }, 800);
-    }
+      }
+    };
+    
+    fetchUserData();
   }, [user]);
 
-  const handleGoBack = () => {
-    if (isEditMode) {
-      Alert.alert(
-        'Discard Changes?',
-        'You have unsaved changes. Are you sure you want to go back?',
-        [
-          { text: 'Stay', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: () => router.back() }
-        ]
-      );
-    } else {
-      router.back();
-    }
+  const navigateToEditScreen = () => {
+    // Navigate to edit screen when implemented
+    Alert.alert('Coming Soon', 'Edit functionality will be available soon.');
   };
 
-  const handleSave = () => {
-    setIsSaving(true);
+  const viewFullSizeImage = () => {
+    if (!userInfo.profilePicture) return;
     
-    // Validate inputs
-    if (!userInfo.name.trim()) {
-      Alert.alert('Error', 'Name cannot be empty');
-      setIsSaving(false);
-      return;
-    }
-    
-    // Simulate API call to update user profile
-    setTimeout(() => {
-      setIsSaving(false);
-      setIsEditMode(false);
-      Alert.alert('Success', 'Your profile has been updated successfully');
-    }, 1000);
-  };
-
-  const pickImage = async () => {
-    if (!isEditMode || !user) return;
-    
-    try {
-      // Request permission
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant permission to access your photos');
-        return;
+    // Navigate to image viewer screen with the profile image
+    router.push({
+      pathname: '/image-viewer',
+      params: { 
+        imageUri: userInfo.profilePicture,
+        title: userInfo.name
       }
-      
-      // Launch image picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedImageUri = result.assets[0].uri;
-        
-        // Show the selected image immediately for better UX
-        setProfileImage(selectedImageUri);
-        setIsImageChanged(true);
-        
-        // Upload the image using the profile service
-        try {
-          setIsSaving(true);
-          const imageUrl = await uploadProfileImage(selectedImageUri);
-          
-          // Update the user info with the new image URL
-          setUserInfo(prev => ({
-            ...prev,
-            profilePicture: imageUrl || prev.profilePicture
-          }));
-          
-          Alert.alert('Success', 'Profile image updated successfully');
-        } catch (uploadError) {
-          console.error('Error uploading profile image:', uploadError);
-          Alert.alert('Error', 'Failed to upload profile image. Please try again.');
-          
-          // Revert the image change if upload failed
-          setIsImageChanged(false);
-        } finally {
-          setIsSaving(false);
-        }
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to select image');
-    }
+    });
   };
 
-  // Toggle edit mode
-  const toggleEditMode = () => {
-    if (isEditMode) {
-      // If leaving edit mode without saving
-      if (isImageChanged) {
-        Alert.alert(
-          'Discard Changes?',
-          'You have unsaved changes. Are you sure you want to discard them?',
-          [
-            { text: 'Stay Editing', style: 'cancel' },
-            { 
-              text: 'Discard', 
-              style: 'destructive', 
-              onPress: () => {
-                setIsEditMode(false);
-                setProfileImage(userInfo.profilePicture);
-                setIsImageChanged(false);
-              } 
-            }
-          ]
-        );
-      } else {
-        setIsEditMode(false);
-      }
-    } else {
-      setIsEditMode(true);
-    }
-  };
-
-  // Handle text input changes
-  const handleInputChange = (field: keyof UserInformation, value: string) => {
-    setUserInfo(prev => ({ ...prev, [field]: value }));
-  };
-
-  // Handle notification toggle
-  const handleNotificationToggle = (type: keyof UserInformation['notifications']) => {
-    setUserInfo(prev => ({
-      ...prev,
-      notifications: {
-        ...prev.notifications,
-        [type]: !prev.notifications[type]
-      }
-    }));
-  };
-
-  if (isLoading || authLoading) {
+  // Guard against missing user data - added protection
+  if (!user || !user.id) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={styles.loadingText}>Loading your information...</Text>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Signing in...</Text>
       </View>
     );
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-    >
-      <StatusBar barStyle="dark-content" />
-      
-      {/* Header */}
-      <View style={[
-        styles.header,
-        { paddingTop: Math.max(insets.top, 20) }
-      ]}>
-        <TouchableOpacity 
-          onPress={handleGoBack}
-          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-          style={styles.backButton}
-        >
-          <FontAwesome name="arrow-left" size={20} color="#1F2937" />
-        </TouchableOpacity>
-        
-        <Text style={styles.headerTitle}>Personal Information</Text>
-        
-        <TouchableOpacity 
-          onPress={toggleEditMode}
-          disabled={isSaving}
-          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-          style={styles.editButton}
-        >
-          <Text style={styles.editButtonText}>
-            {isEditMode ? "Cancel" : "Edit"}
-          </Text>
-        </TouchableOpacity>
+  // Guard against loading states or missing profile data
+  if (isLoading || authLoading || !userInfo.name) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading your profile...</Text>
       </View>
-      
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Profile Picture */}
-        <View style={styles.profileImageSection}>
-          <View style={styles.profileImageContainer}>
-            {isImageUploading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#007AFF" />
-                <Text style={styles.loadingText}>Uploading...</Text>
-              </View>
-            ) : (
-              <Image
-                source={{ uri: profileImage || userInfo.profilePicture }}
-                style={styles.profileImage}
-                accessibilityLabel="Profile picture"
-              />
-            )}
-            {isEditMode && !isImageUploading && (
-              <TouchableOpacity
-                style={styles.editImageButton}
-                onPress={pickImage}
-                disabled={isSaving || isImageUploading}
-              >
-                <FontAwesome name="camera" size={16} color="#FFFFFF" />
-              </TouchableOpacity>
-            )}
-          </View>
-          <Text style={styles.changePhotoText}>
-            {isEditMode && !isImageUploading ? 'Tap to change profile photo' :
-             isImageUploading ? 'Uploading profile photo...' : ''}
-          </Text>
-        </View>
+    );
+  }
+
+
+  return (
+    <ScreenWrapper
+      header={{ hidden: true }}
+      backgroundColor={COLORS.background}
+      statusBarStyle="light-content"
+      backgroundImage={require('../../assets/images/tropical-gradient.png')}
+      backgroundOpacity={0.15}
+    >
         
-        {/* Personal Information Form */}
-        <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>Basic Information</Text>
-          
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Full Name</Text>
-            <TextInput
-              style={[styles.textInput, !isEditMode && styles.disabledInput]}
-              value={userInfo.name}
-              onChangeText={(text) => handleInputChange('name', text)}
-              editable={isEditMode}
-              placeholder="Your full name"
-            />
-          </View>
-          
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Email</Text>
-            <TextInput
-              style={[styles.textInput, styles.disabledInput]}
-              value={userInfo.email}
-              editable={false} // Email should not be editable
-              keyboardType="email-address"
-              placeholder="Your email address"
-            />
-            <Text style={styles.inputHelperText}>
-              Email cannot be changed for security reasons
+        <Animated.ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + scale(30) }
+          ]}
+          showsVerticalScrollIndicator={false}
+          style={{
+            // Improved animation with interpolate to ensure visibility
+            opacity: fadeAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.01, 1] // Never fully transparent
+            })
+          }}
+          scrollEventThrottle={16}
+        >
+          {/* Hero Section with Profile Image and Basic Info */}
+          <Animated.View style={styles.heroSection}>
+            {/* Profile Image with Glowing Border */}
+            <TouchableOpacity
+              style={styles.profileImageContainer}
+              onPress={viewFullSizeImage}
+              activeOpacity={0.9}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${userInfo.name}'s profile picture`}
+            >
+              <SharedElement id={`user.avatar.${user?.id}`}>
+                <LinearGradient
+                  colors={[COLORS.primaryGradientStart, COLORS.primaryGradientEnd]}
+                  style={styles.profileImageBorder}
+                >
+                  <View style={styles.profileImageWrapper}>
+                    <Image
+                      source={{ uri: userInfo.profilePicture || undefined }}
+                      placeholder={require('../../assets/images/default-avatar.png')}
+                      style={styles.profileImage}
+                      contentFit="cover"
+                      transition={300}
+                      accessibilityLabel="Profile picture"
+                    />
+                  </View>
+                </LinearGradient>
+              </SharedElement>
+            </TouchableOpacity>
+            
+            {/* Name and Bio */}
+            <Text
+              style={styles.userName}
+              accessibilityRole="header"
+            >
+              {userInfo.name}
             </Text>
-          </View>
-          
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Phone Number</Text>
-            <TextInput
-              style={[styles.textInput, !isEditMode && styles.disabledInput]}
-              value={userInfo.phone}
-              onChangeText={(text) => handleInputChange('phone', text)}
-              editable={isEditMode}
-              keyboardType="phone-pad"
-              placeholder="Your phone number"
-            />
-          </View>
-          
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Date of Birth</Text>
-            <TextInput
-              style={[styles.textInput, !isEditMode && styles.disabledInput]}
-              value={userInfo.dateOfBirth}
-              onChangeText={(text) => handleInputChange('dateOfBirth', text)}
-              editable={isEditMode}
-              placeholder="YYYY-MM-DD"
-            />
-          </View>
-          
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Location</Text>
-            <TextInput
-              style={[styles.textInput, !isEditMode && styles.disabledInput]}
-              value={userInfo.location}
-              onChangeText={(text) => handleInputChange('location', text)}
-              editable={isEditMode}
-              placeholder="City, State"
-            />
-          </View>
-          
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Bio</Text>
-            <TextInput
-              style={[styles.textArea, !isEditMode && styles.disabledInput]}
-              value={userInfo.bio}
-              onChangeText={(text) => handleInputChange('bio', text)}
-              editable={isEditMode}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              placeholder="Tell us about yourself"
-            />
-          </View>
-        </View>
-        
-        {/* Notification Preferences */}
-        <View style={styles.formSection}>
-          <Text style={styles.sectionTitle}>Notification Preferences</Text>
-          
-          <View style={styles.toggleContainer}>
-            <View style={styles.toggleTextContainer}>
-              <Text style={styles.toggleLabel}>Email Notifications</Text>
-              <Text style={styles.toggleDescription}>
-                Receive event updates and reminders via email
-              </Text>
+            <Text
+              style={styles.userBio}
+              accessibilityLabel={`Bio: ${userInfo.bio}`}
+            >
+              {userInfo.bio || 'No bio provided yet'}
+            </Text>
+            
+            {/* Location Badge */}
+            <View
+              style={styles.locationBadge}
+              accessibilityLabel={`Location: ${userInfo.location}`}
+            >
+              <Ionicons name="location-outline" size={16} color={COLORS.primary} />
+              <Text style={styles.locationText}>{userInfo.location || 'Location not set'}</Text>
             </View>
-            <Switch
-              value={userInfo.notifications.email}
-              onValueChange={() => handleNotificationToggle('email')}
-              disabled={!isEditMode}
-              trackColor={{ false: '#D1D5DB', true: Platform.OS === 'ios' ? '#007AFF' : '#34D399' }}
-              thumbColor={Platform.OS === 'ios' ? '#FFFFFF' : userInfo.notifications.email ? '#FFFFFF' : '#F3F4F6'}
-              ios_backgroundColor="#D1D5DB"
+          </Animated.View>
+          
+          {/* Contact Information Card */}
+          <Animated.View style={styles.cardContainer}>
+            <Text
+              style={styles.cardTitle}
+              accessibilityRole="header"
+            >
+              Contact Information
+            </Text>
+            
+            {/* Email Row with Verification Badge */}
+            <InfoRow
+              icon="mail-outline"
+              label="Email"
+              value={userInfo.email || 'No email provided'}
+              rightContent={
+                <VerificationBadge isVerified={!!userInfo.isEmailVerified} />
+              }
             />
-          </View>
-          
-          <View style={styles.divider} />
-          
-          <View style={styles.toggleContainer}>
-            <View style={styles.toggleTextContainer}>
-              <Text style={styles.toggleLabel}>Push Notifications</Text>
-              <Text style={styles.toggleDescription}>
-                Receive alerts and reminders on your device
-              </Text>
-            </View>
-            <Switch
-              value={userInfo.notifications.push}
-              onValueChange={() => handleNotificationToggle('push')}
-              disabled={!isEditMode}
-              trackColor={{ false: '#D1D5DB', true: Platform.OS === 'ios' ? '#007AFF' : '#34D399' }}
-              thumbColor={Platform.OS === 'ios' ? '#FFFFFF' : userInfo.notifications.push ? '#FFFFFF' : '#F3F4F6'}
-              ios_backgroundColor="#D1D5DB"
+            
+            <Divider />
+            
+            {/* Phone Row */}
+            <InfoRow
+              icon="call-outline"
+              label="Phone"
+              value={maskPhoneNumber(userInfo.phone)}
             />
-          </View>
+          </Animated.View>
           
-          <View style={styles.divider} />
-          
-          <View style={styles.toggleContainer}>
-            <View style={styles.toggleTextContainer}>
-              <Text style={styles.toggleLabel}>SMS Notifications</Text>
-              <Text style={styles.toggleDescription}>
-                Receive important event updates via text message
-              </Text>
-            </View>
-            <Switch
-              value={userInfo.notifications.sms}
-              onValueChange={() => handleNotificationToggle('sms')}
-              disabled={!isEditMode}
-              trackColor={{ false: '#D1D5DB', true: Platform.OS === 'ios' ? '#007AFF' : '#34D399' }}
-              thumbColor={Platform.OS === 'ios' ? '#FFFFFF' : userInfo.notifications.sms ? '#FFFFFF' : '#F3F4F6'}
-              ios_backgroundColor="#D1D5DB"
+          {/* Basic Information Card */}
+          <Animated.View style={styles.cardContainer}>
+            <Text
+              style={styles.cardTitle}
+              accessibilityRole="header"
+            >
+              Basic Information
+            </Text>
+            
+            {/* Date of Birth Row */}
+            <InfoRow
+              icon="calendar-outline"
+              label="Date of Birth"
+              value={userInfo.dateOfBirth || 'Not provided'}
             />
-          </View>
-        </View>
-        
-        {/* Save Button */}
-        {isEditMode && (
-          <TouchableOpacity
-            style={styles.saveButton}
-            onPress={handleSave}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.saveButtonText}>Save Changes</Text>
-            )}
-          </TouchableOpacity>
-        )}
-        
-        {/* Spacer for keyboard */}
-        <View style={{ height: 40 }} />
-      </ScrollView>
-    </KeyboardAvoidingView>
+            
+            <Divider />
+            
+            {/* Location Row */}
+            <InfoRow
+              icon="location-outline"
+              label="Location"
+              value={userInfo.location || 'Not provided'}
+            />
+          </Animated.View>
+          
+          {/* Edit Button */}
+          <Animated.View style={styles.editButtonContainer}>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={navigateToEditScreen}
+              accessibilityRole="button"
+              accessibilityLabel="Edit your personal information"
+            >
+              <View style={styles.editButtonContent}>
+                <FontAwesome5 name="pencil-alt" size={16} color="#FFFFFF" style={styles.editIcon} />
+                <Text style={styles.editButtonText}>Edit Information</Text>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+        </Animated.ScrollView>
+    </ScreenWrapper>
   );
 }
 
-// Platform-specific shadows
-const cardShadow = createShadow(2);
-const buttonShadow = createShadow(1);
-
+// Helper function to mask phone number
+const maskPhoneNumber = (phone: string): string => {
+  if (!phone) return 'Not provided';
+  
+  // Keep only the last 4 digits visible
+  const cleaned = phone.replace(/\D/g, '');
+  if (cleaned.length <= 4) return phone;
+  
+  const lastFour = cleaned.slice(-4);
+  const masked = '*'.repeat(cleaned.length - 4);
+  
+  // Format based on length
+  if (cleaned.length === 10) {
+    return `(${masked.slice(0, 3)}) ${masked.slice(3, 6)}-${lastFour}`;
+  }
+  
+  return `${masked}${lastFour}`;
+};
+// Styles for the personal information screen
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
+  // Loading states
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: COLORS.background,
+    position: 'relative',
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#6B7280',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    ...cardShadow,
-    zIndex: 10,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
-    color: '#1F2937',
-  },
-  backButton: {
-    padding: 8,
-  },
-  editButton: {
-    padding: 8,
-  },
-  editButtonText: {
-    fontSize: 16,
+    color: COLORS.secondaryText,
     fontWeight: '500',
-    color: '#007AFF',
   },
+
+  // Container and background
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    position: 'relative',
+  },
+  backgroundImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.15,
+  },
+
+  // Scroll content
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 30,
+    flexGrow: 1,
+    paddingHorizontal: scale(16),
+    paddingTop: scale(20),
+    paddingBottom: scale(30),
   },
-  profileImageSection: {
+
+  // Hero section
+  heroSection: {
     alignItems: 'center',
-    marginVertical: 24,
+    marginBottom: scale(24),
+    backgroundColor: COLORS.card,
+    borderRadius: 24,
+    padding: 24,
+    position: 'relative',
+    overflow: 'hidden',
+    ...createShadow(8),
+  },
+  cardBackgroundImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.1,
   },
   profileImageContainer: {
-    position: 'relative',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    marginBottom: scale(20),
+  },
+  profileImageBorder: {
+    width: scale(110),
+    height: scale(110),
+    borderRadius: scale(55),
+    padding: 3,
+    backgroundColor: COLORS.card,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...createShadow(5),
+  },
+  profileImageWrapper: {
+    width: '100%',
+    height: '100%',
+    borderRadius: scale(55),
     overflow: 'hidden',
-    ...cardShadow,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   profileImage: {
     width: '100%',
     height: '100%',
   },
-  editImageButton: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+  profileImagePlaceholder: {
     width: '100%',
-    height: 40,
+    height: '100%',
+    borderRadius: scale(55),
+    backgroundColor: COLORS.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  changePhotoText: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#6B7280',
+  profileImagePlaceholderText: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
-  formSection: {
-    marginHorizontal: 16,
-    marginBottom: 24,
-    backgroundColor: 'white',
+  editImageButton: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: COLORS.primary,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: COLORS.card,
+    ...createShadow(3),
+  },
+  userName: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: scale(6),
+    textAlign: 'center',
+  },
+  userBio: {
+    fontSize: 16,
+    color: COLORS.secondaryText,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginBottom: scale(16),
+    paddingHorizontal: scale(20),
+  },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(126, 87, 194, 0.15)',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: 16,
-    padding: 16,
-    ...cardShadow,
+    borderWidth: 1,
+    borderColor: 'rgba(126, 87, 194, 0.3)',
   },
-  sectionTitle: {
+  locationText: {
+    color: '#9575CD',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+
+  // Card containers
+  cardContainer: {
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    padding: scale(20),
+    marginBottom: scale(16),
+    ...createShadow(4),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  cardTitle: {
     fontSize: 18,
-    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
-    color: '#1F2937',
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+
+  // Edit button
+  editButtonContainer: {
+    marginTop: scale(16),
+    marginBottom: scale(24),
+    alignItems: 'center',
+  },
+  editButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+    ...createShadow(4),
+    minWidth: scale(200),
+  },
+  editButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editIcon: {
+    marginRight: 8,
+  },
+  editButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  
+  // Stats elements (adding from original styles)
+  statsCardContainer: {
+    marginTop: scale(16),
+    marginBottom: scale(16),
+  },
+  statsCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 20,
+    padding: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    ...createShadow(4),
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 6,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: COLORS.secondaryText,
+    textAlign: 'center',
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginHorizontal: 8,
+  },
+  
+  // Menu system (adding from original)
+  menuSection: {
     marginBottom: 16,
   },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  textInput: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  disabledInput: {
-    backgroundColor: '#F3F4F6',
-    color: '#6B7280',
-  },
-  textArea: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#1F2937',
-    minHeight: 100,
-  },
-  inputHelperText: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginTop: 4,
-    marginLeft: 4,
-  },
-  toggleContainer: {
+  menuSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 16,
     paddingVertical: 12,
+    borderRadius: 16,
+    marginBottom: 2,
   },
-  toggleTextContainer: {
-    flex: 1,
-    marginRight: 8,
-  },
-  toggleLabel: {
+  menuSectionTitle: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#374151',
+    fontWeight: '700',
+    color: COLORS.text,
   },
-  toggleDescription: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#F3F4F6',
-  },
-  saveButton: {
-    backgroundColor: '#007AFF',
-    marginHorizontal: 16,
-    marginVertical: 16,
-    paddingVertical: 14,
-    borderRadius: 10,
+  menuItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    ...buttonShadow,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.04)',
+    backgroundColor: 'transparent',
   },
-  saveButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
+  menuItemIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+    backgroundColor: 'rgba(126, 87, 194, 0.15)',
   },
 });

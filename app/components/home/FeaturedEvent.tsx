@@ -42,11 +42,18 @@ const FeaturedEvent = ({ event, daysUntil, fadeAnim, translateY, theme }) => {
         params: { eventId: event.id },
       })}
     >
+      {/* Background image for consistent design aesthetic */}
+      <Image
+        source={require('../../../assets/images/tropical-gradient.png')}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      />
+      
       {/* Featured Event Image */}
       <View style={styles.imageContainer}>
         {event.imageUrl ? (
-          <Image 
-            source={{ uri: event.imageUrl }} 
+          <Image
+            source={{ uri: event.imageUrl }}
             style={styles.image}
             resizeMode="cover"
           />
@@ -144,7 +151,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
+    position: 'relative',
     ...createShadow(2),
+  },
+  backgroundImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.1,
+    zIndex: 0,
   },
   imageContainer: {
     width: '100%',

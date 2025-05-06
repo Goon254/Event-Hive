@@ -1,5 +1,6 @@
 // app/utils/platformUtils.ts
-import { Platform } from 'react-native';
+import { Platform, View, Text } from 'react-native';
+import React from 'react';
 
 /**
  * Creates platform-specific shadow styles
@@ -150,3 +151,18 @@ export function safeAreaMargin(insets: SafeAreaInsets, additionalMargin: number 
     marginLeft: insets.left + additionalMargin,
   };
 }
+
+/**
+ * Default export component for platform utilities
+ * This component is exported to satisfy route requirements
+ */
+const PlatformUtilities: React.FC = () => {
+  return React.createElement(
+    View,
+    { style: { flex: 1, justifyContent: 'center', alignItems: 'center' } },
+    React.createElement(Text, null, "Platform Utilities"),
+    React.createElement(Text, null, `Current Platform: ${Platform.OS}`)
+  );
+};
+
+export default PlatformUtilities;

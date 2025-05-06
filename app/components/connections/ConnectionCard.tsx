@@ -10,13 +10,10 @@ interface ConnectionCardProps {
   item: EnhancedConnection;
   activeTab: 'connections' | 'pending' | 'suggested' | 'discover';
   handleConnect: (id: string, action: 'accept' | 'reject' | 'connect' | 'message') => void;
-  unreadMessages: {[key: string]: number};
-  privacySettings: {
-    showOnlineStatus: boolean;
-    allowContactDiscovery: boolean;
-    allowRecommendations: boolean;
-    encryptMessages: boolean;
-  };
+  // Pass only the specific unread count for this connection instead of the entire object
+  unreadCount?: number;
+  // Pass only the specific privacy settings needed instead of the entire object
+  showOnlineStatus?: boolean;
   onMessagePress?: () => void;
 }
 
@@ -28,8 +25,8 @@ const ConnectionCard: React.FC<ConnectionCardProps> = ({
   item,
   activeTab,
   handleConnect,
-  unreadMessages,
-  privacySettings,
+  unreadCount,
+  showOnlineStatus,
   onMessagePress
 }) => {
   const router = useRouter();
@@ -133,7 +130,7 @@ const ConnectionCard: React.FC<ConnectionCardProps> = ({
               </Text>
             </View>
           )}
-          {privacySettings.showOnlineStatus && item.isOnline && (
+          {showOnlineStatus && item.isOnline && (
             <View style={styles.onlineIndicator} testID="online-indicator" />
           )}
         </View>
@@ -173,10 +170,10 @@ const ConnectionCard: React.FC<ConnectionCardProps> = ({
           )}
           
           {/* Unread messages badge */}
-          {unreadMessages[connectionId] && (
+          {unreadCount && unreadCount > 0 && (
             <View style={styles.unreadBadge} testID="unread-badge">
               <Text style={styles.unreadBadgeText}>
-                {unreadMessages[connectionId]}
+                {unreadCount}
               </Text>
             </View>
           )}
@@ -327,5 +324,13 @@ const styles = StyleSheet.create({
   },
 });
 
-// Use memo to prevent unnecessary re-renders
-export default memo(ConnectionCard);
+// Use memo with custom comparison function to prevent unnecessary re-renders
+export default memo(ConnectionCard, (prevProps, nextProps) => {
+  // Only re-render if these specific props change
+  return (
+    prevProps.item.id === nextProps.item.id &&
+    prevProps.activeTab === nextProps.activeTab &&
+    prevProps.unreadCount === nextProps.unreadCount &&
+    prevProps.showOnlineStatus === nextProps.showOnlineStatus
+  );
+});

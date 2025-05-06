@@ -16,7 +16,7 @@ const modalStyles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E1E1E', // Dark background for modals
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     padding: 16,
@@ -27,21 +27,21 @@ const modalStyles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#2D2D2D', // Darker border
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#FFFFFF',
   },
   modalCancel: {
     fontSize: 16,
-    color: '#6B7280',
+    color: '#9CA3AF', // Lighter gray for dark mode
   },
   modalDone: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#3B82F6',
+    color: '#00BFA6', // Updated to primary teal color
   },
   modalBody: {
     padding: 16,
@@ -49,19 +49,19 @@ const modalStyles = StyleSheet.create({
   
   // Specific modal content containers
   ticketModalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E1E1E', // Dark background for modals
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     height: height * 0.7,
   },
   fieldModalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E1E1E', // Dark background for modals
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     height: height * 0.6,
   },
   speakerModalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E1E1E', // Dark background for modals
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     height: height * 0.8,

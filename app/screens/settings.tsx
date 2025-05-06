@@ -1,5 +1,6 @@
 // app/screens/settings.tsx
 import React, { useState, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -8,7 +9,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
-  StatusBar,
   Switch,
   Alert,
   Share,
@@ -17,8 +17,8 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../AuthContext';
 import { FontAwesome, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createShadow, safeTopPadding } from '../utils/platformUtils';
+import { createShadow } from '../utils/platformUtils';
+import ScreenWrapper from '../components/common/ScreenWrapper';
 import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebaseConfig';
 import * as Application from 'expo-application';
@@ -184,30 +184,28 @@ export default function SettingsScreen() {
     );
   }
 
+  // Create back button for header
+  const headerBackButton = (
+    <TouchableOpacity
+      onPress={() => router.back()}
+      hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+      style={styles.backButton}
+    >
+      <FontAwesome name="arrow-left" size={20} color="#FFFFFF" />
+    </TouchableOpacity>
+  );
+
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
-      
-      {/* Header */}
-      <View style={[
-        styles.header,
-        { paddingTop: Math.max(insets.top, 20) }
-      ]}>
-        <TouchableOpacity 
-          onPress={() => router.back()}
-          hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-          style={styles.backButton}
-        >
-          <FontAwesome name="arrow-left" size={20} color="#1F2937" />
-        </TouchableOpacity>
-        
-        <Text style={styles.headerTitle}>Settings</Text>
-        
-        <View style={{ width: 40 }} />
-      </View>
-      
-      <ScrollView 
-        style={styles.scrollView}
+    <ScreenWrapper
+      backgroundColor="#F9FAFB"
+      statusBarStyle="light-content"
+      header={{
+        title: "Settings",
+        rightContent: <View style={{ width: 40 }} />,
+        gradientColors: ['#2563EB', '#4F46E5']
+      }}
+    >
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -577,7 +575,7 @@ export default function SettingsScreen() {
         {/* Spacer */}
         <View style={{ height: 20 }} />
       </ScrollView>
-    </View>
+    </ScreenWrapper>
   );
 }
 
@@ -586,10 +584,6 @@ const cardShadow = createShadow(2);
 const buttonShadow = createShadow(1);
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -600,29 +594,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    ...cardShadow,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: Platform.OS === 'ios' ? '600' : 'bold',
-    color: '#1F2937',
-  },
   backButton: {
     padding: 8,
   },
-  scrollView: {
-    flex: 1,
-  },
   scrollContent: {
+    paddingTop: 20,
     paddingBottom: 30,
   },
   section: {

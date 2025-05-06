@@ -55,7 +55,7 @@ const EventSection = ({
   const CARD_WIDTH = width * 0.75;
   
   return (
-    <Animated.View 
+    <Animated.View
       style={[
         styles.sectionContainer,
         {
@@ -64,6 +64,12 @@ const EventSection = ({
         }
       ]}
     >
+      {/* Background image for consistent design aesthetic */}
+      <Image
+        source={require('../../../assets/images/tropical-gradient.png')}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      />
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>
           {title}
@@ -167,6 +173,16 @@ const styles = StyleSheet.create({
     elevation: 3, // Add elevation for Android
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)', // More visible border
+    position: 'relative',
+  },
+  backgroundImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.08,
+    zIndex: 0,
   },
   
   // Section header with subtle divider

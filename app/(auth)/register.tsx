@@ -1,5 +1,5 @@
 // app/(auth)/register.tsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { enhancedImageService, ImageType, ImageQuality, ImageSize } from '../services/enhancedImageService';
 import {
   View,
@@ -16,7 +16,8 @@ import {
   Modal,
   Dimensions,
   Animated,
-  Keyboard
+  Keyboard,
+  ImageBackground
 } from 'react-native';
 import { useAuth } from '../AuthContext';
 import validationUtils, { formatPhoneNumber } from '../utils/validation';
@@ -50,6 +51,62 @@ const USER_TYPES = [
   { id: 'both', label: 'Both', icon: 'groups' }
 ];
 
+// Wave animation component
+const WaveAnimation = () => {
+  const translateX1 = useRef(new Animated.Value(0)).current;
+  const translateX2 = useRef(new Animated.Value(-100)).current;
+  
+  useEffect(() => {
+    const createAnimation = (value, toValue, duration) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.timing(value, {
+            toValue,
+            duration,
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration,
+            useNativeDriver: true,
+          })
+        ])
+      );
+    };
+    
+    // Create and start animations
+    const animation1 = createAnimation(translateX1, -200, 8000);
+    const animation2 = createAnimation(translateX2, 100, 10000);
+    
+    animation1.start();
+    animation2.start();
+    
+    return () => {
+      animation1.stop();
+      animation2.stop();
+    };
+  }, []);
+  
+  return (
+    <View style={styles.wavesContainer}>
+      <Animated.View
+        style={[
+          styles.wave,
+          styles.wave1,
+          { transform: [{ translateX: translateX1 }] }
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.wave,
+          styles.wave2,
+          { transform: [{ translateX: translateX2 }] }
+        ]}
+      />
+    </View>
+  );
+};
+
 export default function Register() {
   const { signUp, isLoading, error, signInWithGoogle } = useAuth();
   const router = useRouter();
@@ -58,6 +115,15 @@ export default function Register() {
   const [currentStep, setCurrentStep] = useState(1);
   const [progress] = useState(new Animated.Value(0));
   const [uploadingImage, setUploadingImage] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    }).start();
+  }, []);
   
   // Form data
   const [userData, setUserData] = useState({
@@ -714,7 +780,7 @@ export default function Register() {
         >
           {uploadingImage ? (
             <View style={styles.uploadingContainer}>
-              <ActivityIndicator size="large" color="#007AFF" />
+              <ActivityIndicator size="large" color="#F97316" /> {/* Vibrant warm orange */}
               <Text style={styles.uploadingText}>Uploading...</Text>
             </View>
           ) : userData.profileImage ? (
@@ -755,10 +821,10 @@ export default function Register() {
             disabled={isLoading || userData.locationLoading}
           >
             {userData.locationLoading ? (
-              <ActivityIndicator size="small" color="#007AFF" />
+              <ActivityIndicator size="small" color="#F97316" />, {/* Vibrant warm orange */}
             ) : (
               <>
-                <MaterialIcons name="my-location" size={16} color="#007AFF" />
+                <MaterialIcons name="my-location" size={16} color="#F97316" />, {/* Vibrant warm orange */}
                 <Text style={styles.detectLocationText}>Detect</Text>
               </>
             )}
@@ -944,7 +1010,7 @@ export default function Register() {
                     {interest}
                   </Text>
                   {userData.interests.includes(interest) && (
-                    <MaterialIcons name="check" size={20} color="#007AFF" />
+                    <MaterialIcons name="check" size={20} color="#F97316" />, {/* Vibrant warm orange */}
                   )}
                 </TouchableOpacity>
               ))}
@@ -981,28 +1047,44 @@ export default function Register() {
       style={styles.container}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 20}
     >
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={prevStep}
-        >
-          <MaterialIcons name="arrow-back" size={24} color="#007AFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Account</Text>
-        <View style={{ width: 24 }} />
-      </View>
-      
-      {renderStepIndicator()}
-      
-      <ScrollView 
-        ref={scrollViewRef}
-        contentContainerStyle={styles.scrollContainer}
-        keyboardShouldPersistTaps="handled"
+      <ImageBackground
+        source={require('../../assets/images/tropical-gradient.png')}
+        style={styles.backgroundImage}
+        resizeMode="cover"
       >
-        <View style={styles.formContainer}>
-          {currentStep === 1 && renderStep1()}
-          {currentStep === 2 && renderStep2()}
-          {currentStep === 3 && renderStep3()}
+        <LinearGradient
+          colors={['rgba(0, 191, 166, 0.7)', 'rgba(252, 211, 77, 0.8)']}
+          style={styles.gradientOverlay}
+        >
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={prevStep}
+            >
+              <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Join Our Island</Text>
+            <View style={{ width: 24 }} />
+          </View>
+      
+          {renderStepIndicator()}
+          
+          <ScrollView
+            ref={scrollViewRef}
+            contentContainerStyle={styles.scrollContainer}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.formContainer}>
+              <WaveAnimation />
+              
+              <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [20, 0]
+              }) }] }}>
+                {currentStep === 1 && renderStep1()}
+                {currentStep === 2 && renderStep2()}
+                {currentStep === 3 && renderStep3()}
+              </Animated.View>
           
           <View style={styles.buttonsContainer}>
             <TouchableOpacity
@@ -1058,10 +1140,12 @@ export default function Register() {
               </>
             )}
           </View>
-        </View>
-      </ScrollView>
-      
-      {renderInterestsModal()}
+            </View>
+          </ScrollView>
+          
+          {renderInterestsModal()}
+        </LinearGradient>
+      </ImageBackground>
     </KeyboardAvoidingView>
   );
 }
@@ -1069,7 +1153,14 @@ export default function Register() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+  },
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  gradientOverlay: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -1081,21 +1172,26 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+    backgroundColor: 'rgba(0, 191, 166, 0.3)',
+    borderRadius: 20,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '600',
-    color: '#1F2937',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   stepIndicatorContainer: {
     paddingHorizontal: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: 'rgba(255, 255, 255, 0.3)',
   },
   progressBar: {
     height: 4,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#00BFA6', // Tropical teal
     borderRadius: 2,
     marginBottom: 12,
   },
@@ -1107,15 +1203,15 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: 'rgba(255, 255, 255, 0.7)',
   },
   activeStep: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    backgroundColor: '#00BFA6', // Tropical teal
+    borderColor: '#00BFA6', // Tropical teal
   },
   completedStep: {
     backgroundColor: '#34D399',
@@ -1149,6 +1245,16 @@ const styles = StyleSheet.create({
   },
   formContainer: {
     padding: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    margin: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   stepContainer: {
     marginBottom: 24,
@@ -1156,12 +1262,15 @@ const styles = StyleSheet.create({
   stepTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1F2937',
+    color: '#00BFA6', // Tropical teal
     marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   stepDescription: {
     fontSize: 16,
-    color: '#6B7280',
+    color: '#166534', // Deep green
     marginBottom: 24,
   },
   generalError: {
@@ -1182,12 +1291,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderRadius: 10,
     padding: 15,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#A7F3D0', // Soft mint
   },
   inputError: {
     borderColor: '#EF4444',
@@ -1279,8 +1388,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   userTypeSelected: {
-    borderColor: '#007AFF',
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    borderColor: '#00BFA6', // Tropical teal
+    backgroundColor: 'rgba(0, 191, 166, 0.1)', // Tropical teal with transparency
   },
   userTypeText: {
     marginTop: 4,
@@ -1288,7 +1397,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   userTypeTextSelected: {
-    color: '#007AFF',
+    color: '#00BFA6', // Tropical teal
     fontWeight: '600',
   },
   interestsContainer: {
@@ -1311,7 +1420,7 @@ const styles = StyleSheet.create({
   interestChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: '#00BFA6', // Tropical teal
     borderRadius: 16,
     paddingVertical: 6,
     paddingHorizontal: 12,
@@ -1340,7 +1449,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: '#00BFA6', // Tropical teal
     borderRadius: 8,
     padding: 12,
     marginTop: 12,
@@ -1365,10 +1474,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 6,
     borderRadius: 6,
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    backgroundColor: 'rgba(0, 191, 166, 0.1)', // Tropical teal with transparency
   },
   detectLocationText: {
-    color: '#007AFF',
+    color: '#00BFA6', // Tropical teal
     fontSize: 14,
     fontWeight: '500',
     marginLeft: 4,
@@ -1391,8 +1500,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
+    backgroundColor: '#00BFA6', // Tropical teal
+    borderColor: '#00BFA6', // Tropical teal
   },
   termsTextContainer: {
     flex: 1,
@@ -1403,7 +1512,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   termsLink: {
-    color: '#007AFF',
+    color: '#00BFA6', // Tropical teal
     fontWeight: '500',
   },
   buttonsContainer: {
@@ -1413,7 +1522,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007AFF',
+    backgroundColor: '#00BFA6', // Tropical teal
     borderRadius: 10,
     padding: 16,
   },
@@ -1469,7 +1578,7 @@ const styles = StyleSheet.create({
   },
   loginLink: {
     fontSize: 14,
-    color: '#007AFF',
+    color: '#00BFA6', // Tropical teal
     fontWeight: '600',
   },
   modalOverlay: {
@@ -1513,7 +1622,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F3F4F6',
   },
   interestOptionSelected: {
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    backgroundColor: 'rgba(0, 191, 166, 0.1)', // Tropical teal with transparency
   },
   interestOptionText: {
     fontSize: 16,
@@ -1521,10 +1630,10 @@ const styles = StyleSheet.create({
   },
   interestOptionTextSelected: {
     fontWeight: '600',
-    color: '#007AFF',
+    color: '#00BFA6', // Tropical teal
   },
   modalDoneButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#00BFA6', // Tropical teal
     padding: 16,
     alignItems: 'center',
     borderBottomLeftRadius: 16,
@@ -1534,5 +1643,34 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  
+  // Wave animation styles
+  wavesContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 40,
+    overflow: 'hidden',
+  },
+  wave: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 20,
+    backgroundColor: 'transparent',
+    borderRadius: 50,
+  },
+  wave1: {
+    bottom: -10,
+    height: 20,
+    backgroundColor: 'rgba(0, 191, 166, 0.3)', // Tropical teal with transparency
+  },
+  wave2: {
+    bottom: -15,
+    height: 25,
+    backgroundColor: 'rgba(45, 212, 191, 0.2)', // Lighter teal with transparency
   }
 });

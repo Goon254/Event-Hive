@@ -10,12 +10,16 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  ScrollView
+  ScrollView,
+  ImageBackground,
+  Image,
+  Animated
 } from 'react-native';
 import { useAuth } from '../AuthContext';
 import validationUtils from '../utils/validation';
 import { Link, useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { 
   canRequestPasswordReset, 
   recordPasswordResetRequest,
@@ -33,6 +37,62 @@ import {
  * - Clear error messages
  * - Success feedback
  */
+// Wave animation component
+const WaveAnimation = () => {
+  const translateX1 = useRef(new Animated.Value(0)).current;
+  const translateX2 = useRef(new Animated.Value(-100)).current;
+  
+  useEffect(() => {
+    const createAnimation = (value, toValue, duration) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.timing(value, {
+            toValue,
+            duration,
+            useNativeDriver: true,
+          }),
+          Animated.timing(value, {
+            toValue: 0,
+            duration,
+            useNativeDriver: true,
+          })
+        ])
+      );
+    };
+    
+    // Create and start animations
+    const animation1 = createAnimation(translateX1, -200, 8000);
+    const animation2 = createAnimation(translateX2, 100, 10000);
+    
+    animation1.start();
+    animation2.start();
+    
+    return () => {
+      animation1.stop();
+      animation2.stop();
+    };
+  }, []);
+  
+  return (
+    <View style={styles.wavesContainer}>
+      <Animated.View
+        style={[
+          styles.wave,
+          styles.wave1,
+          { transform: [{ translateX: translateX1 }] }
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.wave,
+          styles.wave2,
+          { transform: [{ translateX: translateX2 }] }
+        ]}
+      />
+    </View>
+  );
+};
+
 export default function ResetPassword() {
   const { resetPassword, error, clearError } = useAuth();
   const router = useRouter();
@@ -42,6 +102,15 @@ export default function ResetPassword() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [remainingTime, setRemainingTime] = useState(0);
   const [canRequest, setCanRequest] = useState(true);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   // Clear errors when component mounts
   useEffect(() => {
@@ -137,14 +206,30 @@ export default function ResetPassword() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.formContainer}>
-          <View style={styles.headerContainer}>
-            <Text style={styles.title}>Reset Password</Text>
-            <Text style={styles.subtitle}>
-              Enter your email address and we'll send you instructions to reset your password.
-            </Text>
-          </View>
+      <ImageBackground
+        source={require('../../assets/images/tropical-gradient.png')}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      >
+        <LinearGradient
+          colors={['rgba(0, 191, 166, 0.7)', 'rgba(252, 211, 77, 0.8)']}
+          style={styles.gradientOverlay}
+        >
+          <ScrollView contentContainerStyle={styles.scrollContainer}>
+            <View style={styles.formContainer}>
+              <View style={styles.headerContainer}>
+                <Image
+                  source={require('../../assets/images/eventhive-icon.png')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.title}>Reset Your Password</Text>
+                <Text style={styles.subtitle}>
+                  Enter your email address and we'll send you instructions to reset your password.
+                </Text>
+              </View>
+          
+          <WaveAnimation />
           
           {error && (
             <View style={styles.errorContainer}>
@@ -162,48 +247,58 @@ export default function ResetPassword() {
             </View>
           )}
           
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Email Address</Text>
-            <View style={[
-              styles.inputWrapper,
-              emailError ? styles.inputWrapperError : null
-            ]}>
-              <View style={styles.inputIcon}>
-                <FontAwesome name="envelope" size={16} color="#6B7280" />
+          <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [20, 0]
+          }) }] }}>
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Email Address</Text>
+              <View style={[
+                styles.inputWrapper,
+                emailError ? styles.inputWrapperError : null
+              ]}>
+                <View style={styles.inputIcon}>
+                  <FontAwesome name="envelope" size={16} color="#6B7280" />
+                </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter your email"
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    setEmailError('');
+                  }}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  editable={!isLoading}
+                  placeholderTextColor="#9CA3AF"
+                />
               </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter your email"
-                value={email}
-                onChangeText={(text) => {
-                  setEmail(text);
-                  setEmailError('');
-                }}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                editable={!isLoading}
-                placeholderTextColor="#9CA3AF"
-              />
+              {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
             </View>
-            {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
-          </View>
+          </Animated.View>
           
-          <TouchableOpacity
-            style={[
-              styles.button,
-              (isLoading || !canRequest) && styles.buttonDisabled
-            ]}
-            onPress={handleResetPassword}
-            disabled={isLoading || !canRequest}
-            activeOpacity={0.8}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>Reset Password</Text>
-            )}
-          </TouchableOpacity>
+          <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [30, 0]
+          }) }] }}>
+            <TouchableOpacity
+              style={[
+                styles.button,
+                (isLoading || !canRequest) && styles.buttonDisabled
+              ]}
+              onPress={handleResetPassword}
+              disabled={isLoading || !canRequest}
+              activeOpacity={0.8}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.buttonText}>Reset Password</Text>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
           
           {!canRequest && remainingTime > 0 && (
             <Text style={styles.limitText}>
@@ -213,12 +308,14 @@ export default function ResetPassword() {
           
           <Link href="/(auth)/login" asChild>
             <TouchableOpacity style={styles.backToLogin} activeOpacity={0.7}>
-              <FontAwesome name="arrow-left" size={14} color="#007AFF" style={styles.backIcon} />
+              <FontAwesome name="arrow-left" size={14} color="#F97316" style={styles.backIcon} /> {/* Vibrant warm orange */}
               <Text style={styles.backToLoginText}>Back to Login</Text>
             </TouchableOpacity>
-          </Link>
-        </View>
-      </ScrollView>
+              </Link>
+            </View>
+          </ScrollView>
+        </LinearGradient>
+      </ImageBackground>
     </KeyboardAvoidingView>
   );
 }
@@ -226,23 +323,38 @@ export default function ResetPassword() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+  },
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  gradientOverlay: {
+    flex: 1,
   },
   scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
+    paddingVertical: 40,
   },
   formContainer: {
     padding: 24,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
     marginHorizontal: 16,
     marginVertical: 24,
     borderRadius: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
+    marginBottom: 16,
   },
   headerContainer: {
     alignItems: 'center',
@@ -252,12 +364,15 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     textAlign: 'center',
-    color: '#007AFF',
+    color: '#00BFA6', // Tropical teal
     marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6B7280',
+    color: '#166534', // Deep green
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -305,10 +420,10 @@ const styles = StyleSheet.create({
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#A7F3D0', // Soft mint
     overflow: 'hidden',
   },
   inputWrapperError: {
@@ -330,11 +445,16 @@ const styles = StyleSheet.create({
     marginLeft: 5,
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: '#00BFA6', // Tropical teal
     borderRadius: 10,
     padding: 16,
     alignItems: 'center',
     marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   buttonDisabled: {
     backgroundColor: '#A0A0A0',
@@ -360,8 +480,37 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   backToLoginText: {
-    color: '#007AFF',
+    color: '#00BFA6', // Tropical teal
     fontSize: 14,
     fontWeight: '500',
   },
+  
+  // Wave animation styles
+  wavesContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 40,
+    overflow: 'hidden',
+  },
+  wave: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 20,
+    backgroundColor: 'transparent',
+    borderRadius: 50,
+  },
+  wave1: {
+    bottom: -10,
+    height: 20,
+    backgroundColor: 'rgba(0, 191, 166, 0.3)', // Tropical teal with transparency
+  },
+  wave2: {
+    bottom: -15,
+    height: 25,
+    backgroundColor: 'rgba(45, 212, 191, 0.2)', // Lighter teal with transparency
+  }
 });

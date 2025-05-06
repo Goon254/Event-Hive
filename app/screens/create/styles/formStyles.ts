@@ -13,7 +13,7 @@ const formStyles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1F2937',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
   requiredStar: {
@@ -22,7 +22,7 @@ const formStyles = StyleSheet.create({
   },
   helperText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: 'rgba(255,255,255,0.7)',
     marginBottom: 8,
   },
   input: {
@@ -45,7 +45,7 @@ const formStyles = StyleSheet.create({
   },
   charCount: {
     fontSize: 12,
-    color: '#6B7280',
+    color: 'rgba(255,255,255,0.6)',
     textAlign: 'right',
     marginTop: 4,
   },
@@ -80,7 +80,7 @@ const formStyles = StyleSheet.create({
   tag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#00BFA6', // Updated to primary teal color
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -106,7 +106,7 @@ const formStyles = StyleSheet.create({
     marginRight: 8,
   },
   tagAddButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#00BFA6', // Updated to primary teal color
     borderRadius: 10,
     width: 44,
     height: 44,
@@ -154,8 +154,8 @@ const formStyles = StyleSheet.create({
     marginHorizontal: 4,
   },
   selectedEventType: {
-    borderColor: '#3B82F6',
-    backgroundColor: '#EFF6FF',
+    borderColor: '#00BFA6', // Updated to primary teal color
+    backgroundColor: 'rgba(0, 191, 166, 0.1)', // Light teal background
   },
   eventTypeText: {
     fontSize: 16,
@@ -164,7 +164,7 @@ const formStyles = StyleSheet.create({
     marginLeft: 8,
   },
   selectedEventTypeText: {
-    color: '#3B82F6',
+    color: '#00BFA6', // Updated to primary teal color
   },
   
   // Toggle styles
@@ -200,7 +200,7 @@ const formStyles = StyleSheet.create({
     color: '#1F2937',
   },
   addTicketButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#00BFA6', // Updated to primary teal color
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -301,7 +301,7 @@ const formStyles = StyleSheet.create({
     color: '#1F2937',
   },
   addFieldButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#00BFA6', // Updated to primary teal color
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -392,7 +392,7 @@ const formStyles = StyleSheet.create({
     color: '#1F2937',
   },
   addSpeakerButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#00BFA6', // Updated to primary teal color
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -544,7 +544,7 @@ const formStyles = StyleSheet.create({
     marginRight: 8,
   },
   addOptionButton: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#00BFA6', // Updated to primary teal color
     borderRadius: 8,
     width: 36,
     height: 36,

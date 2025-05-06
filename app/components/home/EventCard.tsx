@@ -1,331 +1,357 @@
-// components/home/EventCard.tsx
-import React from 'react';
+// components/home/EventCard.tsx (Premium Modern Tropical)
+
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
   Image,
   StyleSheet,
-  TouchableOpacity,
+  TouchableWithoutFeedback,
+  Animated,
   Dimensions,
+  Platform,
+  Pressable,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, MaterialIcons, FontAwesome } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { createShadow } from '../../utils/platformUtils';
+import { Event as EventType } from '../../services/eventServices';
 import { format } from 'date-fns';
+import { LinearGradient } from 'expo-linear-gradient';
+import { SharedElement } from 'react-navigation-shared-element';
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = width * 0.75;
-
-// Import the Event type from event services
-import { Event as EventType } from '../../services/eventServices';
-
-// Define interfaces for type safety
-interface EventItem {
-  id: string;
-  title: string;
-  date?: string | Date;
-  location?: string;
-  imageUrl?: string;
-  category?: string;
-  attendees?: string[] | number;
-}
-
-// This should match the FilterType from useEventData
-type FilterType = 'all' | 'upcoming' | 'ongoing' | 'completed';
+const CARD_WIDTH = width - 48; // 24px margin each side
+const THUMB_SIZE = 68; // Slightly larger thumbnail
 
 interface EventStatus {
   label: string;
   color?: string;
+  backgroundColor?: string;
 }
 
 interface EventTheme {
   primaryGradientStart: string;
+  primaryGradientEnd: string;
   secondaryText: string;
   accentText: string;
   text?: string;
   card?: string;
+  cardGlassEffect?: boolean;
 }
 
 interface EventCardProps {
   event: EventType;
   theme: EventTheme;
   onPress?: () => void;
-  style?: any;
-  animationDelay?: number;
-  getEventStatus?: (event: EventType) => FilterType | EventStatus;
+  getEventStatus?: (event: EventType) => EventStatus;
   isUserAttending?: (eventId: string) => boolean;
+  style?: any;
 }
 
-// Updated EventCard to match feed styling
 const EventCard: React.FC<EventCardProps> = ({
   event,
   theme,
   onPress,
-  style,
-  animationDelay,
   getEventStatus,
-  isUserAttending
+  isUserAttending,
+  style,
 }) => {
-  // Determine if user is attending this event
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  
+  useEffect(() => {
+    // Fade in animation on mount
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const handlePressIn = () => Animated.spring(scaleAnim, { 
+    toValue: 0.98,
+    friction: 7,
+    tension: 40,
+    useNativeDriver: true 
+  }).start();
+  
+  const handlePressOut = () => Animated.spring(scaleAnim, { 
+    toValue: 1,
+    friction: 5,
+    tension: 40,
+    useNativeDriver: true 
+  }).start();
+
+  const status = getEventStatus ? getEventStatus(event) : undefined;
   const isAttending = isUserAttending ? isUserAttending(event.id) : false;
-  
-  // Get event status if function is provided and convert to EventStatus if needed
-  const getStatus = (): EventStatus | undefined => {
-    if (!getEventStatus) return undefined;
-    
-    const result = getEventStatus(event);
-    
-    // If result is already an EventStatus object
-    if (typeof result === 'object' && result !== null && 'label' in result) {
-      return result as EventStatus;
-    }
-    
-    // If result is a FilterType string, convert it to EventStatus
-    if (typeof result === 'string') {
-      const statusMap: Record<FilterType, EventStatus> = {
-        'all': { label: 'All', color: '#6B7280' },
-        'upcoming': { label: 'Upcoming', color: '#3B82F6' },
-        'ongoing': { label: 'Live Now', color: '#10B981' },
-        'completed': { label: 'Completed', color: '#6B7280' }
-      };
-      return statusMap[result as FilterType] || { label: result, color: theme.accentText };
-    }
-    
-    return undefined;
-  };
-  
-  const status = getStatus();
-  // Format date for display
-  const formatEventDate = (date?: string | Date): string => {
+
+  const formatEventDate = (date?: string | Date) => {
     if (!date) return 'TBD';
+    return format(new Date(date), 'EEE, MMM d');
+  };
+
+  // Calculate days remaining until event
+  const getDaysRemaining = (date?: string | Date) => {
+    if (!date) return null;
     const eventDate = new Date(date);
-    return format(eventDate, 'EEE, MMM d • h:mm a');
+    const today = new Date();
+    const diffTime = eventDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : null;
   };
 
-  // Generate category color
-  const getCategoryColor = (category?: string): string => {
-    const colors: Record<string, string> = {
-      music: '#3B82F6',
-      sports: '#10B981',
-      art: '#8B5CF6',
-      food: '#F59E0B',
-      technology: '#6366F1',
-      community: '#EC4899',
-      default: theme.primaryGradientStart
-    };
-    
-    if (!category) return colors.default;
-    const lowercaseCategory = category.toLowerCase();
-    return colors[lowercaseCategory] || colors.default;
-  };
+  const daysRemaining = getDaysRemaining(event.date);
 
-  return (
-    <TouchableOpacity
-      style={[
-        styles.card,
-        {
-          backgroundColor: theme.card || '#FFFFFF'
-        },
-        style
-      ]}
-      activeOpacity={0.9}
-      onPress={onPress || (() => router.push({
-        pathname: '/screens/eventdetails',
-        params: { id: event.id.toString() }
-      }))}
-    >
-      {/* Event Image with Gradient Overlay */}
-      <View style={styles.imageContainer}>
+  const renderCardContent = () => (
+    <View style={styles.rowContainer}>
+      {/* Background image for consistent design aesthetic */}
+      <Image
+        source={require('../../../assets/images/tropical-gradient.png')}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      />
+      
+      {/* Thumbnail with shared element transition */}
+      <SharedElement id={`event.${event.id}.image`}>
         {event.imageUrl ? (
           <Image
             source={{ uri: event.imageUrl }}
-            style={styles.image}
+            style={styles.thumbnail}
             resizeMode="cover"
           />
         ) : (
-          <View style={[styles.imagePlaceholder, { backgroundColor: getCategoryColor(event.category) }]}>
-            <FontAwesome name="calendar" size={36} color="#FFFFFF" />
-          </View>
+          <LinearGradient
+            colors={[theme.primaryGradientStart, theme.primaryGradientEnd]}
+            style={[styles.thumbnail, styles.thumbnailPlaceholder]}
+          >
+            <FontAwesome5 name="palm-tree" size={22} color="#FFF" />
+          </LinearGradient>
         )}
-        
-        {/* Status Badge */}
-        {status && (
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: status.color || theme.accentText }
-          ]}>
-            <Text style={styles.statusText}>{status.label}</Text>
+      </SharedElement>
+
+      {/* Text Info */}
+      <View style={styles.infoContainer}>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
+            {event.title}
+          </Text>
+          
+          {isAttending && (
+            <View style={[styles.attendingBadge, { backgroundColor: '#17B99A20' }]}>
+              <MaterialCommunityIcons name="check-circle" size={12} color="#17B99A" style={{ marginRight: 4 }} />
+              <Text style={[styles.attendingText, { color: '#17B99A' }]}>Going</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.metaContainer}>
+          <View style={styles.dateContainer}>
+            <Ionicons name="calendar-outline" size={14} color={theme.secondaryText} style={{ marginRight: 4 }} />
+            <Text style={[styles.dateText, { color: theme.secondaryText }]}>
+              {formatEventDate(event.date)}
+            </Text>
           </View>
-        )}
-        
-        {/* Attendance Badge */}
-        {isAttending && (
-          <View style={styles.attendingBadge}>
-            <MaterialIcons name="check-circle" size={16} color="#FFFFFF" />
-            <Text style={styles.attendingText}>Attending</Text>
-          </View>
-        )}
-      </View>
-      
-      {/* Event Details */}
-      <View style={styles.detailsContainer}>
-        {/* Date and Time */}
-        <View style={styles.dateContainer}>
-          <MaterialIcons name="event" size={16} color={theme.secondaryText} />
-          <Text style={[styles.dateText, { color: theme.secondaryText }]}>
-            {formatEventDate(event.date)}
+
+          {daysRemaining !== null && (
+            <View style={[styles.daysRemainingTag, { backgroundColor: theme.primaryGradientStart + '20' }]}>
+              <Text style={[styles.daysRemainingText, { color: theme.primaryGradientStart }]}>
+                {daysRemaining} {daysRemaining === 1 ? 'day' : 'days'}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.locationContainer}>
+          <Ionicons name="location-outline" size={14} color={theme.secondaryText} style={{ marginRight: 4 }} />
+          <Text style={[styles.locationText, { color: theme.secondaryText }]} numberOfLines={1}>
+            {event.location}
           </Text>
         </View>
         
-        {/* Event Title */}
-        <Text style={[styles.title, { color: theme.text || '#1F2937' }]} numberOfLines={2}>
-          {event.title}
-        </Text>
-        
-        {/* Location */}
-        {event.location && (
-          <View style={styles.locationContainer}>
-            <Ionicons name="location-outline" size={16} color={theme.secondaryText} />
-            <Text style={[styles.locationText, { color: theme.secondaryText }]} numberOfLines={1}>
-              {event.location}
+        {/* Capacity indicator */}
+        {event.capacity && event.attendees && (
+          <View style={styles.capacityContainer}>
+            <View style={styles.capacityBarBackground}>
+              <View 
+                style={[
+                  styles.capacityBarFill, 
+                  { 
+                    width: `${Math.min(100, (event.attendees.length / event.capacity) * 100)}%`,
+                    backgroundColor: theme.primaryGradientStart
+                  }
+                ]} 
+              />
+            </View>
+            <Text style={[styles.capacityText, { color: theme.secondaryText }]}>
+              {event.attendees.length}/{event.capacity} spots
             </Text>
           </View>
         )}
-        
-        {/* Category and Attendees */}
-        <View style={styles.bottomRow}>
-          {event.category && (
-            <View style={[
-              styles.categoryTag,
-              { backgroundColor: getCategoryColor(event.category) + '20' } // Adding transparency
-            ]}>
-              <Text style={[
-                styles.categoryText,
-                { color: getCategoryColor(event.category) }
-              ]}>
-                {event.category}
-              </Text>
-            </View>
-          )}
-          
-          {event.attendees !== undefined && (
-            <View style={styles.attendeesContainer}>
-              <MaterialIcons name="people" size={16} color={theme.secondaryText} />
-              <Text style={[styles.attendeesText, { color: theme.secondaryText }]}>
-                {Array.isArray(event.attendees) ? event.attendees.length : event.attendees}
-              </Text>
-            </View>
-          )}
-        </View>
       </View>
-    </TouchableOpacity>
+    </View>
+  );
+
+  return (
+    <TouchableWithoutFeedback
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={onPress || (() => router.push({ pathname: '/screens/eventdetails', params: { id: event.id.toString() } }))}
+    >
+      <Animated.View 
+        style={[
+          styles.card,
+          { 
+            backgroundColor: theme.cardGlassEffect ? 'rgba(255, 255, 255, 0.8)' : theme.card,
+            transform: [{ scale: scaleAnim }],
+            opacity: fadeAnim,
+          },
+          theme.cardGlassEffect && Platform.OS === 'ios' && { 
+            backdropFilter: 'blur(12px)',
+          },
+          style
+        ]}
+      >
+        {/* Card status indicator (if any) */}
+        {status && (
+          <View 
+            style={[
+              styles.statusStrip, 
+              { 
+                backgroundColor: status.backgroundColor || theme.primaryGradientStart 
+              }
+            ]}
+          />
+        )}
+        
+        {renderCardContent()}
+      </Animated.View>
+    </TouchableWithoutFeedback>
   );
 };
 
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
-    backgroundColor: '#FFFFFF', // This could be theme.card if available
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginRight: 16,
-    ...createShadow(2),
-  },
-  imageContainer: {
-    width: '100%',
-    height: 150,
+    padding: 16,
+    borderRadius: 20,
+    marginBottom: 16,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
     position: 'relative',
+    overflow: 'hidden',
   },
-  image: {
+  backgroundImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
     width: '100%',
     height: '100%',
+    opacity: 0.15,
+    borderRadius: 20,
   },
-  imagePlaceholder: {
-    width: '100%',
-    height: '100%',
+  statusStrip: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopLeftRadius: 20,
+    borderBottomLeftRadius: 20,
+  },
+  rowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  thumbnail: {
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: 18,
+    marginRight: 16,
+  },
+  thumbnailPlaceholder: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  statusBadge: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+  infoContainer: {
+    flex: 1,
   },
-  statusText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  attendingBadge: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
+  titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.9)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
-  attendingText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-    marginLeft: 4,
+  title: {
+    fontSize: 16,
+    fontWeight: '700',
+    flex: 1,
   },
-  detailsContainer: {
-    padding: 16,
+  metaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
   dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
   },
   dateText: {
     fontSize: 13,
-    marginLeft: 4,
+    fontWeight: '500',
   },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
+  daysRemainingTag: {
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  daysRemainingText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   locationText: {
-    fontSize: 14,
-    marginLeft: 4,
-    flex: 1,
+    fontSize: 13,
+    fontWeight: '400',
   },
-  bottomRow: {
+  attendingBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  categoryTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  categoryText: {
-    fontSize: 12,
+  attendingText: {
+    fontSize: 11,
     fontWeight: '600',
   },
-  attendeesContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  capacityContainer: {
+    marginTop: 4,
   },
-  attendeesText: {
-    fontSize: 13,
-    marginLeft: 4,
+  capacityBarBackground: {
+    width: '100%',
+    height: 4,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 4,
   },
+  capacityBarFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  capacityText: {
+    fontSize: 11,
+    fontWeight: '500',
+  }
 });
 
 export default EventCard;

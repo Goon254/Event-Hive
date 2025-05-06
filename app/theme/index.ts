@@ -1,9 +1,5 @@
 /**
- * app/theme/index.ts
- *
- * Centralized theme configuration for the ScanGo app.
- * This file defines colors, spacing, typography, and other design tokens
- * to ensure consistency across the app.
+ * app/theme/index.ts (Updated for Tropical Vibes Theme)
  */
 
 import { Platform } from 'react-native';
@@ -19,156 +15,97 @@ import {
   BREAKPOINTS
 } from './constants';
 
-// Define color palette
+// Define updated color palette for Tropical Vibes
 const palette = {
-  // Primary colors
   primary: {
-    light: COLORS.primary,
-    dark: COLORS.primary,
-    gradient: GRADIENTS.primary,
+    light: '#00BFA6',
+    dark: '#00BFA6',
+    gradient: ['#00BFA6', '#2DD4BF', '#FCD34D'],
   },
-  
-  // Secondary colors
   secondary: {
-    light: '#3B82F6',
-    dark: '#60A5FA',
+    light: '#2DD4BF',
+    dark: '#2DD4BF',
   },
-  
-  // Accent colors
   accent: {
-    success: COLORS.success,
-    warning: COLORS.warning,
-    error: COLORS.error,
-    info: COLORS.primary,
+    success: '#22C55E',
+    warning: '#FACC15',
+    error: '#EF4444',
+    info: '#00BFA6',
   },
-  
-  // Neutral colors
   neutral: {
     white: '#FFFFFF',
     black: '#000000',
-    
-    // Light mode grays
-    gray50: '#F9FAFB',
-    gray100: '#F3F4F6',
-    gray200: '#E5E7EB',
-    gray300: '#D1D5DB',
-    gray400: '#9CA3AF',
-    gray500: '#6B7280',
-    gray600: '#4B5563',
-    gray700: '#374151',
-    gray800: '#1F2937',
-    gray900: '#111827',
-    
-    // Dark mode grays
-    darkGray50: '#18181B',
-    darkGray100: '#1E1E1E',
-    darkGray200: '#252525',
-    darkGray300: '#2D2D2D',
-    darkGray400: '#333333',
-    darkGray500: '#4B4B4B',
-    darkGray600: '#666666',
-    darkGray700: '#9CA3AF',
-    darkGray800: '#D1D5DB',
-    darkGray900: '#F3F4F6',
+    gray50: '#F0FDF4',
+    gray100: '#DCFCE7',
+    gray200: '#BBF7D0',
+    gray300: '#86EFAC',
+    gray400: '#4ADE80',
+    gray500: '#22C55E',
+    gray600: '#16A34A',
+    gray700: '#15803D',
+    gray800: '#166534',
+    gray900: '#14532D',
   },
-  
-  // Transparent colors
   transparent: {
-    light10: 'rgba(255, 255, 255, 0.1)',
     light20: 'rgba(255, 255, 255, 0.2)',
-    light30: 'rgba(255, 255, 255, 0.3)',
-    light40: 'rgba(255, 255, 255, 0.4)',
-    light50: 'rgba(255, 255, 255, 0.5)',
-    light60: 'rgba(255, 255, 255, 0.6)',
-    light70: 'rgba(255, 255, 255, 0.7)',
-    light80: 'rgba(255, 255, 255, 0.8)',
-    light90: 'rgba(255, 255, 255, 0.9)',
-    
-    dark10: 'rgba(0, 0, 0, 0.1)',
     dark20: 'rgba(0, 0, 0, 0.2)',
-    dark30: 'rgba(0, 0, 0, 0.3)',
-    dark40: 'rgba(0, 0, 0, 0.4)',
-    dark50: 'rgba(0, 0, 0, 0.5)',
-    dark60: 'rgba(0, 0, 0, 0.6)',
-    dark70: 'rgba(0, 0, 0, 0.7)',
-    dark80: 'rgba(0, 0, 0, 0.8)',
-    dark90: 'rgba(0, 0, 0, 0.9)',
-    
-    primary10: 'rgba(0, 122, 255, 0.1)',
-    primary20: 'rgba(0, 122, 255, 0.2)',
-    primary30: 'rgba(0, 122, 255, 0.3)',
-    primary50: 'rgba(0, 122, 255, 0.5)',
-    primary70: 'rgba(0, 122, 255, 0.7)',
-  },
+  }
 };
 
-// Use spacing from constants with additional app-specific values
 const spacing = {
   ...SPACING,
-  // Map legacy keys to new format
-  xs: SPACING.xs,
-  sm: SPACING.s,
-  md: SPACING.m,
-  lg: SPACING.l,
-  xl: SPACING.xl,
-  xxl: SPACING.xxl,
-  
-  // App-specific spacing values
-  screenPadding: SPACING.m,
-  cardPadding: SPACING.m,
-  sectionSpacing: SPACING.l,
-  itemSpacing: SPACING.m,
+  xs: 6,
+  sm: 12,
+  md: 20,
+  lg: 28,
+  xl: 36,
+  xxl: 48,
+  screenPadding: 24,
+  cardPadding: 20,
+  sectionSpacing: 28,
+  itemSpacing: 20,
 };
 
-// Merge typography from constants with app-specific font families
 const typography = {
   ...TYPOGRAPHY,
   fontFamily: {
-    regular: Platform.OS === 'ios' ? 'System' : 'Roboto',
-    medium: Platform.OS === 'ios' ? 'System' : 'Roboto',
-    bold: Platform.OS === 'ios' ? 'System' : 'Roboto',
+    regular: 'Poppins-Regular',
+    medium: 'Poppins-Medium',
+    bold: 'Poppins-Bold',
   },
-  
-  // Map legacy keys to new format for backward compatibility
   fontSize: {
-    xs: TYPOGRAPHY.caption.fontSize,
-    sm: TYPOGRAPHY.body2.fontSize,
-    md: TYPOGRAPHY.body1.fontSize,
-    lg: TYPOGRAPHY.button.fontSize,
-    xl: TYPOGRAPHY.h3.fontSize,
-    xxl: TYPOGRAPHY.h2.fontSize,
-    xxxl: TYPOGRAPHY.h1.fontSize,
+    xs: 12,
+    sm: 14,
+    md: 16,
+    lg: 20,
+    xl: 24,
+    xxl: 32,
+    xxxl: 40,
   },
-  
   fontWeight: {
     regular: '400',
     medium: '500',
-    semibold: TYPOGRAPHY.button.fontWeight,
-    bold: TYPOGRAPHY.h1.fontWeight,
+    semibold: '600',
+    bold: '700',
   },
 };
 
-// Use border radius from constants with legacy mapping
 const borderRadius = {
-  ...RADIUS,
-  // Map legacy keys to new format
-  xs: RADIUS.xs,
-  sm: RADIUS.s,
-  md: RADIUS.m,
-  lg: RADIUS.l,
-  xl: RADIUS.xl,
-  xxl: RADIUS.xl, // Map to closest value
-  round: RADIUS.round,
+  xs: 8,
+  sm: 12,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  round: 999,
 };
 
-// Define shadow creation utility
 const createShadow = (elevation: number) => {
   return Platform.select({
     ios: {
       shadowColor: palette.neutral.black,
-      shadowOffset: { width: 0, height: elevation },
-      shadowOpacity: 0.1 + (elevation * 0.03),
-      shadowRadius: elevation * 0.8,
+      shadowOffset: { width: 0, height: elevation / 2 },
+      shadowOpacity: 0.08 + (elevation * 0.02),
+      shadowRadius: elevation * 1.2,
     },
     android: {
       elevation: elevation,
@@ -177,127 +114,97 @@ const createShadow = (elevation: number) => {
   });
 };
 
-// Use shadows from constants with legacy mapping
 const shadows = {
-  ...SHADOWS,
-  // Map legacy keys to new format
-  sm: SHADOWS.light,
-  md: SHADOWS.medium,
-  lg: SHADOWS.strong,
-  xl: createShadow(8), // Keep custom xl shadow
+  sm: createShadow(2),
+  md: createShadow(4),
+  lg: createShadow(8),
+  xl: createShadow(12),
 };
 
-// Animation durations
 const animations = ANIMATIONS;
-
-// Z-index levels
 const zIndex = Z_INDEX;
-
-// Breakpoints
 const breakpoints = BREAKPOINTS;
 
-// Define theme for light mode (now using dark theme colors for consistency)
 const lightTheme = {
   colors: {
-    primary: COLORS.primary,
+    primary: palette.primary.light,
     secondary: palette.secondary.light,
-    background: COLORS.background,
-    card: COLORS.card,
-    text: COLORS.text,
-    textSecondary: COLORS.secondaryText,
-    textInverted: COLORS.background,
-    border: COLORS.border,
-    notification: COLORS.error,
-    
-    // Component specific colors
-    header: COLORS.header,
-    headerText: COLORS.text,
-    tabBar: COLORS.tabBar,
-    tabBarActive: COLORS.tabBarActive,
-    tabBarInactive: COLORS.tabBarInactive,
-    
-    // Card colors
-    cardBackground: COLORS.card,
-    cardBorder: COLORS.border,
-    
-    // Button colors
-    buttonPrimary: COLORS.primary,
-    buttonSecondary: COLORS.primaryDark,
-    buttonText: COLORS.text,
-    buttonTextSecondary: COLORS.text,
-    
-    // Status colors
-    success: COLORS.success,
-    warning: COLORS.warning,
-    error: COLORS.error,
-    info: COLORS.primary,
-    
-    // Gradient colors
-    gradientPrimary: GRADIENTS.primary,
-    gradientOverlay: GRADIENTS.overlay,
+    background: palette.neutral.gray50,
+    card: palette.neutral.white,
+    text: palette.neutral.gray900,
+    textSecondary: palette.neutral.gray600,
+    textInverted: palette.neutral.white,
+    border: palette.neutral.gray200,
+    notification: palette.accent.error,
+    header: palette.primary.gradient,
+    headerText: palette.neutral.white,
+    tabBar: palette.neutral.white,
+    tabBarActive: palette.primary.light,
+    tabBarInactive: palette.neutral.gray400,
+    cardBackground: palette.neutral.white,
+    cardBorder: palette.neutral.gray200,
+    buttonPrimary: palette.primary.light,
+    buttonSecondary: palette.secondary.light,
+    buttonText: palette.neutral.white,
+    buttonTextSecondary: palette.neutral.gray900,
+    success: palette.accent.success,
+    warning: palette.accent.warning,
+    error: palette.accent.error,
+    info: palette.accent.info,
+    gradientPrimary: palette.primary.gradient,
+    gradientOverlay: ['rgba(0,191,166,0.2)', 'rgba(45,212,191,0.2)', 'rgba(252,211,77,0.2)'],
   },
-  
-  // Include other theme properties
   spacing,
   typography,
   borderRadius,
   shadows,
 };
 
-// Define theme for dark mode (same as light theme for consistency)
+// Create a dark mode version of the tropical theme
 const darkTheme = {
   colors: {
-    primary: COLORS.primary,
+    primary: palette.primary.dark,
     secondary: palette.secondary.dark,
-    background: COLORS.background,
-    card: COLORS.card,
-    text: COLORS.text,
-    textSecondary: COLORS.secondaryText,
-    textInverted: COLORS.background,
-    border: COLORS.border,
-    notification: COLORS.error,
-    
-    // Component specific colors
-    header: COLORS.header,
-    headerText: COLORS.text,
-    tabBar: COLORS.tabBar,
-    tabBarActive: COLORS.tabBarActive,
-    tabBarInactive: COLORS.tabBarInactive,
-    
-    // Card colors
-    cardBackground: COLORS.card,
-    cardBorder: COLORS.border,
-    
-    // Button colors
-    buttonPrimary: COLORS.primary,
-    buttonSecondary: COLORS.primaryDark,
-    buttonText: COLORS.text,
-    buttonTextSecondary: COLORS.text,
-    
-    // Status colors
-    success: COLORS.success,
-    warning: COLORS.warning,
-    error: COLORS.error,
-    info: COLORS.primary,
-    
-    // Gradient colors
-    gradientPrimary: GRADIENTS.primary,
-    gradientOverlay: GRADIENTS.overlay,
+    background: '#121212', // Dark background
+    card: '#1E1E1E', // Dark card background
+    text: '#F0FDF4', // Light mint text for dark mode
+    textSecondary: '#A7F3D0', // Soft mint for secondary text
+    textInverted: '#1F2937', // Dark text for inverted elements
+    border: '#2D2D2D', // Dark border
+    notification: palette.accent.error,
+    header: ['#009688', '#00796B', '#00695C'], // Darker teal gradient for header
+    headerText: '#F0FDF4', // Light mint text
+    tabBar: '#1E1E1E', // Dark tab bar
+    tabBarActive: '#00BFA6', // Tropical teal
+    tabBarInactive: '#4B5563', // Dark gray
+    cardBackground: '#1E1E1E', // Dark card background
+    cardBorder: '#2D2D2D', // Dark border
+    buttonPrimary: '#00BFA6', // Tropical teal
+    buttonSecondary: '#2DD4BF', // Lighter teal
+    buttonText: '#F0FDF4', // Light mint text
+    buttonTextSecondary: '#F0FDF4', // Light mint text
+    success: palette.accent.success,
+    warning: palette.accent.warning,
+    error: palette.accent.error,
+    info: palette.accent.info,
+    gradientPrimary: ['#009688', '#00796B', '#00695C'], // Darker teal gradient
+    gradientOverlay: ['rgba(0,150,136,0.2)', 'rgba(0,121,107,0.2)', 'rgba(0,105,92,0.2)'], // Darker overlay
   },
-  
-  // Include other theme properties
   spacing,
   typography,
   borderRadius,
-  shadows,
+  shadows: {
+    sm: createShadow(3), // Slightly stronger shadows for dark mode
+    md: createShadow(5),
+    lg: createShadow(10),
+    xl: createShadow(15),
+  },
 };
 
-// Create a function to get the current theme based on color scheme
 export const getTheme = (colorScheme: 'light' | 'dark') => {
   return colorScheme === 'dark' ? darkTheme : lightTheme;
 };
 
-// Export theme components
 export default {
   light: lightTheme,
   dark: darkTheme,
@@ -311,6 +218,4 @@ export default {
   animations,
   zIndex,
   breakpoints,
-  colors: COLORS,
-  gradients: GRADIENTS,
 };

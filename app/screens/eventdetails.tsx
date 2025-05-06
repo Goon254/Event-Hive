@@ -22,6 +22,9 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
+  where,
+  setDoc,
   DocumentData,
   QueryDocumentSnapshot
 } from 'firebase/firestore';
@@ -624,6 +627,27 @@ export default function EventDetailsScreen() {
         createdAt: Timestamp.now()
       };
       
+      // Verify the attendee record exists before proceeding with payment
+      try {
+        const attendeeRef = doc(db, "events", id.toString(), "attendees", newAttendee.id);
+        const attendeeDoc = await getDoc(attendeeRef);
+        
+        if (!attendeeDoc.exists()) {
+          console.log("Attendee record not yet available, waiting briefly...");
+          // Wait a short time for the database write to complete
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Check again
+          const retryDoc = await getDoc(attendeeRef);
+          if (!retryDoc.exists()) {
+            console.warn(`Attendee record still not found after waiting. Creating payment anyway.`);
+          }
+        }
+      } catch (verifyError) {
+        console.warn('Error verifying attendee record before payment:', verifyError);
+        // Continue with payment attempt anyway
+      }
+      
       // Now initiate the payment flow
       await processPayment(newAttendee);
       
@@ -643,6 +667,40 @@ export default function EventDetailsScreen() {
       // Set payment mode
       setIsPaying(true);
       
+      // Ensure attendee record exists before proceeding
+      try {
+        const attendeeRef = doc(db, "events", id.toString(), "attendees", attendee.id);
+        let attendeeDoc = await getDoc(attendeeRef);
+        
+        // If the document doesn't exist, create it
+        if (!attendeeDoc.exists()) {
+          console.log(`Creating attendee record for ${attendee.id} before payment`);
+          
+          // Create the attendee record
+          await setDoc(attendeeRef, {
+            userId: attendee.userId,
+            name: attendee.name,
+            email: attendee.email,
+            status: attendee.checkInStatus || 'pending',
+            paymentStatus: 'pending',
+            joinedAt: Timestamp.now()
+          });
+          
+          // Verify it was created
+          attendeeDoc = await getDoc(attendeeRef);
+          if (!attendeeDoc.exists()) {
+            console.error(`Failed to create attendee record for ID: ${attendee.id}`);
+            throw new Error('Failed to create attendee record. Please try again.');
+          }
+        }
+        
+        console.log(`Verified attendee record for ${attendee.id}, proceeding with payment`);
+      } catch (verifyError) {
+        console.error('Error verifying/creating attendee record:', verifyError);
+        // Continue anyway since we're using a mock payment service
+        console.log('Continuing with payment despite verification error');
+      }
+      
       // Calculate amount
       const amount = event.price || 0;
       
@@ -655,44 +713,92 @@ export default function EventDetailsScreen() {
         { userId: user?.id }
       );
       
-      // Initialize payment sheet
-      const { error: initError } = await stripe.initPaymentSheet({
-        paymentIntentClientSecret: clientSecret,
-        merchantDisplayName: 'Event-Hive',
-        applePay: { merchantCountryCode: 'US' },
-        googlePay: { merchantCountryCode: 'US', testEnv: __DEV__ }
-      });
+      // Check if this is a mock payment intent (starts with pi_mock_)
+      const isMockPayment = paymentIntentId.startsWith('pi_mock_');
       
-      if (initError) {
-        throw new Error(`Payment initialization failed: ${initError.message}`);
-      }
-      
-      // Present the payment sheet
-      const { error: presentError } = await stripe.presentPaymentSheet();
-      
-      if (presentError) {
-        if (presentError.code === 'Canceled') {
-          // User canceled the payment - this is not a failure
-          console.log('Payment canceled by user');
-          
-          // Remove the attendee record since payment was canceled
-          await eventService.removeAttendee(id.toString(), attendee.id);
-          
-          // Refresh the attendees list
-          const updatedAttendees = attendees.filter(a => a.id !== attendee.id);
-          setAttendees(updatedAttendees);
-          
-          // Update spots left based on capacity and updated attendee count
-          if (event.capacity) {
-            const newSpotsLeft = Math.max(0, event.capacity - updatedAttendees.length);
-            setSpotsLeft(newSpotsLeft);
-          }
-          
-          setIsPaying(false);
-          return;
+      if (isMockPayment) {
+        console.log('Using mock payment flow instead of Stripe');
+        
+        // Simulate a successful payment without using Stripe
+        // Show a confirmation dialog to simulate payment
+        Alert.alert(
+          'Confirm Payment',
+          `Would you like to pay $${amount.toFixed(2)} for this event?`,
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: async () => {
+                console.log('Mock payment canceled by user');
+                
+                // Remove the attendee record since payment was canceled
+                await eventService.removeAttendee(id.toString(), attendee.id);
+                
+                // Refresh the attendees list
+                const updatedAttendees = attendees.filter(a => a.id !== attendee.id);
+                setAttendees(updatedAttendees);
+                
+                // Update spots left based on capacity and updated attendee count
+                if (event.capacity) {
+                  const newSpotsLeft = Math.max(0, event.capacity - updatedAttendees.length);
+                  setSpotsLeft(newSpotsLeft);
+                }
+                
+                setIsPaying(false);
+              }
+            },
+            {
+              text: 'Pay',
+              onPress: async () => {
+                console.log('Mock payment confirmed by user');
+                // Continue with the payment confirmation below
+                // The code will continue execution after this alert
+              }
+            }
+          ],
+          { cancelable: false }
+        );
+      } else {
+        // Real Stripe payment flow
+        // Initialize payment sheet
+        const { error: initError } = await stripe.initPaymentSheet({
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: 'Event-Hive',
+          applePay: { merchantCountryCode: 'US' },
+          googlePay: { merchantCountryCode: 'US', testEnv: __DEV__ }
+        });
+        
+        if (initError) {
+          throw new Error(`Payment initialization failed: ${initError.message}`);
         }
         
-        throw new Error(`Payment failed: ${presentError.message}`);
+        // Present the payment sheet
+        const { error: presentError } = await stripe.presentPaymentSheet();
+        
+        if (presentError) {
+          if (presentError.code === 'Canceled') {
+            // User canceled the payment - this is not a failure
+            console.log('Payment canceled by user');
+            
+            // Remove the attendee record since payment was canceled
+            await eventService.removeAttendee(id.toString(), attendee.id);
+            
+            // Refresh the attendees list
+            const updatedAttendees = attendees.filter(a => a.id !== attendee.id);
+            setAttendees(updatedAttendees);
+            
+            // Update spots left based on capacity and updated attendee count
+            if (event.capacity) {
+              const newSpotsLeft = Math.max(0, event.capacity - updatedAttendees.length);
+              setSpotsLeft(newSpotsLeft);
+            }
+            
+            setIsPaying(false);
+            return;
+          }
+          
+          throw new Error(`Payment failed: ${presentError.message}`);
+        }
       }
       
       // Payment successful - update attendee status
@@ -728,6 +834,19 @@ export default function EventDetailsScreen() {
     } catch (error) {
       console.error('Payment error:', error);
       
+      // Extract meaningful error message
+      let errorMessage = 'There was an error processing your payment';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Check for specific error patterns to provide more helpful messages
+        if (errorMessage.includes('JSON Parse error')) {
+          errorMessage = 'Unable to connect to payment service. Please check your internet connection and try again.';
+        } else if (errorMessage.includes('non-JSON response')) {
+          errorMessage = 'Payment service is currently unavailable. Please try again later.';
+        }
+      }
+      
       // Try to clean up the attendee record if payment failed
       try {
         await eventService.removeAttendee(id.toString(), attendee.id);
@@ -746,8 +865,18 @@ export default function EventDetailsScreen() {
       }
       
       Alert.alert(
-        'Payment Error', 
-        error instanceof Error ? error.message : 'There was an error processing your payment'
+        'Payment Error',
+        errorMessage,
+        [
+          {
+            text: 'OK',
+            style: 'cancel'
+          },
+          {
+            text: 'Try Again',
+            onPress: () => completePayment()
+          }
+        ]
       );
     } finally {
       setIsPaying(false);
@@ -853,17 +982,56 @@ export default function EventDetailsScreen() {
     try {
       setIsPaying(true);
       
-      // Find the user's attendee record
-      const userAttendee = attendees.find(a => a.userId === user?.id);
-      if (!userAttendee) {
-        throw new Error('Attendee record not found');
+      // First, register the user if they're not already registered
+      // This ensures we have an attendee record to work with
+      if (!isAttending) {
+        console.log("User not registered yet, registering first...");
+        await registerForEvent(true);
+        
+        // Wait a moment for the registration to complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
       
-      // Process the payment
+      // Find the user's attendee record
+      let userAttendee = attendees.find(a => a.userId === user?.id);
+      
+      if (!userAttendee) {
+        console.log("Creating a temporary attendee record for payment");
+        // Create a temporary attendee record for payment processing
+        userAttendee = {
+          id: user?.id || '',
+          userId: user?.id,
+          name: user?.name || 'Anonymous',
+          email: user?.email || '',
+          checkInStatus: 'pending',
+          paymentStatus: 'pending',
+          ...(user?.avatar ? { avatar: user.avatar } : {}),
+          createdAt: Timestamp.now()
+        };
+        
+        // Add this attendee to the database
+        try {
+          const attendeeRef = doc(db, "events", id.toString(), "attendees", userAttendee.id);
+          await setDoc(attendeeRef, {
+            userId: userAttendee.userId,
+            name: userAttendee.name,
+            email: userAttendee.email,
+            status: userAttendee.checkInStatus,
+            paymentStatus: userAttendee.paymentStatus,
+            joinedAt: userAttendee.createdAt
+          });
+          console.log("Created temporary attendee record:", userAttendee.id);
+        } catch (createError) {
+          console.error("Error creating temporary attendee record:", createError);
+          // Continue anyway, as the mock payment service will handle this
+        }
+      }
+      
+      // Process the payment with the attendee record
       await processPayment(userAttendee);
     } catch (error) {
       console.error('Error completing payment:', error);
-      Alert.alert('Error', 'Failed to complete payment');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to complete payment');
     } finally {
       setIsPaying(false);
     }
