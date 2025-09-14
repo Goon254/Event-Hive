@@ -17,9 +17,17 @@ import { format } from 'date-fns';
 const { width } = Dimensions.get('window');
 
 // Updated FeaturedEvent to match feed styling
-const FeaturedEvent = ({ event, daysUntil, fadeAnim, translateY, theme }) => {
+interface FeaturedEventProps {
+  event: any;
+  daysUntil: number;
+  fadeAnim: any;
+  translateY: any;
+  theme: { primaryGradientStart: string; primaryGradientEnd: string; secondaryText: string };
+}
+
+const FeaturedEvent: React.FC<FeaturedEventProps> = ({ event, daysUntil, fadeAnim, translateY, theme }) => {
   // Format date for display
-  const formatEventDate = (date) => {
+  const formatEventDate = (date: any) => {
     if (!date) return 'Date TBD';
     const eventDate = new Date(date);
     return format(eventDate, 'EEEE, MMMM d • h:mm a');

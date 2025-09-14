@@ -117,7 +117,7 @@ const WaveAnimation = () => {
   const translateX2 = useRef(new Animated.Value(-100)).current;
   
   useEffect(() => {
-    const createAnimation = (value, toValue, duration) => {
+    const createAnimation = (value: Animated.Value, toValue: number, duration: number) => {
       return Animated.loop(
         Animated.sequence([
           Animated.timing(value, {

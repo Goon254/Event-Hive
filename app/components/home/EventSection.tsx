@@ -7,13 +7,13 @@ import {
   ScrollView,
   ActivityIndicator,
   Animated,
-  Dimensions
+  Dimensions,
+  Image
 } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Event } from '../../services/eventServices';
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
+// Colors and theme hook imports unused here; removing to fix resolution errors
 import EventCard from './EventCard';
 import { createShadow } from './utils/uiHelpers';
 
@@ -50,7 +50,6 @@ const EventSection = ({
   translateY,
   getItemAnimationValues
 }: EventSectionProps) => {
-  const colorScheme = useColorScheme();
   const { width } = Dimensions.get('window');
   const CARD_WIDTH = width * 0.75;
   
@@ -124,12 +123,19 @@ const EventSection = ({
                 return (
                   <EventCard
                     key={item.id || `event-${index}`}
-                    item={item}
-                    index={index}
-                    isAttending={attendingEvents.includes(item.id)}
-                    status={getEventStatus(item)}
-                    fadeValue={fadeValue}
-                    translateValue={translateValue}
+                    event={item}
+                    theme={{
+                      primaryGradientStart: '#00BFA6',
+                      primaryGradientEnd: '#00A19D',
+                      secondaryText: '#6B7280',
+                      accentText: '#111827',
+                      text: '#111827',
+                      card: '#FFFFFF',
+                    }}
+                    onPress={() => router.push({ pathname: '/screens/eventdetails', params: { id: item.id } })}
+                    getEventStatus={(e) => ({ label: getEventStatus(e) })}
+                    isUserAttending={(id) => attendingEvents.includes(id)}
+                    style={{ width: CARD_WIDTH, marginRight: 16 }}
                   />
                 );
               })}

@@ -37,7 +37,7 @@ export function ThemedText({
   // Add custom style if defined
   if (style) {
     const flattenedStyle = StyleSheet.flatten(style);
-    styleArray.push({ ...flattenedStyle, color: flattenedStyle.color ?? color });
+    styleArray.push({ ...flattenedStyle, color: String(flattenedStyle.color ?? color) });
   }
 
   return (

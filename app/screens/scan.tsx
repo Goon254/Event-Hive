@@ -101,7 +101,7 @@ export default function ScanScreen() {
 
   if (hasPermission === null) {
     return (
-      <View style={styles.container}>
+      <View style={styles.centerContainer}>
         <Text style={styles.text}>Requesting camera permission...</Text>
       </View>
     );
@@ -109,7 +109,7 @@ export default function ScanScreen() {
   
   if (hasPermission === false) {
     return (
-      <View style={styles.container}>
+      <View style={styles.centerContainer}>
         <Text style={styles.text}>No access to camera</Text>
         <TouchableOpacity style={styles.button} onPress={() => router.replace('/(tabs)')}>
           <Text style={styles.buttonText}>Go Home</Text>
@@ -181,6 +181,12 @@ export default function ScanScreen() {
 }
 
 const styles = StyleSheet.create({
+  centerContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
+  },
   cameraContainer: {
     flex: 1,
     backgroundColor: '#000',

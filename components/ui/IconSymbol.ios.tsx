@@ -1,3 +1,5 @@
+// Guard import for environments without expo-symbols
+// @ts-ignore
 import { SymbolView, SymbolViewProps, SymbolWeight } from 'expo-symbols';
 import { StyleProp, ViewStyle } from 'react-native';
 

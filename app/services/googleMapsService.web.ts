@@ -384,7 +384,8 @@ class GoogleMapsService {
       }
       
       // Get all events
-      const { events } = await eventService.getEvents();
+      const eventsResponse = await eventService.getEvents();
+      const events = eventsResponse.items;
       
       // Filter events with location data and calculate distance
       const eventsWithDistance = events
@@ -396,7 +397,7 @@ class GoogleMapsService {
             (event.locationDetails as ExtendedLocationDetails).longitude !== undefined
           );
         })
-        .map((event) => {
+        .map((event: any) => {
           // Calculate distance between user and event
           const distance = this.calculateDistance(
             location.coords.latitude,

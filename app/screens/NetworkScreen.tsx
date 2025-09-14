@@ -182,7 +182,7 @@ export default function NetworkScreen({ user }: { user: any }) {
           </Text>
           {connections.length > 0 && (
             <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
-              <Text style={[styles.badgeText, { color: theme.colors.white }]}>
+              <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
                 {connections.length}
               </Text>
             </View>
@@ -209,7 +209,7 @@ export default function NetworkScreen({ user }: { user: any }) {
           </Text>
           {pendingConnections.length > 0 && (
             <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
-              <Text style={[styles.badgeText, { color: theme.colors.white }]}>
+              <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
                 {pendingConnections.length}
               </Text>
             </View>
@@ -236,7 +236,7 @@ export default function NetworkScreen({ user }: { user: any }) {
           </Text>
           {potentialConnections.length > 0 && (
             <View style={[styles.badge, { backgroundColor: theme.colors.primary }]}>
-              <Text style={[styles.badgeText, { color: theme.colors.white }]}>
+              <Text style={[styles.badgeText, { color: '#FFFFFF' }]}>
                 {potentialConnections.length}
               </Text>
             </View>

@@ -57,7 +57,7 @@ const WaveAnimation = () => {
   const translateX2 = useRef(new Animated.Value(-100)).current;
   
   useEffect(() => {
-    const createAnimation = (value, toValue, duration) => {
+    const createAnimation = (value: Animated.Value, toValue: number, duration: number) => {
       return Animated.loop(
         Animated.sequence([
           Animated.timing(value, {
@@ -775,6 +775,9 @@ export default function Register() {
                 {getPasswordStrengthLabel(passwordStrength)}
               </Text>
             )}
+            {!!pwnedWarning && (
+              <Text style={[styles.errorText, { marginTop: 6 }]}>{pwnedWarning}</Text>
+            )}
           </View>
         )}
       </View>
@@ -990,11 +993,11 @@ export default function Register() {
           <View style={styles.termsTextContainer}>
             <Text style={styles.termsText}>
               I agree to the{' '}
-              <Text style={styles.termsLink} onPress={() => Alert.alert('Terms', 'Terms and Conditions will be displayed here.')}>
+              <Text style={styles.termsLink} onPress={() => setShowTermsModal(true)}>
                 Terms of Service
               </Text>
               {' '}and{' '}
-              <Text style={styles.termsLink} onPress={() => Alert.alert('Privacy', 'Privacy Policy will be displayed here.')}>
+              <Text style={styles.termsLink} onPress={() => setShowPrivacyModal(true)}>
                 Privacy Policy
               </Text>
             </Text>
@@ -1043,7 +1046,7 @@ export default function Register() {
                     {interest}
                   </Text>
                   {userData.interests.includes(interest) && (
-                    <MaterialIcons name="check" size={20} color="#F97316" />, {/* Vibrant warm orange */}
+                    <MaterialIcons name="check" size={20} color="#F97316" />
                   )}
                 </TouchableOpacity>
               ))}
@@ -1177,6 +1180,16 @@ export default function Register() {
           </ScrollView>
           
           {renderInterestsModal()}
+          <PrivacyTermsModal
+            visible={showPrivacyModal}
+            onClose={() => setShowPrivacyModal(false)}
+            type="privacy"
+          />
+          <PrivacyTermsModal
+            visible={showTermsModal}
+            onClose={() => setShowTermsModal(false)}
+            type="terms"
+          />
         </LinearGradient>
       </ImageBackground>
     </KeyboardAvoidingView>

@@ -121,7 +121,6 @@ function RootLayoutNav() {
             presentation: 'card',
             title: 'Payment History',
             headerShown: true,
-            headerBackTitleVisible: false,
           }}
         />
         

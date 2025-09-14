@@ -1,6 +1,6 @@
 // app/services/websocketService.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
+import ioClient, { Socket as SocketType } from 'socket.io-client';
 import { Message, EnhancedConnection } from '../models/connection/types';
 
 // WebSocket server URL
@@ -10,7 +10,7 @@ const WEBSOCKET_SERVER_URL = 'wss://api.scangoapp.com/ws';
  * WebSocket Service for handling real-time communication
  */
 export class WebSocketService {
-  private socket: Socket | null = null;
+  private socket: ReturnType<typeof ioClient> | null = null;
   private userId: string | null = null;
   
   // Event callbacks
@@ -31,7 +31,7 @@ export class WebSocketService {
       this.socket.disconnect();
     }
     
-    this.socket = io(WEBSOCKET_SERVER_URL, {
+    this.socket = ioClient(WEBSOCKET_SERVER_URL, {
       auth: { token: userId },
       transports: ['websocket'],
     });

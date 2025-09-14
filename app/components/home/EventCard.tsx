@@ -169,21 +169,21 @@ const EventCard: React.FC<EventCardProps> = ({
         </View>
         
         {/* Capacity indicator */}
-        {event.capacity && event.attendees && (
+        {event.maxAttendees !== undefined && event.attendees && (
           <View style={styles.capacityContainer}>
             <View style={styles.capacityBarBackground}>
               <View 
                 style={[
                   styles.capacityBarFill, 
                   { 
-                    width: `${Math.min(100, (event.attendees.length / event.capacity) * 100)}%`,
+                    width: `${Math.min(100, (event.attendees.length / Math.max(1, event.maxAttendees)) * 100)}%`,
                     backgroundColor: theme.primaryGradientStart
                   }
                 ]} 
               />
             </View>
             <Text style={[styles.capacityText, { color: theme.secondaryText }]}>
-              {event.attendees.length}/{event.capacity} spots
+              {event.attendees.length}/{event.maxAttendees} spots
             </Text>
           </View>
         )}

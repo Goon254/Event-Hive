@@ -51,7 +51,7 @@ export default function PaymentHistory() {
       // Create mock payment data for these events
       const mockPayments: PaymentHistoryItem[] = [];
       
-      for (const event of attendingEvents) {
+      for (const event of attendingEvents.items ?? []) {
         if (event.isPaid) {
           // Simulate 1-2 payments per paid event
           const randomDate = new Date();
@@ -145,7 +145,7 @@ export default function PaymentHistory() {
         }}
       >
         <Text style={styles.receiptButtonText}>View Receipt</Text>
-        <FontAwesome name="receipt" size={14} color="#007AFF" />
+        <FontAwesome name="file" size={14} color="#007AFF" />
       </TouchableOpacity>
     </View>
   );

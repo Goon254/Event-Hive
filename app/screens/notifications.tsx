@@ -284,10 +284,7 @@ export default function NotificationsScreen() {
     } else if (diffDays < 7) {
       return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
     } else {
-      return formatDate(notificationDate, { 
-        month: 'short', 
-        day: 'numeric'
-      });
+      return formatDate(notificationDate);
     }
   };
 

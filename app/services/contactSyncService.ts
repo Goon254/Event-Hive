@@ -2,7 +2,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as Contacts from 'expo-contacts';
 import * as Crypto from 'expo-crypto';
-import { Platform, PermissionsAndroid } from 'react-native';
+import { Platform } from 'react-native';
+import * as RN from 'react-native';
 import { ContactMatch } from '../models/connection/types';
 
 // Constants
@@ -19,8 +20,8 @@ export class ContactSyncService {
   async requestContactsPermission(): Promise<boolean> {
     try {
       if (Platform.OS === 'android') {
-        const result: PermissionsAndroid.PermissionStatus = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.READ_CONTACTS,
+        const result = await RN.PermissionsAndroid.request(
+          RN.PermissionsAndroid.PERMISSIONS.READ_CONTACTS,
           {
             title: 'Contacts Permission',
             message: 'This app needs access to your contacts to find connections.',
@@ -29,7 +30,7 @@ export class ContactSyncService {
           }
         );
         
-        return result === PermissionsAndroid.RESULTS.GRANTED;
+        return result === RN.PermissionsAndroid.RESULTS.GRANTED;
       } else {
         const { status } = await Contacts.requestPermissionsAsync();
         return status === 'granted';

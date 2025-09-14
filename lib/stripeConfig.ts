@@ -44,7 +44,7 @@ export const createPaymentSheetConfig = (clientSecret: string, merchantName: str
   return {
     paymentIntentClientSecret: clientSecret,
     merchantDisplayName: merchantName,
-    style: 'alwaysLight', // or 'alwaysDark'
+    style: 'automatic' as const,
     // Enable these for Apple Pay and Google Pay:
     applePay: {
       merchantCountryCode: 'US',

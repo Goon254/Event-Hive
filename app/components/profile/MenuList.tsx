@@ -59,7 +59,7 @@ const MenuList: React.FC<MenuListProps> = ({
   };
 
   // Get gradient colors for icon background
-  const getIconGradientColors = (icon: string) => {
+  const getIconGradientColors = (icon: string): [string, string] => {
     const gradients = {
       'user': ['#6366F1', '#4F46E5'],
       'gear': ['#34D399', '#10B981'],
@@ -69,7 +69,7 @@ const MenuList: React.FC<MenuListProps> = ({
       'credit-card': ['#60A5FA', '#3B82F6'],
       'history': ['#F472B6', '#EC4899'],
     };
-    return gradients[icon as keyof typeof gradients] || ['#9CA3AF', '#6B7280'];
+    return (gradients[icon as keyof typeof gradients] || ['#9CA3AF', '#6B7280']) as [string, string];
   };
 
   return (

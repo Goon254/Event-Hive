@@ -7,6 +7,14 @@ export interface GeocodingResult {
   formattedAddress: string;
 }
 
+interface LocationDetails {
+  buildingName?: string;
+  streetAddress?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+}
+
 export class GeocodingService {
   private static API_KEY = 'AIzaSyCmExPy3R_vQkxZnz0asVm5WyJIQp9Jubk';
 

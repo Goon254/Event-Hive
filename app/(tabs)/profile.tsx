@@ -41,7 +41,6 @@ import {
   LogoutButton,
   VersionInfo,
   MenuItem,
-  Collapsible,
 } from '../components/profile';
 
 // Define color map for icon backgrounds
@@ -66,7 +65,7 @@ export default function ProfileScreen() {
   const { user, signOut, error, clearError, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [fadeAnim] = useState(new Animated.Value(0));
-  const [expandedSection, setExpandedSection] = useState(null);
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
   
   // Use the profile hook to manage profile data
   const {
@@ -85,18 +84,28 @@ export default function ProfileScreen() {
   // Update profile stats when connections data is loaded
   useEffect(() => {
     if (connections && profile) {
-      setProfile(prev => ({
+      setProfile(prev => (prev ? {
         ...prev,
         stats: {
           ...prev.stats,
           connections: connections.length
         }
-      }));
+      } : prev));
     }
   }, [connections]);
   
   // For this example, we'll use a placeholder profile
-  const [profile, setProfile] = useState(null);
+  type ProfileModel = {
+    id: string;
+    name: string;
+    email: string;
+    profileImageUrl?: string | null;
+    location?: string;
+    bio?: string;
+    badges: string[];
+    stats: { eventsAttended: number; eventsCreated: number; connections: number };
+  };
+  const [profile, setProfile] = useState<ProfileModel | null>(null);
   
   // Fetch profile data when component mounts
   useEffect(() => {
@@ -208,19 +217,19 @@ export default function ProfileScreen() {
     if (user?.id) {
       // In a real implementation, this would fetch the profile from a service
       // For now, we'll just update the profile with the user's avatar
-      setProfile((prev) => ({
+      setProfile((prev) => (prev ? {
         ...prev,
         profileImageUrl: user.avatar
-      }));
+      } : prev));
     }
   };
 
-  const toggleSection = (section) => {
+  const toggleSection = (section: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setExpandedSection(expandedSection === section ? null : section);
   };
 
-  const navigateWithAnimation = (route) => {
+  const navigateWithAnimation = (route: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push(route);
   };
@@ -563,7 +572,7 @@ export default function ProfileScreen() {
                       <View
                         style={[
                           styles.menuItemIconContainer,
-                          { backgroundColor: iconColors[item.icon] || 'rgba(0,0,0,0.08)' }
+                          { backgroundColor: iconColors[item.icon as keyof typeof iconColors] || 'rgba(0,0,0,0.08)' }
                         ]}
                       >
                         <FontAwesome name={item.icon as any} size={18} color="#FFFFFF" />

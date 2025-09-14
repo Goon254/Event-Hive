@@ -277,19 +277,20 @@ export class EventConnectionService {
       
       const connections: EnhancedConnection[] = [];
       
-      for (const doc of connectionsSnapshot.docs) {
-        const connection = doc.data() as Connection;
+      for (const docSnap of connectionsSnapshot.docs) {
+        const connection = docSnap.data() as Connection;
         
         // Fetch user profile for the connection
         const profileId = connection.connectionId;
-        const userDoc = await getDoc(doc(db, 'users', profileId));
+        const userRef = doc(db as any, 'users', profileId);
+        const userDoc = await getDoc(userRef);
         
         if (userDoc.exists()) {
-          const userData = userDoc.data();
+          const userData: any = userDoc.data();
           
           connections.push({
             ...connection,
-            id: doc.id,
+            id: docSnap.id,
             name: userData.name || userData.displayName || 'Unknown',
             avatar: userData.profileImageUrl || userData.photoURL,
             role: userData.userType || userData.role,
@@ -306,19 +307,20 @@ export class EventConnectionService {
         )
       );
       
-      for (const doc of reverseConnectionsSnapshot.docs) {
-        const connection = doc.data() as Connection;
+      for (const docSnap of reverseConnectionsSnapshot.docs) {
+        const connection = docSnap.data() as Connection;
         
         // Fetch user profile for the connection
         const profileId = connection.userId;
-        const userDoc = await getDoc(doc(db, 'users', profileId));
+        const userRef = doc(db as any, 'users', profileId);
+        const userDoc = await getDoc(userRef);
         
         if (userDoc.exists()) {
-          const userData = userDoc.data();
+          const userData: any = userDoc.data();
           
           connections.push({
             ...connection,
-            id: doc.id,
+            id: docSnap.id,
             name: userData.name || userData.displayName || 'Unknown',
             avatar: userData.profileImageUrl || userData.photoURL,
             role: userData.userType || userData.role,
@@ -354,19 +356,20 @@ export class EventConnectionService {
       
       const connections: EnhancedConnection[] = [];
       
-      for (const doc of connectionsSnapshot.docs) {
-        const connection = doc.data() as Connection;
+      for (const docSnap of connectionsSnapshot.docs) {
+        const connection = docSnap.data() as Connection;
         
         // Fetch user profile for the connection
         const profileId = connection.userId;
-        const userDoc = await getDoc(doc(db, 'users', profileId));
+        const userRef = doc(db as any, 'users', profileId);
+        const userDoc = await getDoc(userRef);
         
         if (userDoc.exists()) {
-          const userData = userDoc.data();
+          const userData: any = userDoc.data();
           
           connections.push({
             ...connection,
-            id: doc.id,
+            id: docSnap.id,
             name: userData.name || userData.displayName || 'Unknown',
             avatar: userData.profileImageUrl || userData.photoURL,
             role: userData.userType || userData.role,
