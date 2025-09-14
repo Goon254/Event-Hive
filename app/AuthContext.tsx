@@ -25,11 +25,14 @@ import { doc, setDoc, getDoc, getFirestore } from 'firebase/firestore';
 import { auth, db, storage } from '../lib/firebaseConfig';
 import { sanitizeForFirestore } from './services/migrationService';
 import { useGoogleAuth, getExistingAccountEmail } from './utils/googleAuth';
+import { secureStore, secureRetrieve, secureDelete, isAccountLockedOut, getRemainingLockoutTime, recordFailedLoginAttempt, resetLoginAttempts } from './utils/authSecurity';
+import * as googleOAuthCompliance from './utils/googleOAuthCompliance';
 import { ref, getDownloadURL, uploadBytes, getStorage, listAll, deleteObject } from 'firebase/storage';
 import { enhancedImageService } from './services/enhancedImageService';
 
 // Constants
 const AUTH_STORAGE_KEY = 'auth_user_data';
+const AUTH_SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Interfaces remain the same
 interface UserProfile {
@@ -93,7 +96,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadAuthState = async () => {
       try {
-        const storedAuth = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
+        // Prefer secure storage with AsyncStorage fallback handled internally
+        const storedAuth = await secureRetrieve(AUTH_STORAGE_KEY);
         
         if (storedAuth) {
           const userData = JSON.parse(storedAuth) as User;
@@ -102,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // For example, you could check if it's been more than X days since authentication
           const now = Date.now();
           const authAge = now - (userData.lastAuthenticated || now);
-          const isStillValid = authAge < 30 * 24 * 60 * 60 * 1000; // 30 days for example
+          const isStillValid = authAge < AUTH_SESSION_MAX_AGE_MS; // Enforce max session age
           
           if (isStillValid) {
             setState(prevState => ({
@@ -113,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }));
           } else {
             // Auth data expired, clear it
-            await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+            await secureDelete(AUTH_STORAGE_KEY);
             setState(prevState => ({
               ...prevState,
               isLoading: false
@@ -138,6 +142,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadAuthState();
   }, []);
 
+  // Enforce session maximum age with periodic checks
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const storedAuth = await secureRetrieve(AUTH_STORAGE_KEY);
+        if (!storedAuth) return;
+        const userData = JSON.parse(storedAuth) as User;
+        const now = Date.now();
+        const authAge = now - (userData.lastAuthenticated || 0);
+        if (authAge > AUTH_SESSION_MAX_AGE_MS) {
+          await firebaseSignOut(auth);
+          await secureDelete(AUTH_STORAGE_KEY);
+          try { await googleOAuthCompliance.clearTokens(); } catch {}
+          router.replace('/(auth)/login');
+        }
+      } catch {}
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Set up Firebase auth state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -152,8 +176,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             authProvider: firebaseUser.providerData[0]?.providerId || 'password'
           };
           
-          // Store auth data with timestamp
-          await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+          // Store auth data with timestamp (secure storage preferred)
+          await secureStore(AUTH_STORAGE_KEY, JSON.stringify(user));
           
           // Update state using function form to avoid closure issues
           setState(prevState => ({
@@ -182,7 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         try {
           // User is signed out
-          await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+          await secureDelete(AUTH_STORAGE_KEY);
         } catch (storageError) {
           console.error('Error clearing auth data:', storageError);
         } finally {
@@ -205,9 +229,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     setState(prevState => ({ ...prevState, isLoading: true, error: null }));
     try {
+      // Enforce lockout protection before attempting sign-in
+      const locked = await isAccountLockedOut();
+      if (locked) {
+        const remaining = await getRemainingLockoutTime();
+        throw new Error(`Too many attempts. Try again in ${Math.ceil(remaining / 60)} minutes.`);
+      }
+
       await signInWithEmailAndPassword(auth, email, password);
+      // Reset lockout counters on successful sign-in
+      await resetLoginAttempts();
       // onAuthStateChanged will handle the rest
     } catch (error) {
+      // Record failed attempt to support lockout/backoff
+      try { await recordFailedLoginAttempt(email); } catch {}
       setState(prevState => ({ 
         ...prevState, 
         error: handleAuthError(error), 
@@ -387,8 +422,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState(prevState => ({ ...prevState, isLoading: true }));
     try {
       await firebaseSignOut(auth);
-      // Also manually clear the stored auth data
-      await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+      // Also manually clear the stored auth data and OAuth tokens
+      await secureDelete(AUTH_STORAGE_KEY);
+      try { await googleOAuthCompliance.clearTokens(); } catch {}
       
       // onAuthStateChanged will handle the rest of state updates
       router.replace('/(auth)/login');
@@ -523,7 +559,7 @@ function handleAuthError(error: unknown): string {
       case 'auth/user-disabled':
         return 'Account disabled';
       case 'auth/user-not-found':
-        return 'No user found with this email address';
+        return 'Invalid email or password';
       case 'auth/wrong-password':
         return 'Invalid email or password';
       case 'auth/email-already-in-use':

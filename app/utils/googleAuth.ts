@@ -56,14 +56,18 @@ export const useGoogleAuth = () => {
     responseType: 'code', // Use authorization code flow for better security
   });
 
-  // Log client IDs for debugging
+  // Log client IDs for debugging (development only; avoid leaking identifiers in production)
   useEffect(() => {
-    console.log('Current platform:', Platform.OS);
-    console.log('Using client ID:', getGoogleClientId());
-    console.log('Android client ID:', googleClientIdAndroid);
-    console.log('iOS client ID:', googleClientIdIos);
-    console.log('Web client ID:', googleClientIdWeb);
-    console.log('Expo client ID:', googleClientIdExpo);
+    if (__DEV__) {
+      console.log('Current platform:', Platform.OS);
+      console.log('Using client ID present:', Boolean(getGoogleClientId()));
+      console.log('Client IDs configured:', {
+        androidConfigured: !googleClientIdAndroid.includes('YOUR_'),
+        iosConfigured: !googleClientIdIos.includes('YOUR_'),
+        webConfigured: !googleClientIdWeb.includes('YOUR_'),
+        expoConfigured: !googleClientIdExpo.includes('YOUR_'),
+      });
+    }
   }, []);
 
   /**

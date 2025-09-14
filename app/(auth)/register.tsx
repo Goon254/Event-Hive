@@ -21,7 +21,6 @@ import {
 } from 'react-native';
 import { useAuth } from '../AuthContext';
 import validationUtils, { formatPhoneNumber } from '../utils/validation';
-import { useGoogleAuth } from '../utils/googleAuth';
 import { Link, useRouter } from 'expo-router';
 import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -31,6 +30,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL, StorageError } from 'fire
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebaseConfig';
 import PrivacyTermsModal from '../components/PrivacyTermsModal';
+import { isPasswordCompromised } from '../utils/authSecurity';
 import { getLocationForProfile } from '../utils/geolocationUtils';
 import { normalizeUri, uploadFile } from '../utils/fileUtils';
 import * as FileSystem from 'expo-file-system';
@@ -108,7 +108,7 @@ const WaveAnimation = () => {
 };
 
 export default function Register() {
-  const { signUp, isLoading, error, signInWithGoogle } = useAuth();
+  const { signUp, isLoading, error, signInWithGoogle, checkExistingAccount } = useAuth();
   const router = useRouter();
   const [googleLoading, setGoogleLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -157,6 +157,9 @@ export default function Register() {
   const [showInterestsModal, setShowInterestsModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
+  const [pwnedWarning, setPwnedWarning] = useState('');
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const [checkingPassword, setCheckingPassword] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   
@@ -443,9 +446,39 @@ export default function Register() {
     return isValid;
   };
   
+  // Async validations for step-specific checks (email availability, compromised password)
+  const validateStepAsync = async (): Promise<boolean> => {
+    let isValid = validateStep();
+    if (!isValid) return false;
+    if (currentStep === 1) {
+      try {
+        // Check if email already in use
+        setCheckingEmail(true);
+        const methods = await checkExistingAccount(userData.email);
+        setCheckingEmail(false);
+        if (methods && methods.length > 0) {
+          setErrors(prev => ({ ...prev, email: 'Email already in use' }));
+          isValid = false;
+        }
+      } catch {
+        setCheckingEmail(false);
+      }
+      try {
+        setCheckingPassword(true);
+        const compromised = await isPasswordCompromised(userData.password);
+        setCheckingPassword(false);
+        setPwnedWarning(compromised ? 'This password appears in known data breaches. Consider using a different one.' : '');
+      } catch {
+        setCheckingPassword(false);
+      }
+    }
+    return isValid;
+  };
+
   // Navigate to next step
   const nextStep = async () => {
-    if (validateStep()) {
+    const stepValid = await validateStepAsync();
+    if (stepValid) {
       if (currentStep < 3) {
         // Don't upload the image when transitioning between steps
         // We'll only upload once during final registration
@@ -821,10 +854,10 @@ export default function Register() {
             disabled={isLoading || userData.locationLoading}
           >
             {userData.locationLoading ? (
-              <ActivityIndicator size="small" color="#F97316" />, {/* Vibrant warm orange */}
+              <ActivityIndicator size="small" color="#F97316" />
             ) : (
               <>
-                <MaterialIcons name="my-location" size={16} color="#F97316" />, {/* Vibrant warm orange */}
+                <MaterialIcons name="my-location" size={16} color="#F97316" />
                 <Text style={styles.detectLocationText}>Detect</Text>
               </>
             )}
