@@ -12,6 +12,7 @@ import NearbyEventsMap from '../components/maps/NearbyEventsMap';
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { createShadow } from '../utils/platformUtils';
+import DSButton from '../components/design-system/Button';
 
 export default function NearbyEventsScreen() {
   const colorScheme = useColorScheme();
@@ -152,12 +153,7 @@ export default function NearbyEventsScreen() {
           styles.selectedEventActions,
           { paddingBottom: Platform.OS === 'ios' ? insets.bottom : 16 }
         ]}>
-          <TouchableOpacity
-            style={styles.viewDetailsButton}
-            onPress={handleViewEventDetails}
-          >
-            <Text style={styles.viewDetailsButtonText}>View Event Details</Text>
-          </TouchableOpacity>
+          <DSButton title="View Event Details" onPress={handleViewEventDetails} />
         </View>
       )}
     </SafeAreaView>

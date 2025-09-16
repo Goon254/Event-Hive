@@ -12,6 +12,8 @@ import {
   RefreshControl,
   Alert
 } from 'react-native';
+import DSButton from '../components/design-system/Button';
+import Card from '../components/design-system/Card';
 import { useRouter } from 'expo-router';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
@@ -104,7 +106,7 @@ export default function PaymentHistory() {
 
   // Render payment item
   const renderPaymentItem = ({ item }: { item: PaymentHistoryItem }) => (
-    <View style={styles.paymentCard}>
+    <Card style={styles.paymentCard}>
       <View style={styles.paymentHeader}>
         <Text style={styles.paymentTitle}>{item.eventTitle || 'Event Ticket'}</Text>
         <View style={[
@@ -137,17 +139,13 @@ export default function PaymentHistory() {
         </View>
       </View>
       
-      <TouchableOpacity 
-        style={styles.receiptButton}
-        onPress={() => {
-          // In a real app, this would show or email a receipt
-          Alert.alert('Coming Soon', 'Receipt functionality will be available in a future update.');
-        }}
-      >
-        <Text style={styles.receiptButtonText}>View Receipt</Text>
-        <FontAwesome name="file" size={14} color="#007AFF" />
-      </TouchableOpacity>
-    </View>
+      <DSButton
+        title="View Receipt"
+        onPress={() => Alert.alert('Coming Soon', 'Receipt functionality will be available in a future update.')}
+        variant="ghost"
+        rightIcon={<FontAwesome name="file" size={14} color="#007AFF" />}
+      />
+    </Card>
   );
 
   return (

@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import DSButton from '../../../components/design-system/Button';
 import { MaterialIcons } from '@expo/vector-icons';
 import { NavigationDirection } from '../../types';
 import styles from '../../styles';
@@ -73,33 +74,9 @@ export function SectionNavigation({
       
       {/* Next or Submit button */}
       {showSubmitButton && onSubmit ? (
-        <TouchableOpacity 
-          style={styles.createEventButton}
-          onPress={onSubmit}
-          disabled={isSubmitting}
-          accessibilityLabel="Create event"
-          accessibilityHint="Submit the form and create the event"
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <>
-              <Text style={styles.createEventButtonText}>Create Event</Text>
-              <MaterialIcons name="check-circle" size={20} color="#FFF" />
-            </>
-          )}
-        </TouchableOpacity>
+        <DSButton title="Create Event" onPress={onSubmit} loading={isSubmitting} />
       ) : (
-        <TouchableOpacity 
-          style={styles.nextButton}
-          onPress={() => onNavigate('next')}
-          disabled={isSubmitting}
-          accessibilityLabel="Next section"
-          accessibilityHint="Continue to the next section"
-        >
-          <Text style={styles.nextButtonText}>Next</Text>
-          <MaterialIcons name="arrow-forward-ios" size={16} color="#FFF" />
-        </TouchableOpacity>
+        <DSButton title="Next" onPress={() => onNavigate('next')} loading={isSubmitting} />
       )}
     </View>
   );

@@ -26,6 +26,9 @@ import {
   isPasswordCompromised,
   getPasswordStrength
 } from '../utils/authSecurity';
+import DSButton from '../components/design-system/Button';
+import Card from '../components/design-system/Card';
+import Divider from '../components/design-system/Divider';
 
 /**
  * Reset Password Screen
@@ -216,7 +219,7 @@ export default function ResetPassword() {
           style={styles.gradientOverlay}
         >
           <ScrollView contentContainerStyle={styles.scrollContainer}>
-            <View style={styles.formContainer}>
+            <Card style={styles.formContainer}>
               <View style={styles.headerContainer}>
                 <Image
                   source={require('../../assets/images/eventhive-icon.png')}
@@ -283,21 +286,12 @@ export default function ResetPassword() {
             inputRange: [0, 1],
             outputRange: [30, 0]
           }) }] }}>
-            <TouchableOpacity
-              style={[
-                styles.button,
-                (isLoading || !canRequest) && styles.buttonDisabled
-              ]}
+            <DSButton
+              title="Reset Password"
               onPress={handleResetPassword}
-              disabled={isLoading || !canRequest}
-              activeOpacity={0.8}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.buttonText}>Reset Password</Text>
-              )}
-            </TouchableOpacity>
+              loading={isLoading}
+              disabled={!canRequest}
+            />
           </Animated.View>
           
           {!canRequest && remainingTime > 0 && (
@@ -312,7 +306,7 @@ export default function ResetPassword() {
               <Text style={styles.backToLoginText}>Back to Login</Text>
             </TouchableOpacity>
               </Link>
-            </View>
+            </Card>
           </ScrollView>
         </LinearGradient>
       </ImageBackground>

@@ -19,6 +19,9 @@ import { useAuth } from '../AuthContext';
 import { FontAwesome, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { createShadow } from '../utils/platformUtils';
 import ScreenWrapper from '../components/common/ScreenWrapper';
+import DSButton from '../components/design-system/Button';
+import Card from '../components/design-system/Card';
+import Divider from '../components/design-system/Divider';
 import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebaseConfig';
 import * as Application from 'expo-application';
@@ -210,7 +213,7 @@ export default function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* App Preferences Section */}
-        <View style={styles.section}>
+        <Card style={styles.section}>
           <Text style={styles.sectionTitle}>App Preferences</Text>
           
           <TouchableOpacity 
@@ -322,10 +325,10 @@ export default function SettingsScreen() {
               </Text>
             </View>
           </TouchableOpacity>
-        </View>
+        </Card>
         
         {/* Notification Preferences */}
-        <View style={styles.section}>
+        <Card style={styles.section}>
           <Text style={styles.sectionTitle}>Notifications</Text>
           
           <View style={styles.settingItem}>
@@ -390,10 +393,10 @@ export default function SettingsScreen() {
               </Text>
             </View>
           </View>
-        </View>
+        </Card>
         
         {/* App Experience */}
-        <View style={styles.section}>
+        <Card style={styles.section}>
           <Text style={styles.sectionTitle}>App Experience</Text>
           
           <View style={styles.settingItem}>
@@ -479,10 +482,10 @@ export default function SettingsScreen() {
               </Text>
             </View>
           </View>
-        </View>
+        </Card>
         
         {/* Support & About */}
-        <View style={styles.section}>
+        <Card style={styles.section}>
           <Text style={styles.sectionTitle}>Support & About</Text>
           
           <TouchableOpacity 
@@ -561,16 +564,10 @@ export default function SettingsScreen() {
             <Text style={styles.versionText}>Version {appVersion}</Text>
             <Text style={styles.deviceText}>{deviceInfo}</Text>
           </View>
-        </View>
+        </Card>
         
         {/* Logout Button */}
-        <TouchableOpacity 
-          style={styles.logoutButton}
-          onPress={handleLogout}
-        >
-          <Ionicons name="log-out" size={20} color="#FFFFFF" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        <DSButton title="Logout" onPress={handleLogout} />
         
         {/* Spacer */}
         <View style={{ height: 20 }} />

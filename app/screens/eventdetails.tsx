@@ -45,6 +45,7 @@ import enhancedPaymentService from '../services/enhancedPaymentService';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import Colors from '@/constants/Colors';
+import DSButton from '../components/design-system/Button';
 
 // Define the Attendee interface since it's not exported from eventServices
 interface Attendee {
@@ -1410,10 +1411,11 @@ export default function EventDetailsScreen() {
                       {event.locationDetails.zipCode ? ' ' + event.locationDetails.zipCode : ''}
                     </Text>
                   )}
-                  <TouchableOpacity style={styles.directionsButton} onPress={openDirections}>
-                    <FontAwesome name="map-signs" size={16} color="#FFFFFF" />
-                    <Text style={styles.directionsButtonText}>Get Directions</Text>
-                  </TouchableOpacity>
+                  <DSButton
+                    title="Get Directions"
+                    onPress={openDirections}
+                    leftIcon={<FontAwesome name="map-signs" size={16} color="#FFFFFF" />}
+                  />
                 </View>
               )}
             </View>
@@ -1501,13 +1503,11 @@ export default function EventDetailsScreen() {
             <View style={[styles.virtualLinkCard, { backgroundColor: Colors[colorScheme].background }]}>
               <Text style={[styles.virtualLinkLabel, { color: Colors[colorScheme].secondaryText }]}>Access Link:</Text>
               <Text style={styles.virtualLink}>{event.virtualLink}</Text>
-              <TouchableOpacity 
-                style={styles.openLinkButton}
+              <DSButton
+                title="Open Link"
                 onPress={() => Linking.openURL(event.virtualLink || '')}
-              >
-                <FontAwesome name="external-link" size={16} color="#FFFFFF" />
-                <Text style={styles.openLinkButtonText}>Open Link</Text>
-              </TouchableOpacity>
+                leftIcon={<FontAwesome name="external-link" size={16} color="#FFFFFF" />}
+              />
             </View>
           </View>
         )}
@@ -1704,17 +1704,7 @@ export default function EventDetailsScreen() {
             <Text style={styles.paymentReminderText}>
               Please complete payment to receive your QR code for check-in
             </Text>
-            <TouchableOpacity 
-              style={styles.completePaymentButton}
-              onPress={completePayment}
-              disabled={isPaying}
-            >
-              {isPaying ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.completePaymentText}>Complete Payment</Text>
-              )}
-            </TouchableOpacity>
+            <DSButton title="Complete Payment" onPress={completePayment} loading={isPaying} />
           </View>
         )}
 
@@ -1725,32 +1715,12 @@ export default function EventDetailsScreen() {
       {/* Bottom Action Button */}
       {!isOrganizer && !isAttending && (
         <View style={styles.bottomButtonContainer}>
-          <TouchableOpacity
-            style={[
-              styles.attendButton,
-              event.isPaid && styles.paymentButton,
-              (spotsLeft !== null && spotsLeft <= 0) && styles.disabledButton
-            ]}
+          <DSButton
+            title={event.isPaid ? `Pay & Attend ($${event.price?.toFixed(2) || '0.00'})` : 'Attend This Event'}
             onPress={handleAttend}
-            disabled={isLoading || isPaying || (spotsLeft !== null && spotsLeft <= 0)}
-          >
-            {isLoading || isPaying ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                {event.isPaid ? (
-                  <View style={styles.payButtonContent}>
-                    <FontAwesome name="credit-card" size={20} color="#FFFFFF" style={styles.paymentIcon} />
-                    <Text style={styles.attendButtonText}>
-                      PAY & ATTEND (${event.price?.toFixed(2) || '0.00'})
-                    </Text>
-                  </View>
-                ) : (
-                  <Text style={styles.attendButtonText}>ATTEND THIS EVENT</Text>
-                )}
-              </>
-            )}
-          </TouchableOpacity>
+            loading={isLoading || isPaying}
+            disabled={(spotsLeft !== null && spotsLeft <= 0)}
+          />
         </View>
       )}
 
@@ -1768,17 +1738,7 @@ export default function EventDetailsScreen() {
       {/* Cancel attendance button (if already attending) */}
       {!isOrganizer && isAttending && (
         <View style={styles.bottomButtonContainer}>
-          <TouchableOpacity
-            style={[styles.attendButton, styles.attendingButton]}
-            onPress={handleAttend}
-            disabled={isLoading || isPaying}
-          >
-            {isLoading || isPaying ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.attendButtonText}>CANCEL ATTENDANCE</Text>
-            )}
-          </TouchableOpacity>
+          <DSButton title="Cancel Attendance" onPress={handleAttend} loading={isLoading || isPaying} />
         </View>
       )}
     </View>

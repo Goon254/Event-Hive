@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, Switch, TouchableOpacity, TextInput, FlatList, Alert } from 'react-native';
+import DSButton from '../../../components/design-system/Button';
 import { MaterialIcons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { EventForm, FormErrors, NavigationDirection, TicketType } from '../../types';
@@ -208,17 +209,13 @@ export function TicketsSection({
       {/* Registration Deadline */}
       <View style={styles.formGroup}>
         <Text style={styles.label}>Registration Deadline</Text>
-        <TouchableOpacity
-          style={styles.dateButton}
-          onPress={() => setShowDeadlinePicker(true)}
-          disabled={isSubmitting}
-        >
-          <Text style={styles.dateButtonText}>
-            {formData.registrationDeadline
+        <DSButton
+          title={formData.registrationDeadline
               ? format(formData.registrationDeadline, 'EEEE, MMMM d, yyyy')
               : 'No deadline (registration until event starts)'}
-          </Text>
-        </TouchableOpacity>
+          onPress={() => setShowDeadlinePicker(true)}
+          disabled={isSubmitting}
+        />
         
         {/* Date Picker Modal for Registration Deadline */}
         <DatePickerModal

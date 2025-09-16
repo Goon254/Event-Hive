@@ -19,6 +19,9 @@ import { useAuth } from '../AuthContext';
 import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createShadow, safeTopPadding } from '../utils/platformUtils';
+import DSButton from '../components/design-system/Button';
+import Card from '../components/design-system/Card';
+import Divider from '../components/design-system/Divider';
 
 interface PaymentMethod {
   id: string;
@@ -260,7 +263,7 @@ export default function PaymentMethodsScreen() {
         {paymentMethods.length > 0 ? (
           <View style={styles.paymentMethodsContainer}>
             {paymentMethods.map((method) => (
-              <View key={method.id} style={styles.paymentMethodCard}>
+              <Card key={method.id} style={styles.paymentMethodCard}>
                 {/* Left side - Card icon/info */}
                 <View style={styles.paymentCardLeft}>
                   {method.type === 'credit' && (
@@ -311,22 +314,14 @@ export default function PaymentMethodsScreen() {
                 {/* Right side - Actions */}
                 <View style={styles.paymentCardActions}>
                   {!method.isDefault && (
-                    <TouchableOpacity
-                      style={styles.setDefaultButton}
-                      onPress={() => handleSetDefault(method.id)}
-                    >
-                      <Text style={styles.setDefaultText}>Set Default</Text>
-                    </TouchableOpacity>
+                    <DSButton title="Set Default" onPress={() => handleSetDefault(method.id)} variant="ghost" />
                   )}
                   
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDelete(method.id)}
-                  >
+                  <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(method.id)}>
                     <FontAwesome name="trash-o" size={18} color="#F43F5E" />
                   </TouchableOpacity>
                 </View>
-              </View>
+              </Card>
             ))}
           </View>
         ) : (
@@ -340,13 +335,7 @@ export default function PaymentMethodsScreen() {
         )}
         
         {/* Add Payment Method Button */}
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setModalVisible(true)}
-        >
-          <FontAwesome name="plus" size={16} color="#FFFFFF" />
-          <Text style={styles.addButtonText}>Add Payment Method</Text>
-        </TouchableOpacity>
+        <DSButton title="Add Payment Method" onPress={() => setModalVisible(true)} />
         
         {/* Payment Methods Info */}
         <View style={styles.infoCard}>
@@ -446,20 +435,7 @@ export default function PaymentMethodsScreen() {
               </View>
               
               {/* Add Card Button */}
-              <TouchableOpacity
-                style={styles.addCardButton}
-                onPress={handleAddCard}
-                disabled={isAddingCard}
-              >
-                {isAddingCard ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <>
-                    <FontAwesome name="credit-card" size={16} color="#FFFFFF" />
-                    <Text style={styles.addCardButtonText}>Add Card</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              <DSButton title="Add Card" onPress={handleAddCard} loading={isAddingCard} />
               
               {/* Security Note */}
               <View style={styles.securityNote}>

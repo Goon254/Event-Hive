@@ -14,6 +14,7 @@ import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { useAuth } from '../AuthContext';
 import { usePrivacySettings } from '../hooks/usePrivacySettings';
 import ScreenWrapper from '../components/common/ScreenWrapper';
+import DSButton from '../components/design-system/Button';
 
 // Define styles first to avoid "used before declaration" errors
 const styles = StyleSheet.create({
@@ -602,25 +603,9 @@ export default function PrivacySettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account Management</Text>
           
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => router.push('/screens/data-export' as any)}
-            accessibilityLabel="Export your data"
-            accessibilityHint="Navigate to export your personal data"
-          >
-            <Text style={styles.actionButtonText}>Export Your Data</Text>
-            <Ionicons name="chevron-forward" size={20} color="#007AFF" />
-          </TouchableOpacity>
+          <DSButton title="Export Your Data" onPress={() => router.push('/screens/data-export' as any)} />
           
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.dangerButton]}
-            onPress={() => handleSecurityAction('deleteAccount')}
-            accessibilityLabel="Delete account"
-            accessibilityHint="Initiate the process to delete your account"
-          >
-            <Text style={styles.dangerButtonText}>Delete Account</Text>
-            <Ionicons name="chevron-forward" size={20} color="#FF3B30" />
-          </TouchableOpacity>
+          <DSButton title="Delete Account" onPress={() => handleSecurityAction('deleteAccount')} />
         </View>
       </ScrollView>
     </ScreenWrapper>

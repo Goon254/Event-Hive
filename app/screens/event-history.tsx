@@ -25,6 +25,7 @@ import { BlurView } from 'expo-blur';
 import * as Animatable from 'react-native-animatable';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DSButton from '../components/design-system/Button';
 
 // Explicitly disable the default header
 export const screenOptions = {
@@ -450,12 +451,7 @@ export default function EventHistoryScreen() {
                   : "You haven't created any events yet."}
               </Text>
               {selectedFilter === 'created' && (
-                <TouchableOpacity
-                  style={styles.createEventButton}
-                  onPress={() => router.push('/(tabs)/Create')}
-                >
-                  <Text style={styles.createEventButtonText}>Create an Event</Text>
-                </TouchableOpacity>
+                <DSButton title="Create an Event" onPress={() => router.push('/(tabs)/Create')} />
               )}
             </Animatable.View>
           ) : (

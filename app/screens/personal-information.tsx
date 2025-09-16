@@ -28,6 +28,7 @@ import {
   VerificationBadge,
   Divider
 } from '../components/profile';
+import DSButton from '../components/design-system/Button';
 import { COLORS, GRADIENTS, RADIUS, SHADOWS, Z_INDEX } from '../theme/constants';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -289,17 +290,11 @@ export default function ViewPersonalInformationScreen() {
           
           {/* Edit Button */}
           <Animated.View style={styles.editButtonContainer}>
-            <TouchableOpacity
-              style={styles.editButton}
+            <DSButton
+              title="Edit Information"
               onPress={navigateToEditScreen}
-              accessibilityRole="button"
-              accessibilityLabel="Edit your personal information"
-            >
-              <View style={styles.editButtonContent}>
-                <FontAwesome5 name="pencil-alt" size={16} color="#FFFFFF" style={styles.editIcon} />
-                <Text style={styles.editButtonText}>Edit Information</Text>
-              </View>
-            </TouchableOpacity>
+              leftIcon={<FontAwesome5 name="pencil-alt" size={16} color="#FFFFFF" />}
+            />
           </Animated.View>
         </Animated.ScrollView>
     </ScreenWrapper>

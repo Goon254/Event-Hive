@@ -34,6 +34,9 @@ import { isPasswordCompromised } from '../utils/authSecurity';
 import { getLocationForProfile } from '../utils/geolocationUtils';
 import { normalizeUri, uploadFile } from '../utils/fileUtils';
 import * as FileSystem from 'expo-file-system';
+import DSButton from '../components/design-system/Button';
+import Card from '../components/design-system/Card';
+import Divider from '../components/design-system/Divider';
 
 const { width, height } = Dimensions.get('window');
 
@@ -966,15 +969,11 @@ export default function Register() {
           )}
         </View>
         
-        <TouchableOpacity 
-          style={styles.selectInterestsButton}
+        <DSButton
+          title={userData.interests.length > 0 ? 'Edit Interests' : 'Select Interests'}
           onPress={() => setShowInterestsModal(true)}
-        >
-          <MaterialIcons name="add" size={20} color="#FFFFFF" />
-          <Text style={styles.selectInterestsText}>
-            {userData.interests.length > 0 ? 'Edit Interests' : 'Select Interests'}
-          </Text>
-        </TouchableOpacity>
+          leftIcon={<MaterialIcons name="add" size={20} color="#FFFFFF" />}
+        />
       </View>
       
       <View style={styles.termsContainer}>
@@ -1053,12 +1052,7 @@ export default function Register() {
             </View>
           </ScrollView>
           
-          <TouchableOpacity
-            style={styles.modalDoneButton}
-            onPress={() => setShowInterestsModal(false)}
-          >
-            <Text style={styles.modalDoneButtonText}>Done</Text>
-          </TouchableOpacity>
+          <DSButton title="Done" onPress={() => setShowInterestsModal(false)} />
         </View>
       </View>
     </Modal>
@@ -1110,7 +1104,7 @@ export default function Register() {
             contentContainerStyle={styles.scrollContainer}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.formContainer}>
+            <Card style={styles.formContainer}>
               <WaveAnimation />
               
               <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({
@@ -1123,47 +1117,27 @@ export default function Register() {
               </Animated.View>
           
           <View style={styles.buttonsContainer}>
-            <TouchableOpacity
-              style={[styles.button, (isLoading || uploadingImage) && styles.buttonDisabled]}
+            <DSButton
+              title={currentStep < 3 ? 'Continue' : 'Sign Up'}
               onPress={nextStep}
-              disabled={isLoading || uploadingImage}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <>
-                  <Text style={styles.buttonText}>
-                    {currentStep < 3 ? 'Continue' : 'Sign Up'}
-                  </Text>
-                  {currentStep < 3 && (
-                    <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
-                  )}
-                </>
-              )}
-            </TouchableOpacity>
+              loading={isLoading || uploadingImage}
+              rightIcon={currentStep < 3 ? <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" /> : undefined}
+            />
             {currentStep === 1 && (
               <>
                 <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
+                  <Divider />
                   <Text style={styles.dividerText}>OR</Text>
-                  <View style={styles.dividerLine} />
+                  <Divider />
                 </View>
                 
-                <TouchableOpacity
-                  style={[styles.googleButton, (isLoading || googleLoading || uploadingImage) && styles.buttonDisabled]}
+                <DSButton
+                  title={googleLoading ? 'Signing up...' : 'Sign up with Google'}
                   onPress={handleGoogleSignUp}
-                  disabled={isLoading || googleLoading || uploadingImage}
-                  activeOpacity={0.8}
-                >
-                  {googleLoading ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <FontAwesome name="google" size={20} color="#FFFFFF" style={styles.googleIcon} />
-                      <Text style={styles.googleButtonText}>Sign up with Google</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+                  loading={googleLoading}
+                  variant="secondary"
+                  leftIcon={<FontAwesome name="google" size={20} color="#FFFFFF" />}
+                />
                 
                 <View style={styles.loginContainer}>
                   <Text style={styles.loginText}>Already have an account? </Text>
@@ -1176,7 +1150,7 @@ export default function Register() {
               </>
             )}
           </View>
-            </View>
+            </Card>
           </ScrollView>
           
           {renderInterestsModal()}

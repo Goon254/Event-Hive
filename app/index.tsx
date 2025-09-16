@@ -106,7 +106,7 @@ export default function LandingPage() {
         style={styles.backgroundImage}
       >
         <LinearGradient
-          colors={['rgba(0, 191, 166, 0.7)', 'rgba(252, 211, 77, 0.8)']} // Teal to yellow gradient
+          colors={['rgba(0, 191, 166, 0.7)', 'rgba(252, 211, 77, 0.8)']}
           style={styles.gradient}
         >
           <StatusBar style="light" />
@@ -130,7 +130,8 @@ export default function LandingPage() {
                 ]
               }]}
             >
-              <MaterialIcons name="event" size={80} color="#00BFA6" /> // Tropical teal
+              {/* Tropical teal */}
+              <MaterialIcons name="event" size={80} color="#00BFA6" />
             </Animated.View>
             
             <Image
@@ -166,7 +167,7 @@ export default function LandingPage() {
       style={styles.backgroundImage}
     >
       <LinearGradient
-        colors={['rgba(0, 191, 166, 0.7)', 'rgba(252, 211, 77, 0.8)']} // Teal to yellow gradient
+        colors={['rgba(0, 191, 166, 0.7)', 'rgba(252, 211, 77, 0.8)']}
         style={styles.gradient}
       >
         <SafeAreaView style={styles.container}>
@@ -283,7 +284,7 @@ export default function LandingPage() {
                   key={index}
                   style={[
                     styles.paginationDot,
-                    { backgroundColor: index === 0 ? '#00BFA6' : 'rgba(255, 255, 255, 0.5)' } // Tropical teal
+                    { backgroundColor: index === 0 ? '#00BFA6' : 'rgba(255, 255, 255, 0.5)' }
                   ]}
                   onPress={() => pagerRef.current?.scrollTo({ x: width * index, animated: true })}
                 />

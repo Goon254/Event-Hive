@@ -14,6 +14,9 @@ import {
   Animated,
   Switch,
 } from 'react-native';
+import DSButton from '../components/design-system/Button';
+import Card from '../components/design-system/Card';
+import Divider from '../components/design-system/Divider';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../AuthContext';
 import { FontAwesome, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -493,12 +496,7 @@ export default function NotificationsScreen() {
         </View>
         
         {filteredNotifications.length > 0 && (
-          <TouchableOpacity 
-            style={styles.markAllReadButton}
-            onPress={markAllAsRead}
-          >
-            <Text style={styles.markAllReadText}>Mark All as Read</Text>
-          </TouchableOpacity>
+          <DSButton title="Mark All as Read" onPress={markAllAsRead} variant="ghost" />
         )}
       </View>
       

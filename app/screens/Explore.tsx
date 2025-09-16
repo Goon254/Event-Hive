@@ -26,6 +26,9 @@ import eventService, { Event as EventType, PaginatedResponse } from '../services
 import { createShadow } from '../utils/platformUtils';
 import { auth } from '../../lib/firebaseConfig';
 import ScreenWrapper from '../components/common/ScreenWrapper';
+import DSButton from '../components/design-system/Button';
+import Card from '../components/design-system/Card';
+import Divider from '../components/design-system/Divider';
 
 // Get screen dimensions
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -672,12 +675,7 @@ export default function EventsScreen() {
               )}
               
               {selectedFilter === 'all' && searchQuery.length === 0 && (
-                <TouchableOpacity
-                  style={styles.refreshButton}
-                  onPress={handleRefresh}
-                >
-                  <Text style={styles.refreshButtonText}>Refresh</Text>
-                </TouchableOpacity>
+                <DSButton title="Refresh" onPress={handleRefresh} />
               )}
             </Animated.View>
           }

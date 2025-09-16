@@ -27,6 +27,7 @@ import { enhancedImageService, ImageType, ImageQuality, ImageSize } from '../ser
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { SharedElement } from 'react-navigation-shared-element';
+import DSButton from '../components/design-system/Button';
 
 // Custom hooks
 import { useProfile } from '../hooks/useProfile';
@@ -443,26 +444,21 @@ export default function ProfileScreen() {
               ))}
             </View>
             
-            <TouchableOpacity
-              style={styles.editProfileButton}
+            <DSButton
+              title="Edit Profile"
               onPress={() => navigateWithAnimation('/screens/personal-information')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.editProfileButtonText}>Edit Profile</Text>
-            </TouchableOpacity>
+            />
             
             {/* Share profile button */}
-            <TouchableOpacity
-              style={styles.shareProfileButton}
+            <DSButton
+              title="Share Profile"
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 Alert.alert('Share Profile', 'Share your profile with others');
               }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="share-outline" size={18} color={COLORS.primary} />
-              <Text style={styles.shareProfileButtonText}>Share Profile</Text>
-            </TouchableOpacity>
+              variant="ghost"
+              leftIcon={<Ionicons name="share-outline" size={18} color={COLORS.primary} />}
+            />
           </View>
         </Animated.View>
         
@@ -516,17 +512,15 @@ export default function ProfileScreen() {
             })}]
           }]}
         >
-          <TouchableOpacity 
-            style={styles.qrCodeButton}
+          <DSButton
+            title="My Profile QR Code"
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               navigateWithAnimation('/screens/profile-qr');
             }}
-            activeOpacity={0.8}
-          >
-            <MaterialIcons name="qr-code" size={20} color={COLORS.primary} />
-            <Text style={styles.qrCodeButtonText}>My Profile QR Code</Text>
-          </TouchableOpacity>
+            variant="ghost"
+            leftIcon={<MaterialIcons name="qr-code" size={20} color={COLORS.primary} />}
+          />
         </Animated.View>
 
         {/* Collapsible Menu Sections */}

@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
+import DSButton from '../../../components/design-system/Button';
 import { Picker } from '@react-native-picker/picker';
 import { format } from 'date-fns';
 import { EventForm, FormErrors, NavigationDirection } from '../../types';
@@ -97,15 +98,7 @@ export function DateTimeSection({
         <Text style={styles.label}>
           Start Date<Text style={styles.requiredStar}>*</Text>
         </Text>
-        <TouchableOpacity
-          style={styles.dateButton}
-          onPress={handleStartDateTimeSelect}
-          disabled={isSubmitting}
-        >
-          <Text style={styles.dateButtonText}>
-            {format(formData.date, 'EEEE, MMMM d, yyyy')}
-          </Text>
-        </TouchableOpacity>
+        <DSButton title={format(formData.date, 'EEEE, MMMM d, yyyy')} onPress={handleStartDateTimeSelect} disabled={isSubmitting} />
       </View>
       
       {/* Start Time */}
@@ -113,14 +106,7 @@ export function DateTimeSection({
         <Text style={styles.label}>
           Start Time<Text style={styles.requiredStar}>*</Text>
         </Text>
-        <TouchableOpacity
-          style={styles.dateButton}
-          onPress={handleStartDateTimeSelect}
-        >
-          <Text style={styles.dateButtonText}>
-            {format(formData.time, 'h:mm a')}
-          </Text>
-        </TouchableOpacity>
+        <DSButton title={format(formData.time, 'h:mm a')} onPress={handleStartDateTimeSelect} />
       </View>
       
       {/* End Date */}
@@ -128,15 +114,7 @@ export function DateTimeSection({
         <Text style={styles.label}>
           End Date<Text style={styles.requiredStar}>*</Text>
         </Text>
-        <TouchableOpacity
-          style={styles.dateButton}
-          onPress={handleEndDateTimeSelect}
-          disabled={isSubmitting}
-        >
-          <Text style={styles.dateButtonText}>
-            {format(formData.endDate, 'EEEE, MMMM d, yyyy')}
-          </Text>
-        </TouchableOpacity>
+        <DSButton title={format(formData.endDate, 'EEEE, MMMM d, yyyy')} onPress={handleEndDateTimeSelect} disabled={isSubmitting} />
       </View>
       
       {/* End Time */}
@@ -144,15 +122,7 @@ export function DateTimeSection({
         <Text style={styles.label}>
           End Time<Text style={styles.requiredStar}>*</Text>
         </Text>
-        <TouchableOpacity
-          style={styles.dateButton}
-          onPress={handleEndDateTimeSelect}
-          disabled={isSubmitting}
-        >
-          <Text style={styles.dateButtonText}>
-            {format(formData.endTime, 'h:mm a')}
-          </Text>
-        </TouchableOpacity>
+        <DSButton title={format(formData.endTime, 'h:mm a')} onPress={handleEndDateTimeSelect} disabled={isSubmitting} />
       </View>
       
       {/* Date Picker Modals */}

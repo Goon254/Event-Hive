@@ -23,6 +23,13 @@ import { Link } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useGoogleAuth } from '../utils/googleAuth';
+import DSButton from '../components/design-system/Button';
+import DSTextInput from '../components/design-system/TextInput';
+import Card from '../components/design-system/Card';
+import Divider from '../components/design-system/Divider';
+import DSTextInput from '../../components/DSTextInput';
+import DSButton from '../../components/DSButton';
+import Divider from '../../components/Divider';
 
 // Enhanced form input component
 const EnhancedInput = ({ 
@@ -237,7 +244,7 @@ export default function Login() {
           style={styles.gradientOverlay}
         >
           <ScrollView contentContainerStyle={styles.scrollContainer}>
-            <View style={styles.formContainer}>
+            <Card style={styles.formContainer}>
               <View style={styles.headerContainer}>
                 <Image
                   source={require('../../assets/images/eventhive-icon.png')}
@@ -261,7 +268,7 @@ export default function Login() {
             inputRange: [0, 1],
             outputRange: [20, 0]
           }) }] }}>
-            <EnhancedInput
+            <DSTextInput
             label="Email Address"
             placeholder="Enter your email"
             value={email}
@@ -274,10 +281,10 @@ export default function Login() {
             autoComplete="email"
             editable={!isLoading}
             error={emailError}
-            icon={<FontAwesome name="envelope" size={16} color="#6B7280" />}
+            leftIcon={<FontAwesome name="envelope" size={16} color="#6B7280" />}
           />
 
-          <EnhancedInput
+          <DSTextInput
             label="Password"
             placeholder="Enter your password"
             value={password}
@@ -289,21 +296,10 @@ export default function Login() {
             autoCapitalize="none"
             editable={!isLoading}
             error={passwordError}
-            icon={<FontAwesome name="lock" size={16} color="#6B7280" />}
+            leftIcon={<FontAwesome name="lock" size={16} color="#6B7280" />}
           />
 
-          <TouchableOpacity
-            style={[styles.button, isLoading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={isLoading}
-            activeOpacity={0.8}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.buttonText}>Sign In</Text>
-            )}
-            </TouchableOpacity>
+          <DSButton title="Sign In" onPress={handleLogin} loading={isLoading} />
           </Animated.View>
 
           <Link href="/(auth)/reset-password" asChild>
@@ -314,26 +310,18 @@ export default function Login() {
 
           
           <View style={styles.divider}>
-            <View style={styles.dividerLine} />
+            <Divider />
             <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
+            <Divider />
           </View>
 
-          <TouchableOpacity
-            style={[styles.googleButton, (isLoading || googleLoading) && styles.buttonDisabled]}
+          <DSButton
+            title={googleLoading ? 'Signing in...' : 'Sign in with Google'}
             onPress={handleGoogleSignIn}
-            disabled={isLoading || googleLoading}
-            activeOpacity={0.8}
-          >
-            {googleLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <FontAwesome name="google" size={20} color="#FFFFFF" style={styles.googleIcon} />
-                <Text style={styles.googleButtonText}>Sign in with Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
+            loading={googleLoading}
+            variant="secondary"
+            leftIcon={<FontAwesome name="google" size={20} color="#FFFFFF" />}
+          />
 
           <View style={styles.registerContainer}>
             <Text style={styles.registerText}>Don't have an account? </Text>
@@ -343,7 +331,7 @@ export default function Login() {
               </TouchableOpacity>
             </Link>
           </View>
-        </View>
+        </Card>
           </ScrollView>
         </LinearGradient>
       </ImageBackground>
